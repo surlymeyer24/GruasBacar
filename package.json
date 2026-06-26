@@ -1,0 +1,24 @@
+{
+  "name": "gruasbacar",
+  "private": true,
+  "workspaces": ["shared", "functions", "frontend"],
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "npm run build --workspace=@gruasbacar/shared && npm run build --workspace=gruasbacar-functions && npm run build --workspace=gruasbacar-frontend",
+    "deploy": "npm run build && firebase deploy",
+    "seed": "node scripts/seed.mjs",
+    "seed:emulator": "node scripts/seed.mjs --emulator",
+    "sync-usuarios": "node scripts/sync-usuarios.mjs",
+    "sync-usuarios:emulator": "node scripts/sync-usuarios.mjs --emulator",
+    "migrate-uids": "node scripts/migrar-uids-usuarios.mjs",
+    "migrate-uids:emulator": "node scripts/migrar-uids-usuarios.mjs --emulator",
+    "migrate-gruas": "node scripts/migrar-ids-gruas.mjs",
+    "migrate-gruas:emulator": "node scripts/migrar-ids-gruas.mjs --emulator",
+    "migrate-duplas": "node scripts/migrar-duplas-enganchador.mjs",
+    "migrate-duplas:emulator": "node scripts/migrar-duplas-enganchador.mjs --emulator",
+    "migrate-servicios": "node scripts/migrar-ids-servicios.mjs",
+    "emulators": "npm run build --workspace=@gruasbacar/shared && npm run build --workspace=gruasbacar-functions && firebase emulators:start --import=.emulator-data --export-on-exit=.emulator-data",
+    "fix-invokers": "powershell -ExecutionPolicy Bypass -File scripts/fix-invokers.ps1",
+    "deploy:functions": "node functions/scripts/predeploy.mjs && firebase deploy --only functions"
+  }
+}

@@ -1,0 +1,11 @@
+# Patrones relativos al directorio que se despliega (functions/, hosting/, etc.)
+
+# Cloud Functions: no subir fuente TS ni scripts (lib/ y vendor/ sí van)
+src/
+tsconfig.json
+scripts/
+node_modules/
+.env
+.env.*
+firebase-debug.log
+*.local

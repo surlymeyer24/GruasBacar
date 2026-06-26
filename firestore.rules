@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function usuarioAutenticado() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function tieneRol(rol) {
+      return isAuthenticated() && (
+        usuarioAutenticado().rol == rol ||
+        ('roles' in usuarioAutenticado() && usuarioAutenticado().roles.hasAny([rol]))
+      );
+    }
+
+    function isAdmin() {
+      return tieneRol('ADMIN');
+    }
+
+    function isEnganchador() {
+      return tieneRol('ENGANCHADOR') || tieneRol('CHOFER');
+    }
+
+    function isSupervisor() {
+      return tieneRol('SUPERVISOR');
+    }
+
+    function puedeLeerTodosServicios() {
+      return isAdmin() || isSupervisor();
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    match /usuarios/{uid} {
+      allow get: if isOwner(uid) || isAdmin() || isSupervisor();
+      allow list: if isAdmin() || isSupervisor();
+      allow create: if isAdmin();
+      allow update: if isAdmin() ||
+        (isOwner(uid) &&
+          request.resource.data.rol == resource.data.rol &&
+          (!('roles' in resource.data) || request.resource.data.roles == resource.data.roles) &&
+          request.resource.data.servicioActivoId == resource.data.servicioActivoId &&
+          request.resource.data.email == resource.data.email &&
+          request.resource.data.uid == resource.data.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /servicios/{servicioId} {
+      allow read: if puedeLeerTodosServicios() ||
+        (isEnganchador() && resource.data.creadoPor == request.auth.uid);
+      allow create: if false; // solo via Functions
+      allow update: if false; // solo via Functions
+      allow delete: if false;
+
+      match /eventos/{eventoId} {
+        allow read: if puedeLeerTodosServicios() ||
+          (isEnganchador() && get(/databases/$(database)/documents/servicios/$(servicioId)).data.creadoPor == request.auth.uid);
+        allow write: if false; // solo via Functions
+      }
+
+      match /fotosStaging/{stagingId} {
+        allow read: if puedeLeerTodosServicios() ||
+          (isEnganchador() && get(/databases/$(database)/documents/servicios/$(servicioId)).data.creadoPor == request.auth.uid);
+        allow delete: if isEnganchador() &&
+          get(/databases/$(database)/documents/servicios/$(servicioId)).data.creadoPor == request.auth.uid;
+        allow create, update: if false; // solo via Functions (trigger Storage)
+      }
+
+      match /versiones/{versionId} {
+        allow read: if puedeLeerTodosServicios() ||
+          (isEnganchador() && get(/databases/$(database)/documents/servicios/$(servicioId)).data.creadoPor == request.auth.uid);
+        allow write: if false; // solo via Cloud Functions
+      }
+    }
+
+    match /gruas/{gruaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /corralones/{corralonId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /duplas/{duplaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}

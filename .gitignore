@@ -1,0 +1,37 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# Environment (secrets)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+database-debug.log
+pubsub-debug.log
+.emulator-data/
+.firebaserc
+**/ServiceAccountKey.json
+**/serviceAccountKey.json
+
+# Functions build
+functions/lib/
+functions/vendor/
+functions/node_modules/
+functions/package-lock.json
+
+# Shared build
+shared/dist/

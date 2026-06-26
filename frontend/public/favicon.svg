@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Gruas Bacar">
+  <rect width="32" height="32" rx="7" fill="#161A1D"/>
+  <g fill="none" stroke="#BA181B" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 20h14v-6H7z"/>
+    <path d="M21 14h3l2 3v3h-5z"/>
+    <circle cx="10" cy="20" r="2.25" fill="#BA181B" stroke="none"/>
+    <circle cx="22" cy="20" r="2.25" fill="#BA181B" stroke="none"/>
+    <path d="M11 14V11h5v3"/>
+    <path d="M7 17h14"/>
+  </g>
+</svg>
