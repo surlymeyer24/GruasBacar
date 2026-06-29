@@ -60,7 +60,12 @@ async function fetchServiciosList(scope: AdminServiciosScope): Promise<Servicio[
   return allServices.filter((s) => s.creadoPor === uid);
 }
 
-async function fetchPhotoCounts(servicios: Servicio[]): Promise<Record<string, number>> {
+function photoCountFromServicio(s: Servicio): number | undefined {
+  if (typeof s.totalFotos === "number") return s.totalFotos;
+  return undefined;
+}
+
+async function fetchPhotoCountsFromEventos(servicios: Servicio[]): Promise<Record<string, number>> {
   if (!isMock && db) {
     const counts: Record<string, number> = {};
     await Promise.all(
@@ -89,6 +94,26 @@ async function fetchPhotoCounts(servicios: Servicio[]): Promise<Record<string, n
     }
     counts[s.id] = count;
   }
+  return counts;
+}
+
+async function fetchPhotoCounts(servicios: Servicio[]): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const sinDenormalizar: Servicio[] = [];
+
+  for (const s of servicios) {
+    const denorm = photoCountFromServicio(s);
+    if (denorm !== undefined) {
+      counts[s.id] = denorm;
+    } else {
+      sinDenormalizar.push(s);
+    }
+  }
+
+  if (sinDenormalizar.length > 0) {
+    Object.assign(counts, await fetchPhotoCountsFromEventos(sinDenormalizar));
+  }
+
   return counts;
 }
 

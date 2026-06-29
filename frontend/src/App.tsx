@@ -1,5 +1,6 @@
 import React from "react";
 import { HashRouter, Routes, Route } from "react-router-dom";
+import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
 import { ServicioActivoProvider } from "./context/ServicioActivoProvider";
 
@@ -22,9 +23,11 @@ import DesenganchePage from "./pages/DesenganchePage";
 import HistorialPage from "./pages/HistorialPage";
 import ReportesPage from "./pages/ReportesPage";
 import AdminPage from "./pages/AdminPage";
+import TurnosPage from "./pages/TurnosPage";
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <ServicioActivoProvider>
       <HashRouter>
@@ -138,11 +141,23 @@ export default function App() {
             }
           />
 
+          <Route
+            path="/turnos"
+            element={
+              <ProtectedRoute>
+                <RoleGuard allowedRole="ADMIN">
+                  <TurnosPage />
+                </RoleGuard>
+              </ProtectedRoute>
+            }
+          />
+
           {/* Fallback unknown paths */}
           <Route path="*" element={<DefaultRedirect />} />
         </Routes>
       </HashRouter>
       </ServicioActivoProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }

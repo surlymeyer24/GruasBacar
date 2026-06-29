@@ -7,20 +7,17 @@ import { motion } from "motion/react";
 import {
   Mail,
   Lock,
-  User,
   Eye,
   EyeOff,
   Check,
   AlertCircle,
-  UserCheck,
   Truck,
   MapPin,
-  Camera,
   Activity,
 } from "lucide-react";
 
 export const LoginPage: React.FC = () => {
-  const { user, userData, sessionLoading, profileLoading, login, register } = useAuth();
+  const { user, userData, sessionLoading, profileLoading, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -28,11 +25,6 @@ export const LoginPage: React.FC = () => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [repeatPassword, setRepeatPassword] = useState("");
-  const [username, setUsername] = useState("");
-  const [legajo, setLegajo] = useState("");
-
-  const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -61,36 +53,10 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    if (isSignUp) {
-      if (!username.trim()) {
-        setError("Por favor ingrese su nombre.");
-        return;
-      }
-      if (!legajo.trim()) {
-        setError("Por favor ingrese su número de legajo.");
-        return;
-      }
-      if (password !== repeatPassword) {
-        setError("Las contraseñas no coinciden.");
-        return;
-      }
-    }
-
     setSubmitting(true);
     try {
-      if (isSignUp) {
-        await register({
-          email: email.trim(),
-          password,
-          nombre: username.trim(),
-          legajo: legajo.trim(),
-        });
-        setIsSignUp(false);
-        setSuccess("Cuenta creada. Ya podés iniciar sesión.");
-      } else {
-        await login(email, password);
-        setSuccess("¡Bienvenido/a! Redirigiendo...");
-      }
+      await login(email, password);
+      setSuccess("¡Bienvenido/a! Redirigiendo...");
     } catch (err: unknown) {
       setError(
         getFirebaseErrorMessage(
@@ -235,12 +201,10 @@ export const LoginPage: React.FC = () => {
 
           <div className="mb-8">
             <h1 className="text-2xl font-black text-brand-purply tracking-tight">
-              {isSignUp ? "Crear cuenta" : "Bienvenido/a"}
+              Bienvenido/a
             </h1>
             <p className="text-sm text-brand-pale mt-1">
-              {isSignUp
-                ? "Complete sus datos para registrarse"
-                : "Ingrese sus credenciales para acceder"}
+              Ingrese sus credenciales para acceder
             </p>
           </div>
 
@@ -267,44 +231,6 @@ export const LoginPage: React.FC = () => {
           )}
 
           <form onSubmit={handleAuth} className="space-y-4">
-            {isSignUp && (
-              <>
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-brand-purply">
-                    Nombre completo
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-pale" />
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Ej. José López"
-                      className={inputBase}
-                      required={isSignUp}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-semibold text-brand-purply">
-                    Legajo
-                  </label>
-                  <div className="relative">
-                    <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-pale" />
-                    <input
-                      type="text"
-                      value={legajo}
-                      onChange={(e) => setLegajo(e.target.value)}
-                      placeholder="Número de legajo"
-                      className={inputBase}
-                      required={isSignUp}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
             <div className="space-y-1.5">
               <label className="block text-sm font-semibold text-brand-purply">
                 Email
@@ -350,27 +276,7 @@ export const LoginPage: React.FC = () => {
               </div>
             </div>
 
-            {isSignUp && (
-              <div className="space-y-1.5">
-                <label className="block text-sm font-semibold text-brand-purply">
-                  Repetir contraseña
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-pale" />
-                  <input
-                    type="password"
-                    value={repeatPassword}
-                    onChange={(e) => setRepeatPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={inputBase}
-                    required={isSignUp}
-                  />
-                </div>
-              </div>
-            )}
-
-            {!isSignUp && (
-              <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5">
                 <input
                   type="checkbox"
                   id="rememberMe"
@@ -383,7 +289,6 @@ export const LoginPage: React.FC = () => {
                   Recordar sesión
                 </label>
               </div>
-            )}
 
             <button
               type="submit"
@@ -392,8 +297,6 @@ export const LoginPage: React.FC = () => {
             >
               {submitting ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : isSignUp ? (
-                "Crear cuenta"
               ) : (
                 "Iniciar Sesión"
               )}
@@ -401,31 +304,9 @@ export const LoginPage: React.FC = () => {
           </form>
 
           <div className="mt-8 text-center pt-6 border-t border-brand-seashell/50">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignUp(!isSignUp);
-                setError(null);
-                setSuccess(null);
-              }}
-              className="text-sm text-brand-pale hover:text-brand-purply cursor-pointer transition-colors"
-            >
-              {isSignUp ? (
-                <>
-                  ¿Ya tiene un usuario?{" "}
-                  <span className="text-brand-cta font-semibold">
-                    Iniciar Sesión
-                  </span>
-                </>
-              ) : (
-                <>
-                  ¿No está registrado?{" "}
-                  <span className="text-brand-cta font-semibold">
-                    Crear Cuenta
-                  </span>
-                </>
-              )}
-            </button>
+            <p className="text-sm text-brand-pale">
+              ¿Necesita una cuenta? Contacte al administrador del sistema.
+            </p>
           </div>
         </motion.div>
       </div>

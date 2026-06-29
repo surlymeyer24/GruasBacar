@@ -21,6 +21,7 @@ import {
   UserPlus,
   Tag,
   Trash2,
+  Settings,
 } from "lucide-react";
 import { isMock, db, functions } from "../firebase";
 import { setDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
@@ -420,7 +421,8 @@ export const AdminPage: React.FC = () => {
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <Settings className="w-7 h-7 text-brand-cta" />
             Configuración
           </h1>
           <p className="text-sm text-brand-pale mt-1">

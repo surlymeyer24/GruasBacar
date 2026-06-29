@@ -1,6 +1,13 @@
-import { collection, getDocs } from "firebase/firestore";
-import { Corralon, Grua, Usuario, enganchadorDeDupla } from "@gruasbacar/shared";
-import { db, isMock } from "../firebase";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import {
+  Corralon,
+  Grua,
+  Usuario,
+  enganchadorDeDupla,
+  normalizeRoles,
+  puedeVerHistorialCompleto,
+} from "@gruasbacar/shared";
+import { auth, db, isMock } from "../firebase";
 import { listarUsuarios } from "./usuario.service";
 import { DuplaAsset } from "./dupla.service";
 
@@ -42,15 +49,26 @@ function loadFromLocalStorage(): Pick<AdminCatalogData, "gruas" | "corralones" |
   };
 }
 
+async function puedeListarUsuarios(): Promise<boolean> {
+  if (isMock || !db || !auth?.currentUser) return false;
+  const snap = await getDoc(doc(db, "usuarios", auth.currentUser.uid));
+  if (!snap.exists()) return false;
+  const data = snap.data();
+  return puedeVerHistorialCompleto(normalizeRoles(data.roles, data.rol));
+}
+
 async function fetchCatalog(): Promise<AdminCatalogData> {
   if (!isMock && db) {
-    const [gSnap, cSnap, dSnap, usuariosResult] = await Promise.all([
+    const listarUsuariosPromise = (await puedeListarUsuarios())
+      ? listarUsuarios().catch(() => [] as Usuario[])
+      : Promise.resolve([] as Usuario[]);
+
+    const [gSnap, cSnap, dSnap, usuarios] = await Promise.all([
       getDocs(collection(db, "gruas")),
       getDocs(collection(db, "corralones")),
       getDocs(collection(db, "duplas")),
-      listarUsuarios().catch(() => [] as Usuario[]),
+      listarUsuariosPromise,
     ]);
-    const usuarios = usuariosResult;
 
     const gruas = gSnap.docs.map((d) => {
       const data = d.data() as Grua;

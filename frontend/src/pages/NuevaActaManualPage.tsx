@@ -172,7 +172,10 @@ export const NuevaActaManualPage: React.FC = () => {
             <p className="text-[10px] font-mono font-bold text-brand-orange uppercase tracking-widest">
               Respaldo operativo
             </p>
-            <h1 className="text-2xl font-bold text-gray-900 mt-1">Cargar acta manual</h1>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-1 flex items-center gap-2">
+              <FilePlus className="w-7 h-7 text-brand-cta" />
+              Cargar acta manual
+            </h1>
             <p className="text-sm text-brand-pale mt-1">
               Para cuando el enganchador no pudo completar el flujo en la app. La acta queda registrada como
               entregada.

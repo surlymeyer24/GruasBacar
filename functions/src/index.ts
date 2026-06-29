@@ -191,6 +191,7 @@ export const crearUsuario = onCall(callable, async (request) => {
 });
 
 export const registrarCuenta = onCall(callable, async (request) => {
+  await verificarAdmin(request.auth);
   return usuarioService.registrarCuenta(request.data);
 });
 
@@ -207,7 +208,7 @@ export const desactivarUsuario = onCall(callable, async (request) => {
 });
 
 export const listarUsuarios = onCall(callable, async (request) => {
-  await verificarAdmin(request.auth);
+  await verificarGestionActas(request.auth);
   return usuarioService.listarUsuarios();
 });
 

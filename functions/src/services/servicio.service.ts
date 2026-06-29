@@ -421,6 +421,12 @@ export async function registrarEventoEnganche(
       observacionGeneral: obsFinal,
     });
 
+    if (fotosConUrl.length > 0) {
+      await servicioRef.update({
+        totalFotos: admin.firestore.FieldValue.increment(fotosConUrl.length),
+      });
+    }
+
     const fotoStorage = await import('./fotoStorage.service');
     await fotoStorage.limpiarFotosStaging(servicioId, 'enganche');
   } catch (err) {
@@ -608,6 +614,9 @@ export async function confirmarDesenganche(
     tx.update(servicioRef, {
       estado: 'DESENGANCHADO' as EstadoServicio,
       finalizadoEn: admin.firestore.FieldValue.serverTimestamp(),
+      ...(fotosConUrl.length > 0
+        ? { totalFotos: admin.firestore.FieldValue.increment(fotosConUrl.length) }
+        : {}),
     });
     tx.set(servicioRef.collection('eventos').doc(), {
       tipo: 'DESENGANCHE',
@@ -921,6 +930,7 @@ export async function crearActaManual(
       creadoEn: ts,
       finalizadoEn: ts,
       versionCount: 0,
+      totalFotos: fotosEngancheConUrl.length + fotosDesengancheConUrl.length,
     });
 
     tx.set(eventosRef.doc(), {

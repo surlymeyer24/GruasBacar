@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": ["shared", "functions", "frontend"],
   "scripts": {
+    "prebuild": "node scripts/ensure-deps.mjs",
     "dev": "cd frontend && npm run dev",
     "build": "npm run build --workspace=@gruasbacar/shared && npm run build --workspace=gruasbacar-functions && npm run build --workspace=gruasbacar-frontend",
     "deploy": "npm run build && firebase deploy",

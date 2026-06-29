@@ -56,7 +56,15 @@ async function getServiceAccountEmail(): Promise<string> {
     cachedServiceAccountEmail = client.email;
     return client.email;
   }
-  return '231607744664-compute@developer.gserviceaccount.com';
+  const envEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  if (envEmail) {
+    cachedServiceAccountEmail = envEmail;
+    return envEmail;
+  }
+  throw new Error(
+    'No se pudo obtener el email del service account. ' +
+    'Verificar configuración de IAM o definir GOOGLE_SERVICE_ACCOUNT_EMAIL.'
+  );
 }
 
 const SA_EMAIL_FALLBACK = '231607744664-compute@developer.gserviceaccount.com';

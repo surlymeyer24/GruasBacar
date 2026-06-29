@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { formatFechaHora, fechaServicio, fechaDiaServicio } from "../utils/formatters";
 import { isMock, db } from "../firebase";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { CORRALONES } from "../data/mockData";
 import { Servicio, EstadoServicio, Evento, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, buildIdentificadorCompuesto, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion } from "@gruasbacar/shared";
 import { resolverPatenteGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
@@ -47,6 +47,7 @@ import {
   getAdminServiciosSnapshot,
   updateServicioInAdminCache,
 } from "../services/adminServicios.cache";
+import { ensureEventosServicio } from "../services/historialEventos.cache";
 import { Corralon } from "@gruasbacar/shared";
 import MapaCoordenadasPreview from "../components/shared/MapaCoordenadasPreview";
 import { CustomSelect } from "../components/shared/CustomSelect";
@@ -160,8 +161,6 @@ export const HistorialPage: React.FC = () => {
       setServices(snapshot.servicios);
       if (snapshot.photoCounts !== undefined) {
         setPhotoCounts(snapshot.photoCounts);
-        setFetching(false);
-        return;
       }
       setFetching(false);
     }
@@ -171,10 +170,19 @@ export const HistorialPage: React.FC = () => {
     (async () => {
       if (!snapshot?.servicios) setFetching(true);
       try {
-        const data = await ensureAdminServicios(scope, { withPhotoCounts: true });
+        const data = await ensureAdminServicios(scope);
         if (!cancelled) {
           setServices(data.servicios);
-          setPhotoCounts(data.photoCounts ?? {});
+        }
+
+        const legacySinConteo = data.servicios.some(
+          (s) => typeof s.totalFotos !== "number"
+        );
+        if (!cancelled && legacySinConteo) {
+          const enriched = await ensureAdminServicios(scope, { withPhotoCounts: true });
+          if (!cancelled && enriched.photoCounts) {
+            setPhotoCounts(enriched.photoCounts);
+          }
         }
       } catch (err) {
         console.error("Error reading history logs", err);
@@ -380,48 +388,22 @@ export const HistorialPage: React.FC = () => {
     setLoadingEventos(true);
     setLoadingVersiones(historialCompleto);
 
-    const loadVersiones = async (servicioId: string) => {
-      if (!historialCompleto || isMock || !db) {
-        setVersionesActa([]);
-        setLoadingVersiones(false);
-        return;
-      }
+    const loadVersiones = async (servicioId: string): Promise<VersionActa[]> => {
+      if (!historialCompleto || isMock || !db) return [];
       try {
         const verQ = query(
           collection(db, `servicios/${servicioId}/versiones`),
           orderBy("version", "desc")
         );
         const verSnap = await getDocs(verQ);
-        setVersionesActa(
-          verSnap.docs.map((d) => ({ id: d.id, ...d.data() } as VersionActa))
-        );
+        return verSnap.docs.map((d) => ({ id: d.id, ...d.data() } as VersionActa));
       } catch (err) {
         console.error("Error cargando versiones del acta", err);
-        setVersionesActa([]);
-      } finally {
-        setLoadingVersiones(false);
+        return [];
       }
     };
 
-    try {
-      let eventos: Evento[] = [];
-      if (!isMock && db) {
-        const evQ = query(
-          collection(db, `servicios/${service.id}/eventos`),
-          orderBy("timestamp", "asc")
-        );
-        const evSnap = await getDocs(evQ);
-        eventos = evSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Evento));
-      } else {
-        eventos = (service.eventos ?? []).map((e, i) => ({
-          ...e,
-          id: e.id ?? `mock-ev-${service.id}-${i}`,
-        }));
-      }
-      setSelectedEventos(eventos);
-
-      await loadVersiones(service.id);
-
+    const loadPreviews = async (eventos: Evento[]) => {
       const ids = new Set<string>();
       for (const ev of eventos) {
         for (const f of ev.fotos ?? []) {
@@ -429,18 +411,31 @@ export const HistorialPage: React.FC = () => {
           if (id) ids.add(id);
         }
       }
-      if (ids.size > 0) {
-        try {
-          const previews = await obtenerUrlsPreviewFotos([...ids]);
-          setPreviewUrls(previews);
-        } catch (previewErr) {
-          console.warn("[HistorialPage] No se pudieron resolver previews de Drive", previewErr);
-        }
+      if (ids.size === 0) return;
+      try {
+        const previews = await obtenerUrlsPreviewFotos([...ids]);
+        setPreviewUrls((prev) => ({ ...prev, ...previews }));
+      } catch (previewErr) {
+        console.warn("[HistorialPage] No se pudieron resolver previews de Drive", previewErr);
       }
+    };
+
+    try {
+      const [eventos, versiones] = await Promise.all([
+        ensureEventosServicio(service.id, service.eventos),
+        loadVersiones(service.id),
+      ]);
+
+      setSelectedEventos(eventos);
+      setVersionesActa(versiones);
+      setLoadingEventos(false);
+      setLoadingVersiones(false);
+
+      void loadPreviews(eventos);
     } catch (err) {
       console.error("Error cargando eventos del servicio", err);
-    } finally {
       setLoadingEventos(false);
+      setLoadingVersiones(false);
     }
   };
 
@@ -730,7 +725,8 @@ export const HistorialPage: React.FC = () => {
         
         {/* Page Head */}
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <History className="w-7 h-7 text-brand-cta" />
             Historial de Operaciones
           </h1>
           <p className="text-sm text-brand-pale mt-0.5">
@@ -897,7 +893,7 @@ export const HistorialPage: React.FC = () => {
           <div className="bg-white rounded-2xl border border-brand-seashell overflow-hidden divide-y divide-gray-100 shadow-sm">
             {filteredServices.map((service) => {
               const formattedDate = formatFechaHora(fechaServicio(service));
-              const photoCount = photoCounts[service.id] ?? 0;
+              const photoCount = service.totalFotos ?? photoCounts[service.id] ?? 0;
               const tipoServicio = tipoFlotaDeServicio(service, gruasCatalog);
               const esTransporte = tipoServicio === "TRANSPORTE";
               const esAnulado = service.estado === "ANULADO";

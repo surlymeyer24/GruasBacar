@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Settings, History, LayoutDashboard, Menu, FilePlus, BarChart3 } from "lucide-react";
+import { Home, Settings, History, LayoutDashboard, Menu, FilePlus, BarChart3, Clock } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { esOperador, esSoloSupervisor } from "@gruasbacar/shared";
 
@@ -78,6 +78,10 @@ export const AdminSidebar: React.FC = () => {
             <NavLink to="/admin-dashboard" className={linkClass} title={collapsed ? "Dashboard Admin" : undefined}>
               <LayoutDashboard className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Dashboard</span>}
+            </NavLink>
+            <NavLink to="/turnos" className={linkClass} title={collapsed ? "Turnos" : undefined}>
+              <Clock className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Turnos</span>}
             </NavLink>
             <NavLink to="/admin" className={linkClass} title={collapsed ? "Configuración" : undefined}>
               <Settings className="w-4 h-4 shrink-0" />

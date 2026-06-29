@@ -456,6 +456,8 @@ export interface Servicio {
   origenManual?: boolean;
   /** Cantidad de revisiones registradas (ediciones, anulaciones, etc.). */
   versionCount?: number;
+  /** Total de fotos en eventos (denormalizado para listados). */
+  totalFotos?: number;
   eventos?: Evento[];
 }
 
