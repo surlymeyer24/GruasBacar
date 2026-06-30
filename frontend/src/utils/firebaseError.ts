@@ -3,8 +3,27 @@ import { FirebaseError } from 'firebase/app';
 const GENERIC_INTERNAL =
   'Error interno del servidor. Si persiste, avisá al administrador.';
 
+const SIN_CONEXION =
+  'Sin conexión a internet. Verificá tu señal e intentá de nuevo.';
+
+function esErrorDeRed(err: unknown): boolean {
+  if (err instanceof FirebaseError) {
+    const code = err.code ?? '';
+    if (code === 'functions/unavailable' || code === 'functions/deadline-exceeded') return true;
+    if (code === 'unavailable' || code === 'deadline-exceeded') return true;
+  }
+  if (err instanceof TypeError && err.message === 'Failed to fetch') return true;
+  if (err instanceof Error) {
+    const m = err.message.toLowerCase();
+    if (m.includes('network') || m.includes('failed to fetch') || m.includes('err_internet')) return true;
+  }
+  return false;
+}
+
 /** Mensaje legible desde errores de Callable / Auth / Firestore. */
 export function getFirebaseErrorMessage(err: unknown, fallback: string): string {
+  if (esErrorDeRed(err)) return SIN_CONEXION;
+
   if (err instanceof FirebaseError) {
     const msg = err.message?.trim() ?? '';
     const code = err.code ?? '';
