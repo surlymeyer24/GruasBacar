@@ -371,6 +371,9 @@ export async function actualizarServicio(data: ActualizarServicioPayload): Promi
     dupla: data.dupla,
     corralon: data.corralon ?? found.corralon,
     tipoFlota: data.tipoFlota ?? found.tipoFlota,
+    ...(data.descripcionVehiculo !== undefined
+      ? { descripcionVehiculo: data.descripcionVehiculo.trim() || undefined }
+      : {}),
   });
   updateMockService(found);
 }

@@ -97,6 +97,15 @@ export function diffEdicionServicio(
   const duplaActual = (actual.dupla ?? {}) as DuplasServicio;
 
   pushCambio(cambios, 'patente', 'Patente', actual.patente, data.patente);
+  if (data.descripcionVehiculo !== undefined || actual.descripcionVehiculo) {
+    pushCambio(
+      cambios,
+      'descripcionVehiculo',
+      'Descripción vehículo',
+      actual.descripcionVehiculo ?? '',
+      data.descripcionVehiculo ?? ''
+    );
+  }
   pushCambio(cambios, 'numeroInfraccion', 'Nº infracción', actual.numeroInfraccion ?? '', data.numeroInfraccion ?? '');
   pushCambio(cambios, 'grua', 'Grúa', actual.grua, data.grua, 'grua');
 

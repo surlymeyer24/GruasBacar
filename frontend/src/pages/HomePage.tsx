@@ -211,9 +211,12 @@ export const HomePage: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <p className="text-[9px] font-bold text-brand-pale uppercase tracking-widest">Grúa</p>
-                        <p className="font-mono text-xs font-extrabold text-brand-purply tracking-wider truncate mt-0.5">
-                          {turnoHoy.gruaDescripcion ? `${turnoHoy.gruaDescripcion} — ` : ""}{turnoHoy.gruaPatente}
+                        <p className="text-xs font-extrabold text-brand-purply truncate mt-0.5">
+                          {turnoHoy.gruaDescripcion || turnoHoy.gruaPatente}
                         </p>
+                        {turnoHoy.gruaDescripcion && turnoHoy.gruaPatente && (
+                          <p className="font-mono text-[10px] text-brand-pale tracking-wider truncate">{turnoHoy.gruaPatente}</p>
+                        )}
                       </div>
                     </div>
 

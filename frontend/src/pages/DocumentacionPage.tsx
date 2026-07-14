@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import AdminListFilters from "../components/admin/AdminListFilters";
+import { CustomSelect } from "../components/shared/CustomSelect";
+import { CustomDatePicker } from "../components/shared/CustomDatePicker";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import {
   FileText,
@@ -263,19 +265,17 @@ const CarnetsTab: React.FC<{
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
                 Operador
               </label>
-              <select
+              <CustomSelect
                 value={selectedUid}
-                onChange={(e) => handleSelectOperador(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
-                required
-              >
-                <option value="">Seleccionar operador...</option>
-                {operadores.map((u) => (
-                  <option key={u.uid} value={u.uid}>
-                    {u.nombre}{u.legajo ? ` — Legajo ${u.legajo}` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => handleSelectOperador(val)}
+                options={operadores.map((u) => ({
+                  value: u.uid,
+                  label: `${u.nombre}${u.legajo ? ` — Legajo ${u.legajo}` : ""}`,
+                }))}
+                placeholder="Seleccionar operador..."
+                icon={User}
+                size="sm"
+              />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
@@ -293,11 +293,12 @@ const CarnetsTab: React.FC<{
                 Fecha de vencimiento
               </label>
               <div className="flex gap-2">
-                <input
-                  type="date"
+                <CustomDatePicker
                   value={fechaVencimiento}
-                  onChange={(e) => setFechaVencimiento(e.target.value)}
-                  className="flex-grow px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
+                  onChange={setFechaVencimiento}
+                  placeholder="Fecha de vencimiento..."
+                  className="flex-grow"
+                  size="sm"
                   required
                 />
                 <button
@@ -372,11 +373,11 @@ const CarnetsTab: React.FC<{
                           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
                             Nueva fecha de vencimiento
                           </label>
-                          <input
-                            type="date"
+                          <CustomDatePicker
                             value={editFecha}
-                            onChange={(e) => setEditFecha(e.target.value)}
-                            className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
+                            onChange={setEditFecha}
+                            placeholder="Nueva fecha..."
+                            size="sm"
                           />
                         </div>
                         <div className="flex gap-2">
@@ -663,29 +664,27 @@ const ITVTab: React.FC = () => {
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
                 Grúa
               </label>
-              <select
+              <CustomSelect
                 value={selectedGruaId}
-                onChange={(e) => handleSelectGrua(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
-                required
-              >
-                <option value="">Seleccionar grúa...</option>
-                {gruas.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.patente} — {g.descripcion}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => handleSelectGrua(val)}
+                options={gruas.map((g) => ({
+                  value: g.id,
+                  label: g.descripcion?.trim() ? `${g.descripcion} — ${g.patente}` : g.patente,
+                }))}
+                placeholder="Seleccionar grúa..."
+                icon={Truck}
+                size="sm"
+              />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
                 Fecha de vencimiento
               </label>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={fechaVencimiento}
-                onChange={(e) => setFechaVencimiento(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
+                onChange={setFechaVencimiento}
+                placeholder="Fecha de vencimiento..."
+                size="sm"
                 required
               />
             </div>
@@ -693,11 +692,11 @@ const ITVTab: React.FC = () => {
               <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
                 Turno renovación (opcional)
               </label>
-              <input
-                type="date"
+              <CustomDatePicker
                 value={fechaTurno}
-                onChange={(e) => setFechaTurno(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
+                onChange={setFechaTurno}
+                placeholder="Turno renovación..."
+                size="sm"
               />
             </div>
             <div className="flex items-end">
@@ -767,27 +766,27 @@ const ITVTab: React.FC = () => {
                   >
                     {editing ? (
                       <div className="p-4 space-y-3">
-                        <p className="text-sm font-bold text-gray-900">{r.gruaPatente}</p>
+                        <p className="text-sm font-bold text-gray-900">{gruas.find((g) => g.patente === r.gruaPatente)?.descripcion || r.gruaPatente}</p>
                         <div>
                           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
                             Fecha de vencimiento
                           </label>
-                          <input
-                            type="date"
+                          <CustomDatePicker
                             value={editFechaVenc}
-                            onChange={(e) => setEditFechaVenc(e.target.value)}
-                            className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
+                            onChange={setEditFechaVenc}
+                            placeholder="Fecha de vencimiento..."
+                            size="sm"
                           />
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
                             Turno renovación
                           </label>
-                          <input
-                            type="date"
+                          <CustomDatePicker
                             value={editFechaTurno}
-                            onChange={(e) => setEditFechaTurno(e.target.value)}
-                            className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
+                            onChange={setEditFechaTurno}
+                            placeholder="Turno renovación..."
+                            size="sm"
                           />
                         </div>
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -848,8 +847,11 @@ const ITVTab: React.FC = () => {
 
                         <p className="font-bold text-sm text-gray-900 leading-snug flex items-center gap-2">
                           <Truck className="w-4 h-4 text-brand-cta shrink-0" />
-                          {r.gruaPatente}
+                          {gruas.find((g) => g.patente === r.gruaPatente)?.descripcion || r.gruaPatente}
                         </p>
+                        {gruas.find((g) => g.patente === r.gruaPatente)?.descripcion && (
+                          <p className="font-mono text-[10px] text-brand-pale ml-6">{r.gruaPatente}</p>
+                        )}
 
                         <div className="mt-3 space-y-1.5">
                           <div className="flex items-center gap-2 text-xs text-brand-pale">

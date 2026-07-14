@@ -225,7 +225,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         ? [{ value: "", label: "Sin grúas de este tipo" }]
         : gruasFiltradas.map((g) => ({
             value: g.patente,
-            label: `${g.patente}${g.descripcion ? ` — ${g.descripcion}` : ""}`,
+            label: g.descripcion?.trim() ? `${g.descripcion} — ${g.patente}` : g.patente,
           })),
     [gruasFiltradas]
   );

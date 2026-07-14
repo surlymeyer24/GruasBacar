@@ -28,7 +28,7 @@ import { formatFechaHora, fechaServicio, fechaDiaServicio } from "../utils/forma
 import { isMock, db } from "../firebase";
 import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { CORRALONES } from "../data/mockData";
-import { Servicio, EstadoServicio, Evento, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla } from "@gruasbacar/shared";
+import { Servicio, EstadoServicio, Evento, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla, esPatenteSinNumero, normalizarPatenteInput } from "@gruasbacar/shared";
 import { resolverPatenteGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
 import { gruaService } from "../services/grua.service";
@@ -106,6 +106,20 @@ function corralonKeysForServicio(
   return [...keys];
 }
 
+/** Valor del select de edición: docId del catálogo (el servicio suele guardar el nombre). */
+function valorSelectCorralon(
+  corralonRaw: string | undefined,
+  corralones: CorralonCatalogo[]
+): string {
+  if (!corralonRaw?.trim()) return "";
+  const raw = corralonRaw.trim();
+  const found = corralones.find(
+    (c) => c.id === raw || c.docId === raw || c.nombre === raw
+  );
+  if (!found) return raw;
+  return found.docId ?? found.id;
+}
+
 export const HistorialPage: React.FC = () => {
   const { userData, loading } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -135,6 +149,7 @@ export const HistorialPage: React.FC = () => {
   const [gruasCatalog, setGruasCatalog] = useState<Grua[]>([]);
 
   const [editPatente, setEditPatente] = useState("");
+  const [editDescripcionVehiculo, setEditDescripcionVehiculo] = useState("");
   const [editInfraccion, setEditInfraccion] = useState("");
   const [editGrua, setEditGrua] = useState("");
   const [editCorralon, setEditCorralon] = useState("");
@@ -477,9 +492,10 @@ export const HistorialPage: React.FC = () => {
   const startEditActa = async () => {
     if (!selectedService || !puedeGestionar) return;
     setEditPatente(selectedService.patente);
+    setEditDescripcionVehiculo(selectedService.descripcionVehiculo ?? "");
     setEditInfraccion(selectedService.numeroInfraccion ?? "");
     setEditGrua(patenteGruaDe(selectedService));
-    setEditCorralon(selectedService.corralon ?? "");
+    setEditCorralon(valorSelectCorralon(selectedService.corralon, corralonesCatalog));
     setEditChofer(selectedService.dupla?.chofer ?? "");
     setEditEnganchador(enganchadorDeDuplaServicio(selectedService.dupla) ?? "");
     setEditDuplaId(selectedService.dupla?.duplaId);
@@ -494,15 +510,15 @@ export const HistorialPage: React.FC = () => {
 
     try {
       const catalog = await ensureAdminCatalog();
-      setCorralonesCatalog(
-        catalog.corralones.map((c) => ({
-          id: c.docId,
-          docId: c.docId,
-          nombre: c.nombre,
-          direccion: c.direccion,
-          activo: c.activo,
-        }))
-      );
+      const corralonesMapped: CorralonCatalogo[] = catalog.corralones.map((c) => ({
+        id: c.docId,
+        docId: c.docId,
+        nombre: c.nombre,
+        direccion: c.direccion,
+        activo: c.activo,
+      }));
+      setCorralonesCatalog(corralonesMapped);
+      setEditCorralon(valorSelectCorralon(selectedService.corralon, corralonesMapped));
       if (catalog.gruas.length > 0) {
         setGruasCatalog(
           catalog.gruas.map((g) => ({
@@ -518,6 +534,7 @@ export const HistorialPage: React.FC = () => {
       setDuplasCatalog(catalog.duplas.map((d) => ({ ...d, id: d.docId })));
     } catch {
       setCorralonesCatalog(CORRALONES);
+      setEditCorralon(valorSelectCorralon(selectedService.corralon, CORRALONES));
     }
   };
 
@@ -570,9 +587,16 @@ export const HistorialPage: React.FC = () => {
         ...(editUidEnganchador ? { uidEnganchador: editUidEnganchador } : {}),
       };
 
+      const patenteNormalizada = normalizarPatenteInput(editPatente);
+      const sinPatente = esPatenteSinNumero(patenteNormalizada);
+      const descripcionVehiculo = sinPatente
+        ? editDescripcionVehiculo.trim() || undefined
+        : undefined;
+
       await actualizarServicio({
         servicioId: selectedService.id,
         patente: editPatente.trim(),
+        ...(sinPatente ? { descripcionVehiculo: descripcionVehiculo ?? "" } : {}),
         numeroInfraccion: editInfraccion.trim() || undefined,
         grua: normalizeGruaId(editGrua.trim()),
         corralon: editCorralon.trim() || null,
@@ -581,12 +605,13 @@ export const HistorialPage: React.FC = () => {
         dupla: duplaPayload,
       });
 
-      const patente = editPatente.toUpperCase().trim();
+      const patente = patenteNormalizada;
       const numeroInfraccion = editInfraccion.toUpperCase().trim() || undefined;
 
       const updated: Servicio = {
         ...selectedService,
         patente,
+        descripcionVehiculo,
         numeroInfraccion,
         grua: normalizeGruaId(editGrua.trim()),
         corralon: editCorralon.trim() || undefined,
@@ -1055,12 +1080,33 @@ export const HistorialPage: React.FC = () => {
                   <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest leading-none">Acta Digital de Servicio</span>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     {editingActa ? (
-                      <input
-                        value={editPatente}
-                        onChange={(e) => setEditPatente(e.target.value)}
-                        className="text-xl sm:text-2xl font-bold font-mono text-gray-900 uppercase bg-white border border-brand-orange/30 rounded-lg px-2.5 py-1 w-full max-w-[220px] focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
-                        aria-label="Patente del vehículo"
-                      />
+                      <div className="space-y-2 w-full max-w-[320px]">
+                        <input
+                          value={editPatente}
+                          onChange={(e) => setEditPatente(e.target.value)}
+                          className="text-xl sm:text-2xl font-bold font-mono text-gray-900 uppercase bg-white border border-brand-orange/30 rounded-lg px-2.5 py-1 w-full focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                          aria-label="Patente del vehículo"
+                          placeholder="AA123BB o sin"
+                        />
+                        {esPatenteSinNumero(normalizarPatenteInput(editPatente)) && (
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                              Descripción del vehículo
+                            </label>
+                            <input
+                              value={editDescripcionVehiculo}
+                              onChange={(e) => setEditDescripcionVehiculo(e.target.value)}
+                              maxLength={200}
+                              placeholder="Ej: Fiat Palio rojo, Renault Clio gris"
+                              className="w-full px-2.5 py-1.5 text-sm font-sans font-medium text-gray-800 bg-white border border-brand-orange/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-orange/30"
+                              aria-label="Descripción del vehículo sin patente"
+                            />
+                            <p className="mt-1 text-[10px] text-gray-400 font-medium font-sans normal-case tracking-normal">
+                              Marca, modelo, color u otro dato que identifique al vehículo.
+                            </p>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <h2 className="text-xl sm:text-2xl font-bold font-mono text-gray-900">{displayPatente(selectedService.patente, selectedService.descripcionVehiculo)}</h2>
                     )}

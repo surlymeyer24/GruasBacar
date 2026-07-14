@@ -233,7 +233,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                         <p className="text-[10px] text-brand-pale mt-0.5">
                           Grúa:{" "}
                           <span className="font-bold text-brand-purply/80">
-                            {u.asignacionDiaria.gruaDescripcion ? `${u.asignacionDiaria.gruaDescripcion} — ` : ""}{u.asignacionDiaria.gruaPatente}
+                            {u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPatente}{u.asignacionDiaria.gruaDescripcion && u.asignacionDiaria.gruaPatente ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPatente})</span> : null}
                           </span>{" "}
                           • D: {u.asignacionDiaria.duplaChofer} +{" "}
                           {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}

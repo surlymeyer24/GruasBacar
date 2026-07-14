@@ -214,7 +214,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div key={u.uid ?? `turno-${idx}`} className="p-3 bg-brand-bg rounded-xl border border-brand-seashell hover:border-brand-cta/30 transition-colors">
                         <p className="font-sans text-sm font-bold text-brand-purply">{u.nombre}</p>
                         {u.asignacionDiaria ? (
-                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion ? `${u.asignacionDiaria.gruaDescripcion} — ` : ""}{u.asignacionDiaria.gruaPatente}</span> • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
+                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPatente}</span>{u.asignacionDiaria.gruaDescripcion && u.asignacionDiaria.gruaPatente ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPatente})</span> : null} • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
                         ) : (
                           <p className="text-[10px] text-brand-pale mt-0.5">Servicio activo pero sin turno asignado</p>
                         )}

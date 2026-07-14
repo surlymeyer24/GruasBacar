@@ -234,7 +234,7 @@ export const NuevaActaManualPage: React.FC = () => {
                 onChange={setGrua}
                 options={gruas.map((g) => ({
                   value: g.patente,
-                  label: `${g.descripcion ? `${g.descripcion} — ` : ""}${g.patente}`,
+                  label: g.descripcion?.trim() ? `${g.descripcion} — ${g.patente}` : g.patente,
                 }))}
                 placeholder="Seleccioná grúa"
                 icon={Truck}

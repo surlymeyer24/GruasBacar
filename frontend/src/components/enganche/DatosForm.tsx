@@ -283,7 +283,9 @@ export const DatosForm: React.FC<DatosFormProps> = ({
               className="px-3 py-2.5 rounded-lg border border-slate-200/80 bg-slate-100/90 text-xs font-medium text-slate-400 truncate cursor-default"
             >
               {selectedGrua
-                ? [selectedGrua.descripcion, selectedGrua.patente].filter(Boolean).join(" — ")
+                ? (selectedGrua.descripcion?.trim()
+                    ? `${selectedGrua.descripcion} (${selectedGrua.patente})`
+                    : selectedGrua.patente)
                 : "Sin grúa asignada"}
             </div>
           </div>
