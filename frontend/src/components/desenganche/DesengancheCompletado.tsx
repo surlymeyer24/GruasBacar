@@ -77,7 +77,7 @@ export const DesengancheCompletado: React.FC<DesengancheCompletadoProps> = ({
         <div className="flex items-center justify-between">
           <span className="text-gray-400 font-bold uppercase tracking-wider text-[10px]">Patente</span>
           <span className="font-mono font-extrabold text-gray-900 text-sm tracking-wider">
-            {displayPatente(servicio.patente)}
+            {displayPatente(servicio.patente, servicio.descripcionVehiculo)}
           </span>
         </div>
         <div className="flex items-center justify-between">

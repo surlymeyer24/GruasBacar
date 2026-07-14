@@ -10,10 +10,10 @@ import { corralonService } from "../services/corralon.service";
 import { crearActaManual } from "../services/servicio.service";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
 import { db } from "../firebase";
-import { Grua, Corralon, Usuario, normalizeRoles, puedeGestionarActas } from "@gruasbacar/shared";
+import { Grua, Corralon, Usuario, normalizeRoles, puedeGestionarActas, normalizarPatenteInput, esPatenteSinNumero } from "@gruasbacar/shared";
 import { useAuth } from "../context/AuthContext";
 import { rutaInicioPorRoles } from "@gruasbacar/shared";
-import { FilePlus, MapPin, CheckCircle2, Truck, Users, Building2 } from "lucide-react";
+import { FilePlus, MapPin, CheckCircle2, Truck, Users, Building2, Car } from "lucide-react";
 import { CustomSelect } from "../components/shared/CustomSelect";
 
 export const NuevaActaManualPage: React.FC = () => {
@@ -26,6 +26,7 @@ export const NuevaActaManualPage: React.FC = () => {
   const [loadingCatalog, setLoadingCatalog] = useState(true);
 
   const [patente, setPatente] = useState("");
+  const [descripcionVehiculo, setDescripcionVehiculo] = useState("");
   const [grua, setGrua] = useState("");
   const [legajo, setLegajo] = useState("");
   const [chofer, setChofer] = useState("");
@@ -126,6 +127,7 @@ export const NuevaActaManualPage: React.FC = () => {
 
       const res = await crearActaManual({
         patente: patente.trim(),
+        ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
         grua: grua.trim(),
         legajoEnganchador: legajo.trim(),
         corralon: corralon.trim() || null,
@@ -206,6 +208,24 @@ export const NuevaActaManualPage: React.FC = () => {
               <p className="text-[10px] text-gray-400 font-medium mt-1">
                 Si el vehículo no tiene patente, escribí <span className="font-mono font-bold">sin</span>.
               </p>
+              {esPatenteSinNumero(normalizarPatenteInput(patente)) && (
+                <div className="mt-2 space-y-1">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
+                    <Car className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5 text-brand-cta" />
+                    Descripción del vehículo (opcional)
+                  </label>
+                  <input
+                    value={descripcionVehiculo}
+                    onChange={(e) => setDescripcionVehiculo(e.target.value)}
+                    placeholder="Ej: Fiat Palio rojo, Renault Clio gris"
+                    maxLength={200}
+                    className="w-full px-3 py-2 bg-brand-bg border border-gray-200 rounded-lg text-sm"
+                  />
+                  <p className="text-[10px] text-gray-400 font-medium">
+                    Marca, modelo, color u otro dato que identifique al vehículo.
+                  </p>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Grúa</label>

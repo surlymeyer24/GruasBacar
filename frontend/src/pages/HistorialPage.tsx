@@ -947,7 +947,7 @@ export const HistorialPage: React.FC = () => {
                           esAnulado ? "text-gray-500" : "text-gray-900"
                         }`}
                       >
-                        {displayPatente(service.patente)}
+                        {displayPatente(service.patente, service.descripcionVehiculo)}
                       </span>
                       {getStatusBadge(service.estado)}
                     </div>
@@ -1062,7 +1062,7 @@ export const HistorialPage: React.FC = () => {
                         aria-label="Patente del vehículo"
                       />
                     ) : (
-                      <h2 className="text-xl sm:text-2xl font-bold font-mono text-gray-900">{displayPatente(selectedService.patente)}</h2>
+                      <h2 className="text-xl sm:text-2xl font-bold font-mono text-gray-900">{displayPatente(selectedService.patente, selectedService.descripcionVehiculo)}</h2>
                     )}
                     {getStatusBadge(selectedService.estado)}
                     {tipoFlotaModal && (
@@ -1571,7 +1571,7 @@ export const HistorialPage: React.FC = () => {
           onClose={() => setShowAnularDialog(false)}
           onConfirm={handleAnularActa}
           title="Anular acta"
-          message={`¿Confirmás la anulación del acta ${displayPatente(selectedService?.patente)}${selectedService?.numeroInfraccion ? ` (N° ${selectedService.numeroInfraccion})` : ''}? El servicio quedará marcado como anulado.`}
+          message={`¿Confirmás la anulación del acta ${displayPatente(selectedService?.patente, selectedService?.descripcionVehiculo)}${selectedService?.numeroInfraccion ? ` (N° ${selectedService.numeroInfraccion})` : ''}? El servicio quedará marcado como anulado.`}
           confirmText={anulando ? "Anulando..." : "Anular acta"}
           danger
         />

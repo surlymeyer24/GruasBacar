@@ -151,6 +151,7 @@ export interface ServicioActivoResumen {
   id: string;
   estado: EstadoServicio;
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
 }
 
@@ -328,9 +329,12 @@ export function esPatenteSinNumero(patente: string | undefined | null): boolean 
 }
 
 /** Devuelve la patente para mostrar al usuario. S/N se muestra como "sin". */
-export function displayPatente(patente: string | undefined | null): string {
+export function displayPatente(patente: string | undefined | null, descripcionVehiculo?: string | null): string {
   const normalized = normalizarPatenteInput(patente);
-  return normalized === PATENTE_SIN_NUMERO ? 'sin' : normalized;
+  if (normalized === PATENTE_SIN_NUMERO) {
+    return descripcionVehiculo?.trim() ? `sin — ${descripcionVehiculo.trim()}` : 'sin';
+  }
+  return normalized;
 }
 
 /** Normaliza valor de grúa (patente o id) al formato `G-{patente}`. */
@@ -605,6 +609,7 @@ export interface Evento {
 export interface Servicio {
   id: string;
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   identificadorCompuesto: string; // `{numeroInfraccion}-{legajo}-{patente}` — también ID del documento
   estado: EstadoServicio;
@@ -662,6 +667,7 @@ export interface GuardarAsignacionDiariaPayload {
 // Payloads para Firebase Functions
 export interface IniciarEnganchePayload {
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   grua: string;
   dupla: DuplasServicio;
@@ -697,6 +703,7 @@ export interface AnularServicioPayload {
 export interface ActualizarServicioPayload {
   servicioId: string;
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   grua: string;
   corralon?: string | null;
@@ -716,6 +723,7 @@ export interface AgregarComentarioFotoPayload {
 /** Alta manual de acta completa (supervisor / admin). */
 export interface CrearActaManualPayload {
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   grua: string;
   dupla: DuplasServicio;
@@ -731,6 +739,35 @@ export interface CrearActaManualPayload {
   fotosEngancheBase64: string[];
   fotosDesenganche?: Omit<Foto, 'url' | 'driveFileId'>[];
   fotosDesengancheBase64?: string[];
+}
+
+// ── ITV (Inspección Técnica Vehicular) ──────────────────────
+
+export interface RegistroITV {
+  id: string;
+  numero: number;
+  gruaId: string;
+  gruaPatente: string;
+  fechaVencimiento: string;
+  fechaTurnoRenovacion?: string;
+  renovado: boolean;
+  activo: boolean;
+}
+
+export type ITVEstadoVencimiento =
+  | 'VIGENTE'
+  | 'POR_VENCER_30D'
+  | 'POR_VENCER_15D'
+  | 'POR_VENCER_7D'
+  | 'VENCIDO';
+
+export function calcularEstadoITV(fechaVencimiento: string, ahora?: Date): ITVEstadoVencimiento {
+  const dias = diasParaVencimiento(fechaVencimiento, ahora);
+  if (dias <= 0) return 'VENCIDO';
+  if (dias <= 7) return 'POR_VENCER_7D';
+  if (dias <= 15) return 'POR_VENCER_15D';
+  if (dias <= 30) return 'POR_VENCER_30D';
+  return 'VIGENTE';
 }
 
 // ── Carnets de conducir ──────────────────────────────────────

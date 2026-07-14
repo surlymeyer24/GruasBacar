@@ -9,14 +9,16 @@ import {
   RolUsuario,
   normalizarPatenteInput,
   PATENTE_SIN_NUMERO,
+  esPatenteSinNumero,
 } from "@gruasbacar/shared";
 import { asignacionDiariaVigente } from "../../utils/asignacionDiaria";
-import { FileText, ChevronRight, AlertCircle, Lock } from "lucide-react";
+import { FileText, ChevronRight, AlertCircle, Lock, Car } from "lucide-react";
 import { FlowBackButton } from "../shared/FlowBackButton";
 
 export interface DatosFormFields {
   numeroInfraccion: string;
   patente: string;
+  descripcionVehiculo: string;
   grua: string;
   gruaPatente: string;
   gruaDescripcion: string;
@@ -319,6 +321,26 @@ export const DatosForm: React.FC<DatosFormProps> = ({
           </p>
           {patentError && (
             <p className="text-[10px] text-red-500 font-medium">✓ {patentError}</p>
+          )}
+
+          {esPatenteSinNumero(normalizarPatenteInput(values.patente)) && (
+            <div className="mt-3 space-y-1">
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                <Car className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5 text-brand-cta" />
+                Descripción del vehículo (opcional)
+              </label>
+              <input
+                type="text"
+                value={values.descripcionVehiculo}
+                onChange={(e) => patchValues({ descripcionVehiculo: e.target.value })}
+                placeholder="Ej: Fiat Palio rojo, Renault Clio gris"
+                maxLength={200}
+                className="w-full px-3 py-2.5 bg-brand-bg border border-gray-250 rounded-xl text-xs"
+              />
+              <p className="text-[10px] text-gray-400 font-medium">
+                Marca, modelo, color u otro dato que identifique al vehículo.
+              </p>
+            </div>
           )}
         </div>
 

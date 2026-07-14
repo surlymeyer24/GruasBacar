@@ -194,7 +194,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                       className="p-3 bg-brand-bg rounded-xl border border-brand-seashell flex justify-between items-center hover:border-brand-cta/30 transition-colors"
                     >
                       <div>
-                        <p className="font-mono text-sm font-bold text-brand-purply">{displayPatente(s.patente)}</p>
+                        <p className="font-mono text-sm font-bold text-brand-purply">{displayPatente(s.patente, s.descripcionVehiculo)}</p>
                         <p className="text-[10px] text-brand-pale">
                           Grúa: <span className="font-bold">{s.grua}</span>{s.numeroInfraccion ? ` • N°: ${s.numeroInfraccion}` : ''}
                         </p>

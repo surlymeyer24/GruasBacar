@@ -53,6 +53,7 @@ export function patchEngancheDraft(patch: Partial<EngancheDraft>): void {
       formValues: patch.formValues ?? {
         numeroInfraccion: "",
         patente: "",
+        descripcionVehiculo: "",
         grua: "",
         gruaPatente: "",
         gruaDescripcion: "",

@@ -29,6 +29,7 @@ import {
   RolUsuario,
   AsignacionDiaria,
   DuplasServicio,
+  esPatenteSinNumero,
 } from '@gruasbacar/shared';
 import {
   validarPatente,
@@ -92,14 +93,16 @@ function registrarVersionActa(
 
 function buildServicioActivoResumen(
   servicioId: string,
-  data: Pick<ServicioActivoResumen, 'estado' | 'patente' | 'numeroInfraccion'>
+  data: Pick<ServicioActivoResumen, 'estado' | 'patente' | 'numeroInfraccion'> & { descripcionVehiculo?: string }
 ): ServicioActivoResumen {
-  return {
+  const resumen: ServicioActivoResumen = {
     id: servicioId,
     estado: data.estado,
     patente: data.patente,
     numeroInfraccion: data.numeroInfraccion,
   };
+  if (data.descripcionVehiculo) resumen.descripcionVehiculo = data.descripcionVehiculo;
+  return resumen;
 }
 
 /** Correlativo global de actas (6 dígitos, con ceros a la izquierda). Atómico vía transacción. */
@@ -201,6 +204,9 @@ export async function iniciarEnganche(
   }
 
   const geoEnganche: GeoPoint = data.geo ?? { lat: 0, lng: 0 };
+  const descripcionVehiculo = esPatenteSinNumero(patente)
+    ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
+    : undefined;
 
   await db().runTransaction(async (tx) => {
     const asignacion = usuarioData.asignacionDiaria as AsignacionDiaria | undefined;
@@ -224,6 +230,7 @@ export async function iniciarEnganche(
       dupla: duplaEnriquecida,
       geoEnganche,
       creadoEn: FieldValue.serverTimestamp(),
+      ...(descripcionVehiculo ? { descripcionVehiculo } : {}),
     });
     tx.update(usuarioRef, {
       servicioActivoId: servicioRef.id,
@@ -231,6 +238,7 @@ export async function iniciarEnganche(
         estado: 'ENGANCHADO',
         patente,
         numeroInfraccion,
+        descripcionVehiculo,
       }),
     });
   });
@@ -762,6 +770,10 @@ export async function actualizarServicio(data: ActualizarServicioPayload, editor
 
   const actual = servicioSnap.data()!;
 
+  const descripcionVehiculo = esPatenteSinNumero(patente)
+    ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
+    : undefined;
+
   const updates: Record<string, unknown> = {
     patente,
     numeroInfraccion: numeroInfraccion ?? null,
@@ -769,6 +781,7 @@ export async function actualizarServicio(data: ActualizarServicioPayload, editor
     gruaDocId: gruaValidada.docId,
     tipoFlota: gruaValidada.tipoFlota,
     dupla,
+    descripcionVehiculo: descripcionVehiculo ?? null,
   };
   if (corralonInput !== undefined) {
     updates.corralon = corralonValidado ? corralonValidado.corralonNombre : null;
@@ -900,6 +913,9 @@ export async function crearActaManual(
   driveFolderId: string
 ): Promise<{ servicioId: string }> {
   const patente = validarPatente(data.patente);
+  const descripcionVehiculo = esPatenteSinNumero(patente)
+    ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
+    : undefined;
   const gruaId = normalizeGruaId(validarString(data.grua, 'grua', 20));
   validarString(data.dupla?.chofer, 'dupla.chofer', 100);
   validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador', 100);
@@ -993,6 +1009,7 @@ export async function crearActaManual(
       legajoChofer,
       dupla: data.dupla,
       geoEnganche,
+      ...(descripcionVehiculo ? { descripcionVehiculo } : {}),
       origenManual: true,
       creadoEn: ts,
       finalizadoEn: ts,

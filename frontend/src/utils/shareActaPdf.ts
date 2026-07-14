@@ -20,7 +20,7 @@ export type CompartirPdfResult = "shared" | "aborted" | "not_allowed" | "unavail
 /** Debe llamarse directamente desde un click/tap del usuario (no tras await largo). */
 export async function compartirPdfBlob(
   blob: Blob,
-  servicio: Pick<Servicio, "patente" | "numeroInfraccion">
+  servicio: Pick<Servicio, "patente" | "numeroInfraccion" | "descripcionVehiculo">
 ): Promise<CompartirPdfResult> {
   const filename = nombreArchivoPdf(servicio);
   const file = new File([blob], filename, { type: "application/pdf" });
@@ -29,8 +29,8 @@ export async function compartirPdfBlob(
 
   try {
     await navigator.share({
-      title: `Acta ${displayPatente(servicio.patente)}`,
-      text: `Acta de servicio — Patente ${displayPatente(servicio.patente)}`,
+      title: `Acta ${displayPatente(servicio.patente, servicio.descripcionVehiculo)}`,
+      text: `Acta de servicio — Patente ${displayPatente(servicio.patente, servicio.descripcionVehiculo)}`,
       files: [file],
     });
     return "shared";

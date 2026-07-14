@@ -45,6 +45,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
   const { getPosition } = useGeolocation();
 
   const PATENTE_KEY = `gruasbacar_patente_${turno.duplaId}`;
+  const DESC_VEH_KEY = `gruasbacar_descveh_${turno.duplaId}`;
   const [patente, setPatenteRaw] = useState(() => {
     try { return sessionStorage.getItem(PATENTE_KEY) ?? ""; } catch { return ""; }
   });
@@ -52,6 +53,13 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
     setPatenteRaw(v);
     try { sessionStorage.setItem(PATENTE_KEY, v); } catch { /* quota */ }
   }, [PATENTE_KEY]);
+  const [descripcionVehiculo, setDescripcionVehiculoRaw] = useState(() => {
+    try { return sessionStorage.getItem(DESC_VEH_KEY) ?? ""; } catch { return ""; }
+  });
+  const setDescripcionVehiculo = useCallback((v: string) => {
+    setDescripcionVehiculoRaw(v);
+    try { sessionStorage.setItem(DESC_VEH_KEY, v); } catch { /* quota */ }
+  }, [DESC_VEH_KEY]);
 
   const [patenteError, setPatenteError] = useState<string | null>(null);
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | undefined>();
@@ -103,6 +111,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
       const res = await servicioService.iniciarEnganche(
         {
           patente: normalizedPatente,
+          ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
           grua: turno.gruaPatente,
           gruaPatente: turno.gruaPatente,
           dupla: turno.duplaId,
@@ -230,6 +239,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         const res = await servicioService.iniciarEnganche(
           {
             patente: normalizedPatente,
+            ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
             grua: turno.gruaPatente,
             gruaPatente: turno.gruaPatente,
             dupla: turno.duplaId,
@@ -258,7 +268,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
       fotosRegistradas = true;
       setFotosYaRegistradas(true);
       await confirmarTrasladoConRetry(sId);
-      try { sessionStorage.removeItem(PATENTE_KEY); } catch { /* ok */ }
+      try { sessionStorage.removeItem(PATENTE_KEY); sessionStorage.removeItem(DESC_VEH_KEY); } catch { /* ok */ }
       onCompletedRef.current();
     } catch (err: unknown) {
       if (fotosRegistradas && sId) {
@@ -377,6 +387,8 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
           onChange={setPatente}
           error={patenteError}
           onErrorChange={setPatenteError}
+          descripcionVehiculo={descripcionVehiculo}
+          onDescripcionVehiculoChange={setDescripcionVehiculo}
         />
       </div>
 

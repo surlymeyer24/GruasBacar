@@ -373,7 +373,7 @@ export const MisActasPage: React.FC = () => {
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-base font-bold tracking-wide text-gray-900">
-                        {displayPatente(service.patente)}
+                        {displayPatente(service.patente, service.descripcionVehiculo)}
                       </span>
                       {entregada ? (
                         <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-250 font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wide inline-block font-mono">
@@ -434,7 +434,7 @@ export const MisActasPage: React.FC = () => {
                   </span>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     <h2 className="text-xl sm:text-2xl font-bold font-mono text-gray-900">
-                      {displayPatente(selectedService.patente)}
+                      {displayPatente(selectedService.patente, selectedService.descripcionVehiculo)}
                     </h2>
                   </div>
                   <p className="text-xs text-brand-pale mt-1 flex items-center gap-1">

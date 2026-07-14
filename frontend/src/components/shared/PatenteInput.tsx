@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { normalizarPatenteInput, PATENTE_SIN_NUMERO } from "@gruasbacar/shared";
+import { normalizarPatenteInput, PATENTE_SIN_NUMERO, esPatenteSinNumero } from "@gruasbacar/shared";
+import { Car } from "lucide-react";
 
 export function validatePatenteText(p: string): string | null {
   const clean = normalizarPatenteInput(p);
@@ -20,6 +21,8 @@ interface PatenteInputProps {
   onChange: (value: string) => void;
   error?: string | null;
   onErrorChange?: (error: string | null) => void;
+  descripcionVehiculo?: string;
+  onDescripcionVehiculoChange?: (value: string) => void;
 }
 
 export const PatenteInput: React.FC<PatenteInputProps> = ({
@@ -27,6 +30,8 @@ export const PatenteInput: React.FC<PatenteInputProps> = ({
   onChange,
   error: externalError,
   onErrorChange,
+  descripcionVehiculo,
+  onDescripcionVehiculoChange,
 }) => {
   const [internalError, setInternalError] = useState<string | null>(null);
   const error = externalError ?? internalError;
@@ -44,6 +49,8 @@ export const PatenteInput: React.FC<PatenteInputProps> = ({
       onErrorChange?.(null);
     }
   };
+
+  const showDescripcion = esPatenteSinNumero(normalizarPatenteInput(value));
 
   return (
     <div className="space-y-1">
@@ -73,6 +80,26 @@ export const PatenteInput: React.FC<PatenteInputProps> = ({
       </p>
       {error && (
         <p className="text-[10px] text-red-500 font-medium">✓ {error}</p>
+      )}
+
+      {showDescripcion && onDescripcionVehiculoChange && (
+        <div className="mt-3 space-y-1">
+          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+            <Car className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5 text-brand-cta" />
+            Descripción del vehículo (opcional)
+          </label>
+          <input
+            type="text"
+            value={descripcionVehiculo ?? ""}
+            onChange={(e) => onDescripcionVehiculoChange(e.target.value)}
+            placeholder="Ej: Fiat Palio rojo, Renault Clio gris"
+            maxLength={200}
+            className="w-full px-3 py-2.5 bg-brand-bg border border-gray-250 rounded-xl text-xs"
+          />
+          <p className="text-[10px] text-gray-400 font-medium">
+            Marca, modelo, color u otro dato que identifique al vehículo.
+          </p>
+        </div>
       )}
     </div>
   );

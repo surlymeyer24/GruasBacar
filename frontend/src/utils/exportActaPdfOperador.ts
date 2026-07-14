@@ -76,7 +76,7 @@ function drawOperadorHeader(doc: JsPDFType, logo: LogoAsset | null, servicio: Se
 
   doc.setFontSize(20);
   doc.setTextColor(...GRAY_900);
-  doc.text(displayPatente(servicio.patente), MARGIN, y);
+  doc.text(displayPatente(servicio.patente, servicio.descripcionVehiculo), MARGIN, y);
   y += 8;
 
   doc.setFont("helvetica", "normal");

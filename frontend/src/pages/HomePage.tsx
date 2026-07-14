@@ -256,7 +256,7 @@ export const HomePage: React.FC = () => {
                   <div className="space-y-1">
                     <span className="text-[10px] font-bold text-brand-pale uppercase tracking-widest block">Vehículo</span>
                     <span className="font-mono text-sm font-extrabold text-brand-purply px-2 py-0.5 bg-brand-bg rounded border border-brand-seashell">
-                      {displayPatente(activeService.patente)}
+                      {displayPatente(activeService.patente, activeService.descripcionVehiculo)}
                     </span>
                   </div>
                   <div className="space-y-1 text-right">

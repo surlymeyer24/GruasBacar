@@ -23,6 +23,7 @@ import {
 export interface IniciarEngancheData {
   numeroInfraccion?: string;
   patente: string;
+  descripcionVehiculo?: string;
   grua: string;
   gruaPatente?: string;
   dupla: string;
@@ -42,6 +43,7 @@ export const servicioService = {
         {
           numeroInfraccion?: string;
           patente: string;
+          descripcionVehiculo?: string;
           grua: string;
           dupla: { chofer: string; enganchador: string };
           geo: { lat: number; lng: number };
@@ -52,6 +54,7 @@ export const servicioService = {
         const res = await cloudFn({
           numeroInfraccion: data.numeroInfraccion,
           patente: data.patente,
+          ...(data.descripcionVehiculo ? { descripcionVehiculo: data.descripcionVehiculo } : {}),
           grua: gruaPatente,
           dupla: {
             chofer: data.duplaChofer?.trim() || "—",

@@ -48,7 +48,7 @@ export const PantallaTraslado: React.FC<PantallaTrasladoProps> = ({
 
           <div>
             <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Patente Infractor</span>
-            <span className="font-mono font-extrabold text-2xl text-white tracking-widest">{displayPatente(servicio.patente)}</span>
+            <span className="font-mono font-extrabold text-2xl text-white tracking-widest">{displayPatente(servicio.patente, servicio.descripcionVehiculo)}</span>
           </div>
 
           <div className="pt-4 border-t border-zinc-800/70 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
