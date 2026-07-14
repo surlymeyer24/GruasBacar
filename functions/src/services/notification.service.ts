@@ -15,6 +15,8 @@ const TIPOS_CON_PUSH = new Set<TipoNotificacion>([
   'CARNET_POR_VENCER_30D',
   'CARNET_POR_VENCER_15D',
   'CARNET_POR_VENCER_7D',
+  'ITV_POR_VENCER_7D',
+  'ITV_POR_VENCER_1D',
 ]);
 
 export interface CrearNotificacionInput {

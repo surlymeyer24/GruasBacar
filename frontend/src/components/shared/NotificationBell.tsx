@@ -34,6 +34,9 @@ function rutaAccion(notif: Notificacion): string | null {
   if (notif.tipo === "CARNET_POR_VENCER_30D" || notif.tipo === "CARNET_POR_VENCER_15D" || notif.tipo === "CARNET_POR_VENCER_7D") {
     return "/documentacion";
   }
+  if (notif.tipo === "ITV_POR_VENCER_7D" || notif.tipo === "ITV_POR_VENCER_1D") {
+    return "/documentacion";
+  }
   return null;
 }
 

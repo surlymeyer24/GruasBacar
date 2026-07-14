@@ -7,7 +7,9 @@ export type TipoNotificacion =
   | 'FOTO_SUBIDA_ERROR'
   | 'CARNET_POR_VENCER_30D'
   | 'CARNET_POR_VENCER_15D'
-  | 'CARNET_POR_VENCER_7D';
+  | 'CARNET_POR_VENCER_7D'
+  | 'ITV_POR_VENCER_7D'
+  | 'ITV_POR_VENCER_1D';
 
 export interface Notificacion {
   id: string;

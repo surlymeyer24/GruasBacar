@@ -103,6 +103,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /itv/{itvId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
     match /notificaciones/{notifId} {
       allow read: if isAuthenticated() && resource.data.destinatarioUid == request.auth.uid;
       allow create: if false;

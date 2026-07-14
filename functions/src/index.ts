@@ -7,6 +7,7 @@ import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as servicioService from './services/servicio.service';
 import * as carnetService from './services/carnet.service';
+import * as itvService from './services/itv.service';
 import * as usuarioService from './services/usuario.service';
 import * as mapsService from './services/maps.service';
 import { verificarAuth, verificarAdmin, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
@@ -327,9 +328,40 @@ export const desactivarCarnet = onCall(callable, withHttpsErrorHandling('desacti
 }));
 
 export const verificarCarnetsVencimiento = onSchedule(
-  { schedule: 'every day 08:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
   async () => {
     await carnetService.verificarVencimientosCarnets();
+  }
+);
+
+// ── ITV (Inspección Técnica Vehicular) ──────────────────────
+
+export const crearITV = onCall(callable, withHttpsErrorHandling('crearITV', async (request) => {
+  await verificarAdmin(request.auth);
+  return itvService.crearITV(request.data);
+}));
+
+export const actualizarITV = onCall(callable, withHttpsErrorHandling('actualizarITV', async (request) => {
+  await verificarAdmin(request.auth);
+  await itvService.actualizarITV(request.data);
+  return { ok: true };
+}));
+
+export const listarITV = onCall(callable, withHttpsErrorHandling('listarITV', async (request) => {
+  await verificarAdmin(request.auth);
+  return itvService.listarITV();
+}));
+
+export const desactivarITV = onCall(callable, withHttpsErrorHandling('desactivarITV', async (request) => {
+  await verificarAdmin(request.auth);
+  await itvService.desactivarITV(request.data?.itvId);
+  return { ok: true };
+}));
+
+export const verificarITVVencimiento = onSchedule(
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await itvService.verificarVencimientosITV();
   }
 );
 
