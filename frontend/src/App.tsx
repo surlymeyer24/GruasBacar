@@ -2,6 +2,7 @@ import React from "react";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationProvider";
 import { ServicioActivoProvider } from "./context/ServicioActivoProvider";
 
 // Components
@@ -21,14 +22,17 @@ import EnganchePage from "./pages/EnganchePage";
 import TrasladoPage from "./pages/TrasladoPage";
 import DesenganchePage from "./pages/DesenganchePage";
 import HistorialPage from "./pages/HistorialPage";
+import MisActasPage from "./pages/MisActasPage";
 import ReportesPage from "./pages/ReportesPage";
 import AdminPage from "./pages/AdminPage";
 import TurnosPage from "./pages/TurnosPage";
+import DocumentacionPage from "./pages/DocumentacionPage";
 
 export default function App() {
   return (
     <ErrorBoundary>
     <AuthProvider>
+      <NotificationProvider>
       <ServicioActivoProvider>
       <HashRouter>
         <Routes>
@@ -122,6 +126,17 @@ export default function App() {
           />
 
           <Route
+            path="/mis-actas"
+            element={
+              <ProtectedRoute>
+                <RoleGuard allowedRole="ENGANCHADOR" fallbackPath="/historial">
+                  <MisActasPage />
+                </RoleGuard>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/reportes"
             element={
               <ProtectedRoute>
@@ -152,11 +167,23 @@ export default function App() {
             }
           />
 
+          <Route
+            path="/documentacion"
+            element={
+              <ProtectedRoute>
+                <RoleGuard allowedRole="ADMIN">
+                  <DocumentacionPage />
+                </RoleGuard>
+              </ProtectedRoute>
+            }
+          />
+
           {/* Fallback unknown paths */}
           <Route path="*" element={<DefaultRedirect />} />
         </Routes>
       </HashRouter>
       </ServicioActivoProvider>
+      </NotificationProvider>
     </AuthProvider>
     </ErrorBoundary>
   );

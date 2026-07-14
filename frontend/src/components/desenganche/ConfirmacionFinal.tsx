@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { Foto } from "@gruasbacar/shared";
+import { Foto, TipoDestino } from "@gruasbacar/shared";
 import { etiquetaFotoLegible } from "../../utils/driveUrl";
-import { ClipboardCheck, FileText, CheckCircle, PenTool, Building2 } from "lucide-react";
+import { ClipboardCheck, CheckCircle, PenTool, Building2, Shield } from "lucide-react";
 import { FlowBackButton } from "../shared/FlowBackButton";
 
 interface ConfirmacionFinalProps {
   corralonId: string;
   corralonNombre?: string;
-  encargadoDeposito?: string;
+  tipoDestino?: TipoDestino;
   fotos: Foto[];
   initialObservacion?: string;
   onConfirm: (observacionGeneral: string) => void;
@@ -18,7 +18,7 @@ interface ConfirmacionFinalProps {
 
 export const ConfirmacionFinal: React.FC<ConfirmacionFinalProps> = ({
   corralonNombre = "Corralón Municipal",
-  encargadoDeposito,
+  tipoDestino,
   fotos,
   initialObservacion = "",
   onConfirm,
@@ -43,7 +43,7 @@ export const ConfirmacionFinal: React.FC<ConfirmacionFinalProps> = ({
       {/* Step Title Header */}
       <div>
         <span className="text-[10px] bg-emerald-50 text-emerald-600 font-extrabold px-2.5 py-1 rounded-full uppercase font-mono tracking-wider">
-          PASO 3 DE 3 · RESUMEN SERVICIO
+          PASO 2 DE 2 · RESUMEN SERVICIO
         </span>
         <h2 className="text-base font-bold text-gray-900 flex items-center gap-2 mt-3">
           <ClipboardCheck className="w-5 h-5 text-emerald-500" />
@@ -52,30 +52,16 @@ export const ConfirmacionFinal: React.FC<ConfirmacionFinalProps> = ({
       </div>
 
       {/* Overview Block */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        
-        {/* Playon Destination */}
-        <div className="p-4 bg-brand-bg rounded-xl border border-brand-seashell/50 flex items-start gap-3">
-          <div className="p-2 bg-emerald-50 text-emerald-500 rounded-lg">
-            <Building2 className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase block tracking-wider">Lugar de Depósito</span>
-            <span className="text-xs font-extrabold text-gray-850">{corralonNombre}</span>
-          </div>
+      <div className="p-4 bg-brand-bg rounded-xl border border-brand-seashell/50 flex items-start gap-3">
+        <div className={`p-2 rounded-lg ${tipoDestino === "SECCIONAL" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-500"}`}>
+          {tipoDestino === "SECCIONAL" ? <Shield className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
         </div>
-
-        {/* Encargado del depósito */}
-        <div className="p-4 bg-brand-bg rounded-xl border border-brand-seashell/50 flex items-start gap-3">
-          <div className="p-2 bg-indigo-50 text-indigo-500 rounded-lg">
-            <FileText className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-[10px] text-gray-400 font-bold uppercase block tracking-wider">Encargado del Depósito</span>
-            <span className="text-xs font-extrabold text-gray-850">{encargadoDeposito?.trim() || "—"}</span>
-          </div>
+        <div>
+          <span className="text-[10px] text-gray-400 font-bold uppercase block tracking-wider">
+            {tipoDestino === "SECCIONAL" ? "Seccional Policial" : "Lugar de Depósito"}
+          </span>
+          <span className="text-xs font-extrabold text-gray-850">{corralonNombre}</span>
         </div>
-
       </div>
 
       {/* Captured snapshots preview container */}

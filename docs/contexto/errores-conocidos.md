@@ -172,6 +172,30 @@
 
 ---
 
+## `ayudante` / `inspector` / `encargadoDeposito` aparecen en documentos viejos
+
+- **Pasa cuando:** Leés una dupla o un servicio de Firestore y encontrás `ayudante` en vez de `enganchador`, o `inspector` / `encargadoDeposito` en actas viejas.
+- **Causa real:** En jul 2026 la dupla pasó de `{chofer, ayudante}` a `{chofer, enganchador}`, y se eliminaron `inspector` y `encargadoDeposito` del flujo. Los documentos anteriores conservan los campos legacy.
+- **Solución:** Los tipos en shared los declaran opcionales con `@deprecated`. Para el nombre del enganchador en duplas usar `enganchadorDeDupla()` de shared (cae a `ayudante` si `enganchador` no existe). **No escribir estos campos en documentos nuevos** y no borrarlos de los viejos.
+
+---
+
+## `roles.includes('ADMIN')` no reconoce a un SUPERADMIN
+
+- **Pasa cuando:** Un usuario SUPERADMIN no pasa una verificación de permisos y recibe `permission-denied` en algo que un admin sí puede hacer.
+- **Causa real:** El chequeo se hizo a mano con `roles.includes('ADMIN')` en vez de usar el helper. SUPERADMIN no incluye el string `'ADMIN'` en su array — la herencia de permisos vive en `esAdmin()`.
+- **Solución:** Usar siempre `esAdmin(roles)` (o `tieneRol()`) de `@gruasbacar/shared`. El middleware de functions, `RoleGuard` y `firestore.rules` ya están migrados.
+
+---
+
+## El frontend muestra "Error inesperado en ..." con code `internal`
+
+- **Pasa cuando:** Una Cloud Function falla y el mensaje al usuario es `Error inesperado en {operacion}: {detalle}`.
+- **Causa real:** No es un bug del wrapper — es `withHttpsErrorHandling` haciendo su trabajo: el handler lanzó un error genérico (no `HttpsError`) y el wrapper lo envolvió con contexto en lugar de dejar que Firebase lo enmascare como `internal` sin detalle.
+- **Solución:** Buscar el `console.error` correspondiente en Cloud Logging (queda logueado con el nombre de la operación). Si el caso de error es esperable, convertirlo en un `HttpsError` tipado con mensaje propio en el service.
+
+---
+
 ## Cosas que parecen rotas pero son a propósito
 
 - **`storage.rules` + Storage en uso** — Desde jun 2025 Storage es buffer temporal de fotos; las rules restringen escritura al `creadoPor` del servicio. Drive sigue siendo archivo definitivo.

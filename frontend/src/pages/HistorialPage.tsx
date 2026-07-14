@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
@@ -27,8 +28,8 @@ import { formatFechaHora, fechaServicio, fechaDiaServicio } from "../utils/forma
 import { isMock, db } from "../firebase";
 import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { CORRALONES } from "../data/mockData";
-import { Servicio, EstadoServicio, Evento, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, buildIdentificadorCompuesto, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion } from "@gruasbacar/shared";
-import { resolverPatenteGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
+import { Servicio, EstadoServicio, Evento, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla } from "@gruasbacar/shared";
+import { resolverPatenteGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
 import { gruaService } from "../services/grua.service";
 import { corralonService } from "../services/corralon.service";
@@ -40,6 +41,7 @@ import {
 } from "../utils/driveUrl";
 import { obtenerUrlsPreviewFotos } from "../services/drive.service";
 import { actualizarServicio, anularServicio, agregarComentarioFoto } from "../services/servicio.service";
+import { getFirebaseErrorMessage } from "../utils/firebaseError";
 import { ensureAdminCatalog } from "../services/adminCatalog.cache";
 import {
   adminServiciosScopeForUser,
@@ -106,6 +108,8 @@ function corralonKeysForServicio(
 
 export const HistorialPage: React.FC = () => {
   const { userData, loading } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const servicioParamHandledRef = useRef(false);
   const [services, setServices] = useState<Servicio[]>([]);
   const [fetching, setFetching] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -136,9 +140,14 @@ export const HistorialPage: React.FC = () => {
   const [editCorralon, setEditCorralon] = useState("");
   const [editChofer, setEditChofer] = useState("");
   const [editEnganchador, setEditEnganchador] = useState("");
-  const [editInspector, setEditInspector] = useState("");
+  const [editDuplaId, setEditDuplaId] = useState<string | undefined>();
+  const [editLegajoChofer, setEditLegajoChofer] = useState<string | undefined>();
+  const [editLegajoEnganchador, setEditLegajoEnganchador] = useState<string | undefined>();
+  const [editUidChofer, setEditUidChofer] = useState<string | undefined>();
+  const [editUidEnganchador, setEditUidEnganchador] = useState<string | undefined>();
+  const [usuariosCatalog, setUsuariosCatalog] = useState<Usuario[]>([]);
+  const [duplasCatalog, setDuplasCatalog] = useState<Dupla[]>([]);
   const [editTipoFlota, setEditTipoFlota] = useState<TipoFlota>("TRANSITO");
-  const [editEncargado, setEditEncargado] = useState("");
   const [editMotivo, setEditMotivo] = useState("");
   const [versionesActa, setVersionesActa] = useState<VersionActa[]>([]);
   const [loadingVersiones, setLoadingVersiones] = useState(false);
@@ -152,7 +161,7 @@ export const HistorialPage: React.FC = () => {
   const historialCompleto = userData ? puedeVerHistorialCompleto(userData.roles) : false;
 
   useEffect(() => {
-    if (!userData) return;
+    if (!userData || !historialCompleto) return;
 
     const scope = adminServiciosScopeForUser(historialCompleto, userData.uid);
     const snapshot = getAdminServiciosSnapshot(scope);
@@ -170,18 +179,13 @@ export const HistorialPage: React.FC = () => {
     (async () => {
       if (!snapshot?.servicios) setFetching(true);
       try {
-        const data = await ensureAdminServicios(scope);
+        // force: true evita mostrar conteos de fotos desactualizados cuando un
+        // servicio suma fotos (ej. desenganche) después de haberse cacheado la lista.
+        const data = await ensureAdminServicios(scope, { withPhotoCounts: true, force: true });
         if (!cancelled) {
           setServices(data.servicios);
-        }
-
-        const legacySinConteo = data.servicios.some(
-          (s) => typeof s.totalFotos !== "number"
-        );
-        if (!cancelled && legacySinConteo) {
-          const enriched = await ensureAdminServicios(scope, { withPhotoCounts: true });
-          if (!cancelled && enriched.photoCounts) {
-            setPhotoCounts(enriched.photoCounts);
+          if (data.photoCounts) {
+            setPhotoCounts(data.photoCounts);
           }
         }
       } catch (err) {
@@ -247,6 +251,8 @@ export const HistorialPage: React.FC = () => {
       .catch(() => setCorralonesCatalog(CORRALONES));
   }, [puedeGestionar]);
 
+  const labelGruaDe = (servicio: Servicio) =>
+    resolverLabelGrua(servicio.grua, gruasCatalog);
   const patenteGruaDe = (servicio: Servicio) =>
     resolverPatenteGrua(servicio.grua, gruasCatalog);
 
@@ -344,7 +350,7 @@ export const HistorialPage: React.FC = () => {
   const filteredServices = servicesForTab.filter((s) => {
     const matchesSearch = 
       s.patente.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.numeroInfraccion.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.numeroInfraccion ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.grua.toLowerCase().includes(searchQuery.toLowerCase()) ||
       patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase());
 
@@ -439,6 +445,25 @@ export const HistorialPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const servicioId = searchParams.get("servicio")?.trim();
+    if (!servicioId) {
+      servicioParamHandledRef.current = false;
+      return;
+    }
+    if (servicioParamHandledRef.current || fetching || services.length === 0) return;
+
+    const found = services.find((s) => s.id === servicioId);
+    if (!found) return;
+
+    servicioParamHandledRef.current = true;
+    void handleSelectService(found);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("servicio");
+    setSearchParams(next, { replace: true });
+  }, [fetching, services, searchParams, setSearchParams]);
+
   const closeModal = () => {
     setSelectedService(null);
     setSelectedEventos([]);
@@ -452,14 +477,17 @@ export const HistorialPage: React.FC = () => {
   const startEditActa = async () => {
     if (!selectedService || !puedeGestionar) return;
     setEditPatente(selectedService.patente);
-    setEditInfraccion(selectedService.numeroInfraccion);
+    setEditInfraccion(selectedService.numeroInfraccion ?? "");
     setEditGrua(patenteGruaDe(selectedService));
     setEditCorralon(selectedService.corralon ?? "");
     setEditChofer(selectedService.dupla?.chofer ?? "");
     setEditEnganchador(enganchadorDeDuplaServicio(selectedService.dupla) ?? "");
-    setEditInspector(selectedService.dupla?.inspector ?? "");
+    setEditDuplaId(selectedService.dupla?.duplaId);
+    setEditLegajoChofer(selectedService.dupla?.legajoChofer);
+    setEditLegajoEnganchador(selectedService.dupla?.legajoEnganchador);
+    setEditUidChofer(selectedService.dupla?.uidChofer);
+    setEditUidEnganchador(selectedService.dupla?.uidEnganchador);
     setEditTipoFlota(tipoFlotaDeServicio(selectedService, gruasCatalog));
-    setEditEncargado(selectedService.encargadoDeposito ?? "");
     setEditMotivo("");
     setActaError(null);
     setEditingActa(true);
@@ -486,6 +514,8 @@ export const HistorialPage: React.FC = () => {
           }))
         );
       }
+      setUsuariosCatalog(catalog.usuarios);
+      setDuplasCatalog(catalog.duplas.map((d) => ({ ...d, id: d.docId })));
     } catch {
       setCorralonesCatalog(CORRALONES);
     }
@@ -518,53 +548,50 @@ export const HistorialPage: React.FC = () => {
 
   const saveEditActa = async () => {
     if (!selectedService || !puedeGestionar) return;
-    if (!editPatente.trim() || !editInfraccion.trim() || !editGrua.trim()) {
-      setActaError("Patente, acta y grúa son obligatorios.");
+    if (!editPatente.trim() || !editGrua.trim()) {
+      setActaError("Patente y grúa son obligatorios.");
       return;
     }
-    if (!editChofer.trim() || !editEnganchador.trim() || !editInspector.trim()) {
-      setActaError("Completá los datos de la dupla e inspector.");
+    if (!editChofer.trim() || !editEnganchador.trim()) {
+      setActaError("Completá los datos de la dupla.");
       return;
     }
 
     setSavingActa(true);
     setActaError(null);
     try {
+      const duplaPayload = {
+        chofer: editChofer.trim(),
+        enganchador: editEnganchador.trim(),
+        ...(editDuplaId ? { duplaId: editDuplaId } : {}),
+        ...(editLegajoChofer ? { legajoChofer: editLegajoChofer } : {}),
+        ...(editLegajoEnganchador ? { legajoEnganchador: editLegajoEnganchador } : {}),
+        ...(editUidChofer ? { uidChofer: editUidChofer } : {}),
+        ...(editUidEnganchador ? { uidEnganchador: editUidEnganchador } : {}),
+      };
+
       await actualizarServicio({
         servicioId: selectedService.id,
         patente: editPatente.trim(),
-        numeroInfraccion: editInfraccion.trim(),
+        numeroInfraccion: editInfraccion.trim() || undefined,
         grua: normalizeGruaId(editGrua.trim()),
         corralon: editCorralon.trim() || null,
         tipoFlota: editTipoFlota,
-        encargadoDeposito: editEncargado.trim() || null,
         motivo: editMotivo.trim() || null,
-        dupla: {
-          chofer: editChofer.trim(),
-          enganchador: editEnganchador.trim(),
-          inspector: editInspector.trim(),
-        },
+        dupla: duplaPayload,
       });
 
       const patente = editPatente.toUpperCase().trim();
-      const numeroInfraccion = editInfraccion.toUpperCase().trim();
-      const legajoChofer = selectedService.legajoChofer?.trim() || "SIN_LEGAJO";
-      const encargadoDeposito = editEncargado.trim() || undefined;
+      const numeroInfraccion = editInfraccion.toUpperCase().trim() || undefined;
 
       const updated: Servicio = {
         ...selectedService,
         patente,
         numeroInfraccion,
-        identificadorCompuesto: buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente),
         grua: normalizeGruaId(editGrua.trim()),
         corralon: editCorralon.trim() || undefined,
         tipoFlota: editTipoFlota,
-        encargadoDeposito,
-        dupla: {
-          chofer: editChofer.trim(),
-          enganchador: editEnganchador.trim(),
-          inspector: editInspector.trim(),
-        },
+        dupla: duplaPayload,
       };
 
       const versiones = await reloadVersionesActa(updated.id);
@@ -578,7 +605,7 @@ export const HistorialPage: React.FC = () => {
       setEditMotivo("");
     } catch (err) {
       console.error(err);
-      setActaError(err instanceof Error ? err.message : "No se pudo guardar la acta.");
+      setActaError(getFirebaseErrorMessage(err, "No se pudo guardar la acta."));
     } finally {
       setSavingActa(false);
     }
@@ -630,7 +657,7 @@ export const HistorialPage: React.FC = () => {
       updateServicioInAdminCache(withVersion);
     } catch (err) {
       console.error(err);
-      setActaError(err instanceof Error ? err.message : "No se pudo anular la acta.");
+      setActaError(getFirebaseErrorMessage(err, "No se pudo anular la acta."));
     } finally {
       setAnulando(false);
     }
@@ -698,7 +725,7 @@ export const HistorialPage: React.FC = () => {
       await exportActaPdf({
         servicio: selectedService,
         eventos: selectedEventos,
-        patenteGrua: patenteGruaDe(selectedService),
+        patenteGrua: labelGruaDe(selectedService),
         tipoFlota: selectedServiceTipo ?? undefined,
         corralonNombre: selectedService.corralon
           ? getCorralonName(selectedService.corralon)
@@ -707,22 +734,27 @@ export const HistorialPage: React.FC = () => {
         previewUrls,
         incluirFotos,
         legajos: legajosDuplaServicio(selectedService, usuariosLegajo),
+        variant: "supervisor",
         onProgress: setExportPdfProgress,
       });
       setShowExportPdfDialog(false);
     } catch (err) {
       console.error(err);
-      setActaError(err instanceof Error ? err.message : "No se pudo generar el PDF.");
+      setActaError(getFirebaseErrorMessage(err, "No se pudo generar el PDF."));
     } finally {
       setExportandoPdf(false);
       setExportPdfProgress(null);
     }
   };
 
+  if (!loading && userData && !historialCompleto) {
+    return <Navigate to={rutaInicioPorRoles(userData.roles)} replace />;
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
-        
+
         {/* Page Head */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
@@ -737,7 +769,7 @@ export const HistorialPage: React.FC = () => {
         </div>
 
         {/* Solapas de vista */}
-        <div className="border border-brand-seashell rounded-2xl shadow-sm overflow-hidden bg-white">
+        <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
           <div className="bg-gray-100/80 px-2 pt-2">
             <nav
               className="grid grid-cols-3 gap-0.5"
@@ -915,7 +947,7 @@ export const HistorialPage: React.FC = () => {
                           esAnulado ? "text-gray-500" : "text-gray-900"
                         }`}
                       >
-                        {service.patente}
+                        {displayPatente(service.patente)}
                       </span>
                       {getStatusBadge(service.estado)}
                     </div>
@@ -927,11 +959,11 @@ export const HistorialPage: React.FC = () => {
                     >
                       <p className="font-mono flex items-center gap-1 min-w-0">
                         <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                        Acta: {service.numeroInfraccion}
+                        Acta: {service.numeroInfraccion || "—"}
                       </p>
                       <p className="flex items-center gap-1 min-w-0">
                         <Truck className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                        Grúa: {patenteGruaDe(service)}
+                        Grúa: {labelGruaDe(service)}
                       </p>
                     </div>
 
@@ -1020,7 +1052,7 @@ export const HistorialPage: React.FC = () => {
               {/* Modal Header */}
               <div className="flex justify-between items-center px-6 py-5 sm:px-8 border-b border-gray-100 bg-brand-bg rounded-t-2xl shrink-0">
                 <div>
-                  <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest leading-none">Acta Digital de Secuestro</span>
+                  <span className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-widest leading-none">Acta Digital de Servicio</span>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                     {editingActa ? (
                       <input
@@ -1030,7 +1062,7 @@ export const HistorialPage: React.FC = () => {
                         aria-label="Patente del vehículo"
                       />
                     ) : (
-                      <h2 className="text-xl sm:text-2xl font-bold font-mono text-gray-900">{selectedService.patente}</h2>
+                      <h2 className="text-xl sm:text-2xl font-bold font-mono text-gray-900">{displayPatente(selectedService.patente)}</h2>
                     )}
                     {getStatusBadge(selectedService.estado)}
                     {tipoFlotaModal && (
@@ -1111,7 +1143,7 @@ export const HistorialPage: React.FC = () => {
                         className="w-full px-2.5 py-1.5 bg-white border border-brand-orange/30 rounded-lg text-sm font-bold font-mono uppercase text-gray-900 focus:outline-none focus:ring-1 focus:ring-brand-orange/40"
                       />
                     ) : (
-                      <span className="font-bold text-gray-900 uppercase text-sm">{selectedService.numeroInfraccion}</span>
+                      <span className="font-bold text-gray-900 uppercase text-sm">{selectedService.numeroInfraccion || "—"}</span>
                     )}
                   </div>
                   <div>
@@ -1123,7 +1155,7 @@ export const HistorialPage: React.FC = () => {
                         options={[
                           ...gruasCatalog.map((g) => ({
                             value: g.patente,
-                            label: `${g.patente}${g.descripcion ? ` — ${g.descripcion}` : ""}`,
+                            label: `${g.descripcion ? `${g.descripcion} — ` : ""}${g.patente}`,
                           })),
                           ...(!gruasCatalog.some((g) => g.patente === editGrua) && editGrua
                             ? [{ value: editGrua, label: editGrua }]
@@ -1135,7 +1167,7 @@ export const HistorialPage: React.FC = () => {
                       />
                     ) : (
                       <span className="font-bold text-gray-900 uppercase text-sm">
-                        {patenteGruaDe(selectedService)}
+                        {labelGruaDe(selectedService)}
                       </span>
                     )}
                   </div>
@@ -1197,41 +1229,44 @@ export const HistorialPage: React.FC = () => {
                   <div className="sm:col-span-2 lg:col-span-3 pt-2 border-t border-brand-seashell">
                     <span className="text-gray-400 block mb-1">Personal de la Dupla</span>
                     {editingActa ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-sans">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-sans">
                         <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Chofer</label>
-                          <input
-                            value={editChofer}
-                            onChange={(e) => setEditChofer(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-brand-orange/30 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-brand-orange/40"
+                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Dupla</label>
+                          <CustomSelect
+                            value={editDuplaId ?? ""}
+                            onChange={(duplaId) => {
+                              const dupla = duplasCatalog.find((d) => d.id === duplaId);
+                              if (!dupla) return;
+                              setEditDuplaId(dupla.id);
+                              setEditChofer(dupla.chofer);
+                              setEditEnganchador(enganchadorDeDupla(dupla));
+                              setEditLegajoChofer(dupla.legajoChofer);
+                              setEditLegajoEnganchador(dupla.legajoEnganchador);
+                              const choferUser = usuariosCatalog.find((u) => u.legajo === dupla.legajoChofer);
+                              const engUser = usuariosCatalog.find((u) => u.legajo === dupla.legajoEnganchador);
+                              setEditUidChofer(choferUser?.uid);
+                              setEditUidEnganchador(engUser?.uid);
+                            }}
+                            options={duplasCatalog.map((d) => ({
+                              value: d.id,
+                              label: `${d.chofer} + ${enganchadorDeDupla(d)}`,
+                            }))}
+                            placeholder="Seleccioná dupla"
+                            icon={Users}
+                            ariaLabel="Dupla"
+                            size="sm"
                           />
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Enganchador</label>
-                          <input
-                            value={editEnganchador}
-                            onChange={(e) => setEditEnganchador(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-brand-orange/30 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-brand-orange/40"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">Inspector</label>
-                          <input
-                            value={editInspector}
-                            onChange={(e) => setEditInspector(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-brand-orange/30 rounded-lg text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-brand-orange/40"
-                          />
+                        <div className="flex items-end gap-2 text-xs text-gray-500">
+                          {editChofer && editEnganchador && (
+                            <span>{editChofer} + {editEnganchador}</span>
+                          )}
                         </div>
                       </div>
                     ) : (
-                      <>
-                        <p className="font-sans font-semibold text-gray-800 text-xs">
-                          Chofer: <span className="font-normal">{selectedService.dupla?.chofer}</span> • Enganchador: <span className="font-normal">{enganchadorDeDuplaServicio(selectedService.dupla)}</span>
-                        </p>
-                        <p className="font-sans font-semibold text-gray-800 text-xs mt-0.5">
-                          Inspector Actuante: <span className="font-normal">{selectedService.dupla?.inspector}</span>
-                        </p>
-                      </>
+                      <p className="font-sans font-semibold text-gray-800 text-xs">
+                        Chofer: <span className="font-normal">{selectedService.dupla?.chofer}</span> • Enganchador: <span className="font-normal">{enganchadorDeDuplaServicio(selectedService.dupla)}</span>
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1274,13 +1309,6 @@ export const HistorialPage: React.FC = () => {
                                 <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
                                 <span>
                                   Corralón: <span className="font-semibold">{corralonEvento}</span>
-                                  {evento.encargadoDeposito?.trim() && (
-                                    <>
-                                      {" "}
-                                      · Encargado:{" "}
-                                      <span className="font-semibold">{evento.encargadoDeposito.trim()}</span>
-                                    </>
-                                  )}
                                 </span>
                               </p>
                             )}
@@ -1354,7 +1382,7 @@ export const HistorialPage: React.FC = () => {
                   )}
                 </div>
 
-                {(editingActa || selectedService.corralon || selectedService.encargadoDeposito?.trim()) && (
+                {(editingActa || selectedService.corralon) && (
                   <div
                     className={`p-4 border rounded-xl flex items-start gap-3 ${
                       editingActa
@@ -1368,7 +1396,7 @@ export const HistorialPage: React.FC = () => {
                         Estadía del Vehículo
                       </h4>
                       {editingActa ? (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-2">
                           <CustomSelect
                             value={editCorralon}
                             onChange={setEditCorralon}
@@ -1382,29 +1410,11 @@ export const HistorialPage: React.FC = () => {
                             size="sm"
                             className="max-w-md"
                           />
-                          <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-0.5">
-                              Encargado de depósito
-                            </label>
-                            <input
-                              value={editEncargado}
-                              onChange={(e) => setEditEncargado(e.target.value)}
-                              placeholder="Nombre del encargado"
-                              className="w-full max-w-md px-2.5 py-1.5 bg-white border border-brand-orange/30 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-brand-orange/40"
-                            />
-                          </div>
                         </div>
                       ) : (
-                        <>
-                          <p className="text-sm font-bold text-gray-800 mt-1">
-                            {getCorralonName(selectedService.corralon)}
-                          </p>
-                          {selectedService.encargadoDeposito?.trim() && (
-                            <p className="text-xs text-gray-600 mt-1">
-                              Encargado: <span className="font-semibold">{selectedService.encargadoDeposito}</span>
-                            </p>
-                          )}
-                        </>
+                        <p className="text-sm font-bold text-gray-800 mt-1">
+                          {getCorralonName(selectedService.corralon)}
+                        </p>
                       )}
                       {!editingActa && (
                         <p className="text-xs text-gray-400">
@@ -1527,7 +1537,7 @@ export const HistorialPage: React.FC = () => {
                   className="px-4 py-2 border border-brand-orange/40 text-brand-orange rounded-xl text-xs font-bold hover:bg-orange-50 flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
                 >
                   <FileDown className="w-3.5 h-3.5" />
-                  {exportandoPdf ? "Generando PDF..." : "Exportar PDF"}
+                  {exportandoPdf ? "Generando PDFs..." : "Exportar PDFs"}
                 </button>
                 <button 
                   onClick={closeModal}
@@ -1561,7 +1571,7 @@ export const HistorialPage: React.FC = () => {
           onClose={() => setShowAnularDialog(false)}
           onConfirm={handleAnularActa}
           title="Anular acta"
-          message={`¿Confirmás la anulación del acta ${selectedService?.patente} (N° ${selectedService?.numeroInfraccion})? El servicio quedará marcado como anulado.`}
+          message={`¿Confirmás la anulación del acta ${displayPatente(selectedService?.patente)}${selectedService?.numeroInfraccion ? ` (N° ${selectedService.numeroInfraccion})` : ''}? El servicio quedará marcado como anulado.`}
           confirmText={anulando ? "Anulando..." : "Anular acta"}
           danger
         />

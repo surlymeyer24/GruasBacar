@@ -15,7 +15,7 @@ import {
 import { isMock, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { getMockServices } from "../data/mockData";
-import { Servicio, duplaEnganchadorDeAsignacion } from "@gruasbacar/shared";
+import { Servicio, duplaEnganchadorDeAsignacion, displayPatente } from "@gruasbacar/shared";
 import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
 import { esOperador } from "@gruasbacar/shared";
@@ -33,7 +33,7 @@ export const AdminDashboardPage: React.FC = () => {
   const [now, setNow] = useState(() => new Date());
   const [showConfigDia, setShowConfigDia] = useState(false);
 
-  const isAdmin = userData?.roles?.includes("ADMIN");
+  const isAdmin = userData?.roles?.includes("SUPERADMIN") || userData?.roles?.includes("ADMIN");
   const isEnganchador = userData ? esOperador(userData.roles) : false;
 
 
@@ -78,7 +78,7 @@ export const AdminDashboardPage: React.FC = () => {
                 Dashboard de Administración
               </h1>
               <p className="text-sm text-brand-seashell mt-1 max-w-xl">
-                Panel de administración y auditoría de la flota de remolques y actas de secuestros estatales.
+                Panel de administración y auditoría de la flota de remolques y actas de servicios estatales.
               </p>
             </div>
             <div
@@ -187,8 +187,8 @@ export const AdminDashboardPage: React.FC = () => {
                     adminStats?.serviciosActivos?.map((s, idx) => (
                       <div key={s.id ?? `${s.patente}-${s.numeroInfraccion}-${idx}`} className="p-3 bg-brand-bg rounded-xl border border-brand-seashell flex justify-between items-center hover:border-brand-cta/30 transition-colors">
                         <div>
-                          <p className="font-mono text-sm font-bold text-brand-purply">{s.patente}</p>
-                          <p className="text-[10px] text-brand-pale">Grúa: <span className="font-bold">{s.grua}</span> • N°: {s.numeroInfraccion}</p>
+                          <p className="font-mono text-sm font-bold text-brand-purply">{displayPatente(s.patente)}</p>
+                          <p className="text-[10px] text-brand-pale">Grúa: <span className="font-bold">{s.grua}</span>{s.numeroInfraccion ? ` • N°: ${s.numeroInfraccion}` : ''}</p>
                         </div>
                         <span className="text-[9px] font-bold bg-brand-cta/10 text-brand-cta px-2 py-0.5 rounded-full border border-brand-cta/20 uppercase font-mono">
                           {s.estado.replace("_", " ")}
@@ -214,7 +214,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div key={u.uid ?? `turno-${idx}`} className="p-3 bg-brand-bg rounded-xl border border-brand-seashell hover:border-brand-cta/30 transition-colors">
                         <p className="font-sans text-sm font-bold text-brand-purply">{u.nombre}</p>
                         {u.asignacionDiaria ? (
-                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaPatente}</span> • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
+                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion ? `${u.asignacionDiaria.gruaDescripcion} — ` : ""}{u.asignacionDiaria.gruaPatente}</span> • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
                         ) : (
                           <p className="text-[10px] text-brand-pale mt-0.5">Servicio activo pero sin turno asignado</p>
                         )}
@@ -237,7 +237,7 @@ export const AdminDashboardPage: React.FC = () => {
                     Configuración de Flota
                   </h3>
                   <p className="text-sm text-brand-pale">
-                    Administre los vehículos grúa asignados, inspectores actuantes, y configure las coordenadas de los corralones.
+                    Administre los vehículos grúa asignados y configure las coordenadas de los corralones.
                   </p>
                 </div>
                 <Link
@@ -257,7 +257,7 @@ export const AdminDashboardPage: React.FC = () => {
                     Auditoría de Servicios
                   </h3>
                   <p className="text-sm text-brand-pale">
-                    Inspeccione en tiempo real las actas digitales de secuestro, descargue reportes del estado de fotos guardadas.
+                    Inspeccione en tiempo real las actas digitales de servicio, descargue reportes del estado de fotos guardadas.
                   </p>
                 </div>
                 <Link

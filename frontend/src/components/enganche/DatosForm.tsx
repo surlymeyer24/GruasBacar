@@ -2,9 +2,16 @@ import React, { useState, useEffect } from "react";
 import { gruaService } from "../../services/grua.service";
 import { duplaService } from "../../services/dupla.service";
 import { useAuth } from "../../context/AuthContext";
-import { Grua, Dupla, enganchadorDeDupla } from "@gruasbacar/shared";
+import {
+  Grua,
+  Dupla,
+  enganchadorDeDupla,
+  RolUsuario,
+  normalizarPatenteInput,
+  PATENTE_SIN_NUMERO,
+} from "@gruasbacar/shared";
 import { asignacionDiariaVigente } from "../../utils/asignacionDiaria";
-import { FileText, ChevronRight, Hash, AlertCircle, Lock } from "lucide-react";
+import { FileText, ChevronRight, AlertCircle, Lock } from "lucide-react";
 import { FlowBackButton } from "../shared/FlowBackButton";
 
 export interface DatosFormFields {
@@ -16,7 +23,6 @@ export interface DatosFormFields {
   dupla: string;
   duplaChofer: string;
   duplaEnganchador: string;
-  inspector: string;
 }
 
 interface DatosFormProps {
@@ -38,6 +44,9 @@ export const DatosForm: React.FC<DatosFormProps> = ({
   const catalogPrefilledRef = React.useRef(false);
   const valuesRef = React.useRef(values);
   valuesRef.current = values;
+
+  const userRoles: RolUsuario[] = userData?.roles ?? [];
+  const esChofer = userRoles.includes('CHOFER');
 
   const patchValues = (partial: Partial<DatosFormFields>) => {
     onChange({ ...valuesRef.current, ...partial });
@@ -85,9 +94,6 @@ export const DatosForm: React.FC<DatosFormProps> = ({
             updates.dupla = dupla.id;
             updates.duplaChofer = dupla.chofer;
             updates.duplaEnganchador = enganchadorDeDupla(dupla);
-          }
-          if (!values.inspector.trim()) {
-            updates.inspector = turno.inspector;
           }
         } else {
           let matchingDupla = activeDuplas.find((d) => {
@@ -139,15 +145,16 @@ export const DatosForm: React.FC<DatosFormProps> = ({
   }, [userData]);
 
   const validatePatenteText = (p: string) => {
-    const clean = p.replace(/[\s-]/g, "").toUpperCase();
+    const clean = normalizarPatenteInput(p);
     if (!clean) return "La patente es obligatoria";
-    
+    if (clean === PATENTE_SIN_NUMERO) return null;
+
     // Argentine old (ex: AAA333) and new Mercosur (ex: AA444BB) format checks
     const oldFormat = /^[A-Z]{3}\d{3}$/;
     const newFormat = /^[A-Z]{2}\d{3}[A-Z]{2}$/;
-    
+
     if (!oldFormat.test(clean) && !newFormat.test(clean)) {
-      return "Formato inválido (Ejemplos válidos: AAA123 o AA123BB)";
+      return "Formato inválido (Ejemplos válidos: AAA123, AA123BB o sin si no tiene patente)";
     }
     return null;
   };
@@ -166,29 +173,28 @@ export const DatosForm: React.FC<DatosFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const infErr = !values.numeroInfraccion.trim() ? "Nro de infracción obligatorio" : null;
     const patErr = validatePatenteText(values.patente);
     const grErr = !values.grua ? "Falta asignar un móvil de grúa" : null;
     const duErr = !values.dupla ? "Falta asignar el enganchador del turno" : null;
-    const insErr = !values.inspector.trim() ? "Falta indicar el inspector actuante" : null;
     const turnoErr = !asignacionDiariaVigente(userData?.asignacionDiaria)
       ? "Configurá tu turno del día antes de registrar un servicio"
       : null;
 
     setPatentError(patErr);
 
-    if (infErr || patErr || grErr || duErr || insErr || turnoErr) {
-      setError(patErr || infErr || grErr || duErr || insErr || turnoErr || "Por favor, complete todos los campos requeridos.");
+    if (patErr || grErr || duErr || turnoErr) {
+      setError(patErr || grErr || duErr || turnoErr || "Por favor, complete todos los campos requeridos.");
       return;
     }
 
     setError(null);
+    const userName = userData?.nombre?.trim() || "";
     onSubmit({
       ...values,
-      patente: values.patente.replace(/[\s-]/g, "").toUpperCase(),
+      patente: normalizarPatenteInput(values.patente),
       numeroInfraccion: values.numeroInfraccion.toUpperCase().trim(),
-      inspector: values.inspector.trim(),
-      duplaChofer: userData?.nombre?.trim() || values.duplaChofer,
+      duplaChofer: esChofer ? (userName || values.duplaChofer) : values.duplaChofer,
+      duplaEnganchador: esChofer ? values.duplaEnganchador : (userName || values.duplaEnganchador),
     });
   };
 
@@ -211,10 +217,10 @@ export const DatosForm: React.FC<DatosFormProps> = ({
       <div>
         <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
           <FileText className="w-5 h-5 text-brand-cta" />
-          Datos Iniciales del Secuestro
+          Datos Iniciales del Servicio
         </h2>
         <p className="text-xs text-gray-400 mt-1">
-          Ingrese la patente del infractor y complete el acta municipal correspondiente. Los recursos operativos de su turno se vinculan automáticamente.
+          Ingrese la patente del infractor. Los recursos operativos de su turno se vinculan automáticamente.
         </p>
       </div>
 
@@ -246,7 +252,9 @@ export const DatosForm: React.FC<DatosFormProps> = ({
               aria-readonly="true"
               className="px-3 py-2.5 rounded-lg border border-slate-200/80 bg-slate-100/90 text-xs font-medium text-slate-400 truncate cursor-default"
             >
-              {userData?.nombre || "Chofer no detectado"}
+              {esChofer
+                ? (userData?.nombre || "Chofer no detectado")
+                : (selectedDupla?.chofer || values.duplaChofer || "—")}
             </div>
           </div>
 
@@ -258,7 +266,9 @@ export const DatosForm: React.FC<DatosFormProps> = ({
               aria-readonly="true"
               className="px-3 py-2.5 rounded-lg border border-slate-200/80 bg-slate-100/90 text-xs font-medium text-slate-400 truncate cursor-default"
             >
-              {enganchadorDeDupla(selectedDupla) || "—"}
+              {esChofer
+                ? (enganchadorDeDupla(selectedDupla) || "—")
+                : (userData?.nombre || "Enganchador no detectado")}
             </div>
           </div>
 
@@ -271,76 +281,45 @@ export const DatosForm: React.FC<DatosFormProps> = ({
               className="px-3 py-2.5 rounded-lg border border-slate-200/80 bg-slate-100/90 text-xs font-medium text-slate-400 truncate cursor-default"
             >
               {selectedGrua
-                ? [selectedGrua.patente, selectedGrua.descripcion].filter(Boolean).join(" — ")
+                ? [selectedGrua.descripcion, selectedGrua.patente].filter(Boolean).join(" — ")
                 : "Sin grúa asignada"}
             </div>
           </div>
 
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Inspector Municipal
-            </span>
-            <div
-              aria-readonly="true"
-              className="px-3 py-2.5 rounded-lg border border-slate-200/80 bg-slate-100/90 text-xs font-medium text-slate-400 truncate cursor-default"
-            >
-              {values.inspector || "—"}
-            </div>
-          </div>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        
-        {/* Nro Infraccion & Patente */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* Numero infraccion */}
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-              Acta de Infracción / Nro
-            </label>
-            <div className="relative">
-              <Hash className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={values.numeroInfraccion}
-                onChange={(e) => patchValues({ numeroInfraccion: e.target.value })}
-                placeholder="Ej: INF-122938"
-                className="w-full pl-9 pr-3 py-2.5 bg-brand-bg border border-gray-250 rounded-xl font-mono text-xs uppercase"
-                required
-              />
-            </div>
-          </div>
 
-          {/* Patente */}
-          <div className="space-y-1">
-            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-              Patente / Dominio
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 font-mono font-extrabold text-xs text-brand-cta border border-brand-cta/20 px-1 rounded bg-brand-cta/10">
-                AR
-              </span>
-              <input
-                type="text"
-                value={values.patente}
-                onChange={(e) => handlePatenteChange(e.target.value)}
-                placeholder="Ej: AA123BB o KLO098"
-                maxLength={9}
-                className={`w-full pl-11 pr-3 py-2.5 bg-brand-bg border rounded-xl font-mono text-xs font-bold uppercase tracking-widest ${
-                  patentError 
-                    ? "border-red-500 focus:ring-1 focus:ring-red-500 bg-red-500/5Name" 
-                    : "border-gray-250"
-                }`}
-                required
-              />
-            </div>
-            {patentError && (
-              <p className="text-[10px] text-red-500 font-medium">✓ {patentError}</p>
-            )}
+        {/* Patente */}
+        <div className="space-y-1">
+          <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+            Patente / Dominio
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-2.5 font-mono font-extrabold text-xs text-brand-cta border border-brand-cta/20 px-1 rounded bg-brand-cta/10">
+              AR
+            </span>
+            <input
+              type="text"
+              value={values.patente}
+              onChange={(e) => handlePatenteChange(e.target.value)}
+              placeholder="Ej: AA123BB o KLO098"
+              maxLength={9}
+              className={`w-full pl-11 pr-3 py-2.5 bg-brand-bg border rounded-xl font-mono text-xs font-bold uppercase tracking-widest ${
+                patentError
+                  ? "border-red-500 focus:ring-1 focus:ring-red-500 bg-red-500/5Name"
+                  : "border-gray-250"
+              }`}
+              required
+            />
           </div>
-
+          <p className="text-[10px] text-gray-400 font-medium">
+            ¿El vehículo no tiene patente? Escribí <span className="font-mono font-bold">sin</span>.
+          </p>
+          {patentError && (
+            <p className="text-[10px] text-red-500 font-medium">✓ {patentError}</p>
+          )}
         </div>
 
         {/* Action buttons */}

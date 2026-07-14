@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AsignacionDiaria,
   Grua,
@@ -7,14 +7,61 @@ import {
   TIPO_FLOTA_OPTIONS,
   normalizeTipoFlota,
   enganchadorDeDupla,
+  duplaDeUsuario,
+  legajoKey,
+  nombresCoinciden,
+  normalizeRoles,
 } from "@gruasbacar/shared";
 import { gruaService } from "../../services/grua.service";
 import { duplaService } from "../../services/dupla.service";
+import { obtenerOperadoresActivos, OperadorResumen } from "../../services/usuario.service";
 import { useAuth } from "../../context/AuthContext";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
-import { Truck, Users, User, X, AlertCircle } from "lucide-react";
+import { Truck, User, Users, X, AlertCircle, MessageSquareWarning } from "lucide-react";
 import { fechaHoyArgentina } from "../../utils/formatters";
 import { CustomSelect } from "../shared/CustomSelect";
+import { solicitarReconfiguracionTurno } from "../../services/notificacion.service";
+
+interface Operador {
+  nombre: string;
+  legajo: string;
+}
+
+function uniqueKey(op: Operador): string {
+  return op.legajo || op.nombre.trim().toLowerCase();
+}
+
+function extractOperadores(duplas: Dupla[], rol: "chofer" | "enganchador"): Operador[] {
+  const seen = new Set<string>();
+  const result: Operador[] = [];
+  for (const d of duplas) {
+    const nombre = rol === "chofer" ? d.chofer : enganchadorDeDupla(d);
+    const legajo = rol === "chofer" ? d.legajoChofer ?? "" : d.legajoEnganchador ?? "";
+    if (!nombre.trim()) continue;
+    const key = uniqueKey({ nombre, legajo });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ nombre: nombre.trim(), legajo: legajo.trim() });
+  }
+  return result;
+}
+
+function findDuplaMatch(
+  duplas: Dupla[],
+  chofer: Operador | undefined,
+  enganchador: Operador | undefined
+): Dupla | undefined {
+  if (!chofer || !enganchador) return undefined;
+  return duplas.find((d) => {
+    const choferOk = chofer.legajo
+      ? legajoKey(d.legajoChofer) === legajoKey(chofer.legajo)
+      : nombresCoinciden(d.chofer, chofer.nombre);
+    const engOk = enganchador.legajo
+      ? legajoKey(d.legajoEnganchador) === legajoKey(enganchador.legajo)
+      : nombresCoinciden(enganchadorDeDupla(d), enganchador.nombre);
+    return choferOk && engOk;
+  });
+}
 
 interface ConfiguracionDiaModalProps {
   isOpen: boolean;
@@ -35,47 +82,90 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   onClose,
   onSaved,
 }) => {
-  const { guardarAsignacionDiaria } = useAuth();
+  const { guardarAsignacionDiaria, userData } = useAuth();
 
   const [gruas, setGruas] = useState<Grua[]>([]);
   const [duplas, setDuplas] = useState<Dupla[]>([]);
+  const [cfOperadores, setCfOperadores] = useState<OperadorResumen[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [solicitudEnviando, setSolicitudEnviando] = useState(false);
+  const [solicitudOk, setSolicitudOk] = useState(false);
+  const [solicitudError, setSolicitudError] = useState<string | null>(null);
 
   const [tipoFlota, setTipoFlota] = useState<TipoFlota>("TRANSITO");
   const [gruaPatente, setGruaPatente] = useState("");
-  const [duplaId, setDuplaId] = useState("");
-  const [inspector, setInspector] = useState("");
+  const [choferKey, setChoferKey] = useState("");
+  const [enganchadorKey, setEnganchadorKey] = useState("");
+  const preselected = useRef(false);
 
   const gruasFiltradas = useMemo(
     () => gruas.filter((g) => normalizeTipoFlota(g.tipo) === tipoFlota),
     [gruas, tipoFlota]
   );
 
-  const duplasFiltradas = useMemo(
-    () => duplas.filter((d) => normalizeTipoFlota(d.tipo) === tipoFlota),
-    [duplas, tipoFlota]
+  const choferes = useMemo(() => {
+    const fromDuplas = extractOperadores(duplas, "chofer");
+    const fromCf = cfOperadores
+      .filter((o) => o.roles.includes("CHOFER"))
+      .map((o) => ({ nombre: o.nombre, legajo: o.legajo }));
+    const seen = new Set<string>();
+    const result: Operador[] = [];
+    for (const op of [...fromCf, ...fromDuplas]) {
+      const key = uniqueKey(op);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(op);
+    }
+    return result;
+  }, [duplas, cfOperadores]);
+
+  const enganchadores = useMemo(() => {
+    const fromDuplas = extractOperadores(duplas, "enganchador");
+    const fromCf = cfOperadores
+      .filter((o) => o.roles.includes("ENGANCHADOR"))
+      .map((o) => ({ nombre: o.nombre, legajo: o.legajo }));
+    const seen = new Set<string>();
+    const result: Operador[] = [];
+    for (const op of [...fromCf, ...fromDuplas]) {
+      const key = uniqueKey(op);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(op);
+    }
+    return result;
+  }, [duplas, cfOperadores]);
+
+  const selectedChofer = choferes.find((c) => uniqueKey(c) === choferKey);
+  const selectedEnganchador = enganchadores.find((e) => uniqueKey(e) === enganchadorKey);
+
+  const duplaMatch = useMemo(
+    () => findDuplaMatch(duplas, selectedChofer, selectedEnganchador),
+    [duplas, selectedChofer, selectedEnganchador]
   );
 
   useEffect(() => {
     if (!isOpen) return;
 
     setError(null);
+    preselected.current = false;
     setTipoFlota(normalizeTipoFlota(initialAsignacion?.tipoFlota));
     setGruaPatente(initialAsignacion?.gruaPatente ?? "");
-    setDuplaId(initialAsignacion?.duplaId ?? "");
-    setInspector(initialAsignacion?.inspector ?? "");
+    setChoferKey("");
+    setEnganchadorKey("");
 
     const load = async () => {
       setLoadingCatalog(true);
       try {
-        const [activeGruas, activeDuplas] = await Promise.all([
+        const [activeGruas, activeDuplas, cfOperadores] = await Promise.all([
           gruaService.getGruasActivas(),
           duplaService.getDuplasActivas(),
+          obtenerOperadoresActivos(),
         ]);
         setGruas(activeGruas);
         setDuplas(activeDuplas);
+        setCfOperadores(cfOperadores);
       } catch (err) {
         console.error(err);
         setError("No se pudo cargar grúas y duplas.");
@@ -87,21 +177,47 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     load();
   }, [isOpen, initialAsignacion]);
 
-  // Asegura grúa y dupla válidas para el tipo elegido (también al cambiar Tránsito ↔ Transporte).
   useEffect(() => {
     if (!isOpen || loadingCatalog) return;
 
-    setGruaPatente((prev) =>
-      gruasFiltradas.some((g) => g.patente === prev)
-        ? prev
-        : (gruasFiltradas[0]?.patente ?? "")
-    );
-    setDuplaId((prev) =>
-      duplasFiltradas.some((d) => d.id === prev) ? prev : (duplasFiltradas[0]?.id ?? "")
-    );
-  }, [isOpen, loadingCatalog, tipoFlota, gruas, duplas, gruasFiltradas, duplasFiltradas]);
+    if (!preselected.current) {
+      preselected.current = true;
 
-  const selectedDupla = duplasFiltradas.find((d) => d.id === duplaId);
+      const miDupla = duplaDeUsuario(duplas, userData);
+
+      if (miDupla) {
+        const choferOp: Operador = { nombre: miDupla.chofer, legajo: miDupla.legajoChofer ?? "" };
+        const engOp: Operador = { nombre: enganchadorDeDupla(miDupla), legajo: miDupla.legajoEnganchador ?? "" };
+        setChoferKey(uniqueKey(choferOp));
+        setEnganchadorKey(uniqueKey(engOp));
+      } else {
+        const roles = normalizeRoles(userData?.roles, userData?.rol);
+        const userLegajo = legajoKey(userData?.legajo);
+        const userName = userData?.nombre;
+
+        const matchByLegajoOrName = (ops: Operador[]) =>
+          ops.find((o) =>
+            (userLegajo && legajoKey(o.legajo) === userLegajo) ||
+            nombresCoinciden(o.nombre, userName)
+          );
+
+        if (roles.includes("CHOFER")) {
+          const match = matchByLegajoOrName(choferes);
+          setChoferKey(match ? uniqueKey(match) : "");
+          setEnganchadorKey("");
+        } else {
+          const match = matchByLegajoOrName(enganchadores);
+          setEnganchadorKey(match ? uniqueKey(match) : "");
+          setChoferKey("");
+        }
+      }
+    }
+
+    setGruaPatente((prev) => {
+      if (gruasFiltradas.some((g) => g.patente === prev)) return prev;
+      return gruasFiltradas[0]?.patente ?? "";
+    });
+  }, [isOpen, loadingCatalog, tipoFlota, gruas, duplas, gruasFiltradas, choferes, enganchadores, userData]);
 
   const gruaOptions = useMemo(
     () =>
@@ -114,63 +230,61 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     [gruasFiltradas]
   );
 
-  const duplaOptions = useMemo(
+  const choferOptions = useMemo(
     () =>
-      duplasFiltradas.length === 0
-        ? [{ value: "", label: "Sin duplas de este tipo" }]
-        : duplasFiltradas.map((d) => ({
-            value: d.id,
-            label: `${d.chofer} + ${enganchadorDeDupla(d)}`,
+      choferes.length === 0
+        ? [{ value: "", label: "Sin choferes disponibles" }]
+        : choferes.map((c) => ({
+            value: uniqueKey(c),
+            label: c.nombre + (c.legajo ? ` (${c.legajo})` : ""),
           })),
-    [duplasFiltradas]
+    [choferes]
+  );
+
+  const enganchadorOptions = useMemo(
+    () =>
+      enganchadores.length === 0
+        ? [{ value: "", label: "Sin enganchadores disponibles" }]
+        : enganchadores.map((e) => ({
+            value: uniqueKey(e),
+            label: e.nombre + (e.legajo ? ` (${e.legajo})` : ""),
+          })),
+    [enganchadores]
   );
 
   const handleTipoFlotaChange = (nuevoTipo: TipoFlota) => {
     setError(null);
     setTipoFlota(nuevoTipo);
-    const gruasTipo = gruas.filter((g) => normalizeTipoFlota(g.tipo) === nuevoTipo);
-    const duplasTipo = duplas.filter((d) => normalizeTipoFlota(d.tipo) === nuevoTipo);
-    setGruaPatente((prev) =>
-      gruasTipo.some((g) => g.patente === prev) ? prev : (gruasTipo[0]?.patente ?? "")
-    );
-    setDuplaId((prev) =>
-      duplasTipo.some((d) => d.id === prev) ? prev : (duplasTipo[0]?.id ?? "")
-    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const dupla = duplasFiltradas.find((d) => d.id === duplaId);
     const gruaOk = gruasFiltradas.some((g) => g.patente === gruaPatente);
-
-    if (!gruaOk || !dupla) {
-      setError("Elegí una grúa y dupla válidas para el tipo seleccionado.");
-      return;
-    }
-    if (!inspector.trim()) {
-      setError("Indicá el inspector que te acompaña.");
+    if (!gruaOk || !selectedChofer || !selectedEnganchador) {
+      setError("Elegí grúa, chofer y enganchador para el tipo seleccionado.");
       return;
     }
 
     setSaving(true);
     setError(null);
     try {
-      await guardarAsignacionDiaria({
+      const payload = {
         gruaPatente,
-        duplaId: dupla.id,
-        duplaChofer: dupla.chofer,
-        duplaEnganchador: enganchadorDeDupla(dupla),
-        inspector: inspector.trim(),
+        duplaId: duplaMatch?.id ?? "",
+        duplaChofer: selectedChofer.nombre,
+        duplaEnganchador: selectedEnganchador.nombre,
+        legajoChofer: selectedChofer.legajo || undefined,
+        legajoEnganchador: selectedEnganchador.legajo || undefined,
         tipoFlota,
-      });
+      };
+      await guardarAsignacionDiaria(payload);
       onSaved({
         fecha: fechaHoyArgentina(),
         gruaPatente,
-        duplaId: dupla.id,
-        duplaChofer: dupla.chofer,
-        duplaEnganchador: enganchadorDeDupla(dupla),
-        inspector: inspector.trim(),
+        duplaId: duplaMatch?.id ?? "",
+        duplaChofer: selectedChofer.nombre,
+        duplaEnganchador: selectedEnganchador.nombre,
         tipoFlota,
       });
       if (!blocking) onClose?.();
@@ -185,7 +299,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   if (!isOpen) return null;
 
   const canDismiss = allowDismiss && Boolean(onClose);
-  const sinRecursos = gruasFiltradas.length === 0 || duplasFiltradas.length === 0;
+  const sinRecursos = gruasFiltradas.length === 0 || choferes.length === 0 || enganchadores.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -204,7 +318,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
               Configurá tu turno de hoy
             </h3>
             <p className="text-xs text-brand-pale mt-1">
-              Elegí tránsito o transporte; solo verás grúas y duplas de ese tipo.
+              Elegí tipo, grúa, chofer y enganchador para este turno.
             </p>
           </div>
           {canDismiss && (
@@ -259,9 +373,8 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
               {sinRecursos && (
                 <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200/50">
-                  No hay grúas o duplas habilitadas de tipo{" "}
-                  {TIPO_FLOTA_OPTIONS.find((o) => o.value === tipoFlota)?.label.toLowerCase()}.
-                  Pedile al administrador que las configure.
+                  No hay grúas o personal habilitado.
+                  Pedile al administrador que los configure.
                 </p>
               )}
 
@@ -283,38 +396,33 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
               <div className="space-y-1">
                 <label className="flex items-center gap-1.5 text-[10px] font-bold text-brand-pale uppercase tracking-wider">
-                  <Users className="w-3.5 h-3.5" />
-                  Dupla de trabajo
+                  <User className="w-3.5 h-3.5" />
+                  Chofer
                 </label>
                 <CustomSelect
-                  value={duplaId}
-                  onChange={setDuplaId}
-                  options={duplaOptions}
-                  placeholder="Seleccioná dupla"
-                  icon={Users}
-                  ariaLabel="Dupla de trabajo"
-                  disabled={saving || duplasFiltradas.length === 0}
+                  value={choferKey}
+                  onChange={setChoferKey}
+                  options={choferOptions}
+                  placeholder="Seleccioná chofer"
+                  icon={User}
+                  ariaLabel="Chofer"
+                  disabled={saving || choferes.length === 0}
                 />
-                {selectedDupla && (
-                  <p className="text-[10px] text-brand-pale mt-1">
-                    Chofer: {selectedDupla.chofer} · Enganchador: {enganchadorDeDupla(selectedDupla)}
-                  </p>
-                )}
               </div>
 
               <div className="space-y-1">
                 <label className="flex items-center gap-1.5 text-[10px] font-bold text-brand-pale uppercase tracking-wider">
-                  <User className="w-3.5 h-3.5" />
-                  Inspector que te acompaña
+                  <Users className="w-3.5 h-3.5" />
+                  Enganchador
                 </label>
-                <input
-                  type="text"
-                  value={inspector}
-                  onChange={(e) => setInspector(e.target.value)}
-                  disabled={saving}
-                  placeholder="Ej: Inspector Daniel López"
-                  className="w-full px-3 py-2.5 bg-brand-bg border border-brand-seashell rounded-xl text-sm text-brand-purply font-medium placeholder:text-brand-pale/70"
-                  required
+                <CustomSelect
+                  value={enganchadorKey}
+                  onChange={setEnganchadorKey}
+                  options={enganchadorOptions}
+                  placeholder="Seleccioná enganchador"
+                  icon={Users}
+                  ariaLabel="Enganchador"
+                  disabled={saving || enganchadores.length === 0}
                 />
               </div>
             </>
@@ -322,11 +430,46 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
           <button
             type="submit"
-            disabled={saving || loadingCatalog || sinRecursos}
+            disabled={saving || loadingCatalog || sinRecursos || !selectedChofer || !selectedEnganchador}
             className="w-full py-3 bg-brand-cta hover:bg-brand-cta-hover disabled:bg-brand-cta/40 text-white font-extrabold text-xs rounded-xl cursor-pointer"
           >
             {saving ? "Guardando..." : "Confirmar turno del día"}
           </button>
+
+          <button
+            type="button"
+            disabled={solicitudEnviando || solicitudOk}
+            onClick={async () => {
+              setSolicitudEnviando(true);
+              setSolicitudError(null);
+              try {
+                await solicitarReconfiguracionTurno();
+                setSolicitudOk(true);
+              } catch (err) {
+                setSolicitudError(
+                  getFirebaseErrorMessage(err, "No se pudo avisar al administrador.")
+                );
+              } finally {
+                setSolicitudEnviando(false);
+              }
+            }}
+            className="w-full py-2.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-xl cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            <MessageSquareWarning className="w-4 h-4" />
+            {solicitudOk
+              ? "Administrador avisado"
+              : solicitudEnviando
+                ? "Enviando aviso…"
+                : "Mi turno no está bien"}
+          </button>
+          {solicitudError && (
+            <p className="text-[11px] text-red-600">{solicitudError}</p>
+          )}
+          {solicitudOk && (
+            <p className="text-[11px] text-emerald-700">
+              El administrador recibió tu aviso. Te notificaremos cuando lo actualice.
+            </p>
+          )}
 
           {canDismiss && (
             <button

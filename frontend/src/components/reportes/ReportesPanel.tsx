@@ -9,7 +9,6 @@ import {
   Users,
   Building2,
   Tag,
-  UserCheck,
   FileDown,
 } from "lucide-react";
 import { CustomSelect } from "../shared/CustomSelect";
@@ -173,16 +172,6 @@ export const ReportesPanel: React.FC = () => {
               onChange={(v) => patchFilter("tipo", v)}
               options={tipoOptions}
               icon={Tag}
-              size="filter"
-            />
-          </FilterField>
-
-          <FilterField label="Inspector" icon={<UserCheck className="w-3 h-3" />}>
-            <CustomSelect
-              value={filters.inspector}
-              onChange={(v) => patchFilter("inspector", v)}
-              options={filterOptions.inspector}
-              icon={UserCheck}
               size="filter"
             />
           </FilterField>

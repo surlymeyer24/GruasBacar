@@ -24,7 +24,6 @@ export interface ReportesFilterState {
   chofer: string;
   dupla: string;
   tipo: string;
-  inspector: string;
   corralon: string;
   tiempo: TiempoFilter;
   grua: string;
@@ -37,7 +36,6 @@ export const DEFAULT_REPORTES_FILTERS: ReportesFilterState = {
   chofer: "ALL",
   dupla: "ALL",
   tipo: "ALL",
-  inspector: "ALL",
   corralon: "ALL",
   tiempo: "ALL",
   grua: "ALL",
@@ -126,10 +124,6 @@ export function filtrarServiciosReportes(
       filters.tipo
     );
 
-    const inspector = s.dupla?.inspector?.trim() ?? "";
-    const matchesInspector =
-      filters.inspector === "ALL" || inspector === filters.inspector;
-
     const matchesCorralon =
       filters.corralon === "ALL" ||
       corralonKeysForServicio(s.corralon, corralonesCatalog).includes(filters.corralon);
@@ -146,7 +140,6 @@ export function filtrarServiciosReportes(
       matchesChofer &&
       matchesDupla &&
       matchesTipo &&
-      matchesInspector &&
       matchesCorralon &&
       matchesTiempo &&
       matchesGrua
@@ -163,7 +156,6 @@ export function buildFilterOptions(
   const enganchadores = new Set<string>();
   const choferes = new Set<string>();
   const duplas = new Map<string, string>();
-  const inspectores = new Set<string>();
   const corralones = new Map<string, string>();
   const gruas = new Map<string, string>();
 
@@ -176,9 +168,6 @@ export function buildFilterOptions(
 
     const duplaKey = duplaKeyFromServicio(s);
     if (duplaKey) duplas.set(duplaKey, duplaLabelFromKey(duplaKey));
-
-    const insp = s.dupla?.inspector?.trim();
-    if (insp) inspectores.add(insp);
 
     if (s.grua?.trim()) {
       const grua = gruasCatalog.find((g) => g.id === s.grua || g.patente === s.grua);
@@ -218,10 +207,6 @@ export function buildFilterOptions(
       ...[...choferes].sort((a, b) => a.localeCompare(b, "es")).map((v) => ({ value: v, label: v })),
     ],
     dupla: [{ value: "ALL", label: "Todas las duplas" }, ...sortOpts([...duplas.entries()])],
-    inspector: [
-      { value: "ALL", label: "Todos los inspectores" },
-      ...[...inspectores].sort((a, b) => a.localeCompare(b, "es")).map((v) => ({ value: v, label: v })),
-    ],
     corralon: [{ value: "ALL", label: "Todos los corralones" }, ...sortOpts([...corralones.entries()])],
     grua: [{ value: "ALL", label: "Todas las grúas" }, ...sortOpts([...gruas.entries()])],
   };

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { MessageSquare, Send } from "lucide-react";
 import { ComentarioFoto, Foto } from "@gruasbacar/shared";
 import { formatFechaHora } from "../../utils/formatters";
+import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
 interface FotoComentariosPanelProps {
   foto: Foto;
@@ -33,7 +34,7 @@ export const FotoComentariosPanel: React.FC<FotoComentariosPanelProps> = ({
       await onAgregarComentario(texto.trim());
       setTexto("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo guardar el comentario.");
+      setError(getFirebaseErrorMessage(err, "No se pudo guardar el comentario."));
     } finally {
       setEnviando(false);
     }

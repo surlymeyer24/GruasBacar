@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { compressImage } from "../../utils/compressImage";
 import { fotoService } from "../../services/foto.service";
 import { EtiquetaFoto } from "@gruasbacar/shared";
-import { Camera, Check, ChevronLeft, X } from "lucide-react";
+import { Camera, Check, ChevronLeft, ImagePlus, X } from "lucide-react";
 
 export const PASOS_FOTO = [
   {
@@ -52,6 +52,7 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
   permitirGaleria = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galeriaInputRef = useRef<HTMLInputElement>(null);
   const [stepIndex, setStepIndex] = useState(startAtStep);
   const [processing, setProcessing] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -74,6 +75,12 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
     if (processing) return;
     setErrorText(null);
     fileInputRef.current?.click();
+  };
+
+  const abrirGaleria = () => {
+    if (processing) return;
+    setErrorText(null);
+    galeriaInputRef.current?.click();
   };
 
   const guardarYAvanzar = (foto: SlotFotoGuia, index: number) => {
@@ -107,8 +114,15 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
         fotoService.blobToBase64(compressed),
       ]);
       guardarYAvanzar({ blob: compressed, previewUrl, etiqueta, base64 }, index);
-    } catch {
-      setErrorText("No se pudo procesar la imagen. Tocá el recuadro e intentá de nuevo.");
+    } catch (err: unknown) {
+      const isMemory =
+        err instanceof RangeError ||
+        (err instanceof Error && /memory|allocation|out of memory/i.test(err.message));
+      setErrorText(
+        isMemory
+          ? "Memoria insuficiente. Cerrá otras pestañas de Chrome e intentá de nuevo."
+          : "No se pudo procesar la imagen. Tocá el recuadro e intentá de nuevo."
+      );
     } finally {
       setProcessing(false);
     }
@@ -196,10 +210,19 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            {...(!permitirGaleria ? { capture: "environment" as const } : {})}
+            capture="environment"
             className="hidden"
             onChange={handleFileChange}
           />
+          {permitirGaleria && (
+            <input
+              ref={galeriaInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          )}
 
           <p className="text-xs text-gray-500 text-center">{paso.instruccion}</p>
 
@@ -234,7 +257,7 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
                   <Camera className="w-10 h-10" />
                 </div>
                 <span className="text-sm font-bold text-brand-orange">
-                  {permitirGaleria ? "Tocá para elegir o sacar la foto" : "Tocá para sacar la foto"}
+                  Tocá para sacar la foto
                 </span>
               </div>
             )}
@@ -246,6 +269,18 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
               </div>
             )}
           </button>
+
+          {permitirGaleria && (
+            <button
+              type="button"
+              onClick={abrirGaleria}
+              disabled={processing}
+              className="w-full py-2.5 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait"
+            >
+              <ImagePlus className="w-4 h-4" />
+              Subir desde galería
+            </button>
+          )}
         </div>
 
         <div className="px-5 py-3 border-t border-gray-100 flex justify-between shrink-0 bg-brand-bg/80">

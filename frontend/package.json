@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:no-hmr": "vite",
+    "dev:live": "vite --mode live",
     "build": "npx tsc && vite build",
     "preview": "vite preview"
   },

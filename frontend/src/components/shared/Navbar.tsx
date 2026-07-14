@@ -1,8 +1,9 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { esOperador, rutaInicioPorRoles, esSoloSupervisor, labelRolUsuario } from "@gruasbacar/shared";
+import { esAdmin, esSuperAdmin, esOperador, rutaInicioPorRoles, esSoloSupervisor, esSoloVisor, labelRolUsuario, primerNombre } from "@gruasbacar/shared";
 import { LogOut, User, Shield, Truck, Menu, X } from "lucide-react";
+import { NotificationBell } from "./NotificationBell";
 
 export const Navbar: React.FC = () => {
   const { userData, logout } = useAuth();
@@ -20,16 +21,21 @@ export const Navbar: React.FC = () => {
 
   if (!userData) return null;
 
-  const isAdmin = userData.roles?.includes("ADMIN");
+  const isAdmin = esAdmin(userData.roles ?? []);
   const isSupervisorOnly = esSoloSupervisor(userData.roles);
+  const isVisorOnly = esSoloVisor(userData.roles);
   const homePath = rutaInicioPorRoles(userData.roles);
-  const mainRole = userData.roles?.includes("ADMIN")
-    ? "ADMIN"
-    : userData.roles?.includes("SUPERVISOR")
-      ? "SUPERVISOR"
-      : userData.roles?.includes("ENGANCHADOR")
-        ? "ENGANCHADOR"
-        : userData.roles?.[0] || "ENGANCHADOR";
+  const mainRole = esSuperAdmin(userData.roles ?? [])
+    ? "SUPERADMIN"
+    : esAdmin(userData.roles ?? [])
+      ? "ADMIN"
+      : userData.roles?.includes("SUPERVISOR")
+        ? "SUPERVISOR"
+        : userData.roles?.includes("VISOR")
+          ? "VISOR"
+          : userData.roles?.includes("ENGANCHADOR")
+            ? "ENGANCHADOR"
+            : userData.roles?.[0] || "ENGANCHADOR";
 
   return (
     <header className="sticky top-0 z-40 w-full bg-brand-purply border-b border-brand-cornflower/30 shadow-md text-white">
@@ -48,15 +54,20 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Desktop Right Info */}
-          <div className="hidden md:flex items-center gap-6">
+          <div className="hidden md:flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-brand-seashell/80">
               <User className="w-4 h-4 text-brand-pale" />
               <span className="font-medium text-white">
-                {userData.nombre}
+                {primerNombre(userData.nombre)}
               </span>
             </div>
 
-            {mainRole === "ADMIN" ? (
+            {mainRole === "SUPERADMIN" ? (
+              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-amber-500/15 text-amber-400 rounded-lg border border-amber-500/30">
+                <Shield className="w-3.5 h-3.5 text-amber-400" />
+                Super Admin
+              </span>
+            ) : mainRole === "ADMIN" ? (
               <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-brand-cta/15 text-brand-cta rounded-lg border border-brand-cta/30">
                 <Shield className="w-3.5 h-3.5 text-brand-cta" />
                 Administrador
@@ -65,6 +76,11 @@ export const Navbar: React.FC = () => {
               <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-brand-cornflower/15 text-brand-seashell rounded-lg border border-brand-cornflower/30">
                 <Shield className="w-3.5 h-3.5 text-brand-pale" />
                 {labelRolUsuario("SUPERVISOR")}
+              </span>
+            ) : mainRole === "VISOR" ? (
+              <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-teal-500/15 text-teal-300 rounded-lg border border-teal-500/30">
+                <Shield className="w-3.5 h-3.5 text-teal-400" />
+                Visor
               </span>
             ) : mainRole === "CHOFER" ? (
               <span className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-brand-cornflower/15 text-brand-seashell rounded-lg border border-brand-cornflower/30">
@@ -85,18 +101,28 @@ export const Navbar: React.FC = () => {
               <LogOut className="w-4 h-4" />
               Salir
             </button>
+
+            <NotificationBell />
           </div>
 
           {/* Mobile Right Controls */}
-          <div className="flex items-center md:hidden gap-3">
+          <div className="flex items-center md:hidden gap-2">
             {/* Quick mini role indicator */}
-            {mainRole === "ADMIN" ? (
+            {mainRole === "SUPERADMIN" ? (
+              <span className="text-[10px] font-extrabold bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/30">
+                SUPER
+              </span>
+            ) : mainRole === "ADMIN" ? (
               <span className="text-[10px] font-extrabold bg-brand-cta/20 text-brand-cta px-2 py-0.5 rounded-full border border-brand-cta/30">
                 ADMIN
               </span>
             ) : mainRole === "SUPERVISOR" ? (
               <span className="text-[10px] font-extrabold bg-brand-cornflower/20 text-brand-pale px-2 py-0.5 rounded-full border border-brand-cornflower/30">
                 SUPV
+              </span>
+            ) : mainRole === "VISOR" ? (
+              <span className="text-[10px] font-extrabold bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded-full border border-teal-500/30">
+                VISOR
               </span>
             ) : mainRole === "CHOFER" ? (
               <span className="text-[10px] font-extrabold bg-brand-cornflower/20 text-brand-pale px-2 py-0.5 rounded-full border border-brand-cornflower/30">
@@ -115,6 +141,8 @@ export const Navbar: React.FC = () => {
             >
               {mobileMenuOpen ? <X className="w-6 h-6 text-white" /> : <Menu className="w-6 h-6 text-brand-seashell" />}
             </button>
+
+            <NotificationBell />
           </div>
         </div>
       </div>
@@ -124,18 +152,27 @@ export const Navbar: React.FC = () => {
         <div className="md:hidden border-t border-brand-cornflower/30 bg-brand-purply px-4 pt-3 pb-4 space-y-3">
           <div className="p-3 bg-white/5 rounded-xl border border-white/5">
             <p className="text-xs text-brand-pale/80 font-mono tracking-wider uppercase">Usuario Activo</p>
-            <p className="text-sm font-bold text-white mt-0.5">{userData.nombre}</p>
+            <p className="text-sm font-bold text-white mt-0.5">{primerNombre(userData.nombre)}</p>
           </div>
           
           <div className="grid grid-cols-1 gap-2">
             {userData && esOperador(userData.roles) && (
-              <Link
-                to="/"
-                onClick={() => setMobileMenuOpen(false)}
-                className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
-              >
-                Dashboard Operador
-              </Link>
+              <>
+                <Link
+                  to="/"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                >
+                  Dashboard Operador
+                </Link>
+                <Link
+                  to="/mis-actas"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                >
+                  Mis Actas
+                </Link>
+              </>
             )}
             {isAdmin && (
               <>
@@ -194,7 +231,32 @@ export const Navbar: React.FC = () => {
                 </Link>
               </>
             )}
-            {!isSupervisorOnly && (
+            {isVisorOnly && (
+              <>
+                <Link
+                  to="/supervisor-dashboard"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  to="/historial"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                >
+                  Historial
+                </Link>
+                <Link
+                  to="/reportes"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                >
+                  Reportes
+                </Link>
+              </>
+            )}
+            {isAdmin && (
               <Link
                 to="/historial"
                 onClick={() => setMobileMenuOpen(false)}

@@ -18,6 +18,7 @@ import {
   normalizeRoles,
   enganchadorDeDupla,
   matchesTipoFlotaFilter,
+  nombresCoinciden,
 } from "@gruasbacar/shared";
 import { isMock, db } from "../../firebase";
 import { DuplaDoc, GruaDoc } from "../../services/adminCatalog.cache";
@@ -81,7 +82,7 @@ function gruasParaTipo(gruas: GruaDoc[], tipo: TipoFlota): GruaDoc[] {
 
 function gruaLabel(g: GruaDoc): string {
   const desc = g.descripcion?.trim();
-  return desc ? `${g.patente} — ${desc}` : g.patente;
+  return desc ? `${desc} — ${g.patente}` : g.patente;
 }
 
 function parsedToImportRow(
@@ -293,6 +294,8 @@ export const DuplasImportModal: React.FC<DuplasImportModalProps> = ({
         const id = generateDuplaId(row.chofer, row.enganchador, usedIds, counter);
         usedIds.add(id);
         const gruaId = row.gruaId.trim() || undefined;
+        const choferUsuario = choferes.find((c) => nombresCoinciden(c.nombre, row.chofer));
+        const enganchadorUsuario = enganchadores.find((e) => nombresCoinciden(e.nombre, row.enganchador));
         newDuplas.push({
           id,
           docId: id,
@@ -301,6 +304,8 @@ export const DuplasImportModal: React.FC<DuplasImportModalProps> = ({
           activa: true,
           tipo: row.tipo,
           gruaId,
+          legajoChofer: choferUsuario?.legajo?.trim() || undefined,
+          legajoEnganchador: enganchadorUsuario?.legajo?.trim() || undefined,
         });
       }
 
@@ -314,6 +319,8 @@ export const DuplasImportModal: React.FC<DuplasImportModalProps> = ({
             activa: true,
             tipo: d.tipo,
             ...(d.gruaId ? { gruaId: d.gruaId } : {}),
+            ...(d.legajoChofer ? { legajoChofer: d.legajoChofer } : {}),
+            ...(d.legajoEnganchador ? { legajoEnganchador: d.legajoEnganchador } : {}),
           });
         }
         await batch.commit();

@@ -15,6 +15,22 @@
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "creadoEn", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "notificaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "destinatarioUid", "order": "ASCENDING" },
+        { "fieldPath": "creadaEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notificaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "destinatarioUid", "order": "ASCENDING" },
+        { "fieldPath": "leida", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

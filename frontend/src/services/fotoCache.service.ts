@@ -13,13 +13,18 @@ export interface FotoCacheSlot {
 export interface FotoCacheBorrador {
   key: string;
   slots: (FotoCacheSlot | null)[];
-  fotoExtra: FotoCacheSlot | null;
+  fotoExtra?: FotoCacheSlot | null;
+  fotosExtra?: FotoCacheSlot[];
   comentario: string;
   updatedAt: number;
 }
 
 export function claveBorradorFotos(servicioId: string, carpeta: "enganche" | "desenganche"): string {
   return `${servicioId}:${carpeta}`;
+}
+
+export function claveBorradorDraft(identificador: string, carpeta: "enganche" | "desenganche"): string {
+  return `draft:${identificador}:${carpeta}`;
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null;

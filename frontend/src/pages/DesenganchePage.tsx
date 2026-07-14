@@ -4,45 +4,40 @@ import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import { useServicioActivo } from "../hooks/useServicioActivo";
-import { LlegadaCorralon } from "../components/desenganche/LlegadaCorralon";
-import { FotoDesenganche } from "../components/desenganche/FotoDesenganche";
+import { DesengancheCaptura } from "../components/desenganche/DesengancheCaptura";
 import { ConfirmacionFinal } from "../components/desenganche/ConfirmacionFinal";
+import { DesengancheCompletado } from "../components/desenganche/DesengancheCompletado";
 import { FotosLoteResult } from "../components/shared/FotoLoteUpload";
-import { corralonService } from "../services/corralon.service";
 import { servicioService } from "../services/servicio.service";
 import { limpiarBorradorFotos, claveBorradorFotos } from "../services/fotoCache.service";
-import { Corralon, esOperador, rutaInicioPorRoles, geoEngancheDeServicio } from "@gruasbacar/shared";
+import { esOperador, rutaInicioPorRoles, geoEngancheDeServicio, Servicio } from "@gruasbacar/shared";
+import { corralonService } from "../services/corralon.service";
+import { Corralon } from "@gruasbacar/shared";
 import { ShieldAlert } from "lucide-react";
+import { esErrorDeRed } from "../utils/firebaseError";
+import { resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 
-type PasosDesenganche = "LLEGADA" | "FOTOS_EGRESO" | "CONFIRMACION_FINAL";
-
-function marcarPasoVisitado(prev: Set<PasosDesenganche>, paso: PasosDesenganche): Set<PasosDesenganche> {
-  if (prev.has(paso)) return prev;
-  const next = new Set(prev);
-  next.add(paso);
-  return next;
-}
+type PasosDesenganche = "CAPTURA" | "CONFIRMACION_FINAL" | "COMPLETADO";
 
 export const DesenganchePage: React.FC = () => {
   const { userData, updateServicioActivo, profileLoading } = useAuth();
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<PasosDesenganche>("LLEGADA");
-  const [pasosVisitados, setPasosVisitados] = useState<Set<PasosDesenganche>>(() => new Set(["LLEGADA"]));
+  const [step, setStep] = useState<PasosDesenganche>("CAPTURA");
   const [selectedCorralonId, setSelectedCorralonId] = useState("");
-  const [encargadoDeposito, setEncargadoDeposito] = useState("");
   const [corralones, setCorralones] = useState<Corralon[]>([]);
   const [capturedFotos, setCapturedFotos] = useState<FotosLoteResult | null>(null);
-  const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | undefined>(undefined);
   const [llegadaRegistrada, setLlegadaRegistrada] = useState(false);
-  
-  // Submission indicator
+
   const [isFinishing, setIsFinishing] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [servicioCompletado, setServicioCompletado] = useState<Servicio | null>(null);
+  const [corralonCompletadoNombre, setCorralonCompletadoNombre] = useState("");
 
   const { servicio, loading: serviceLoading } = useServicioActivo();
 
   useEffect(() => {
+    if (step === "COMPLETADO") return;
     if (!profileLoading) {
       if (!userData || !esOperador(userData.roles)) {
         navigate(rutaInicioPorRoles(userData?.roles ?? []), { replace: true });
@@ -53,9 +48,10 @@ export const DesenganchePage: React.FC = () => {
         return;
       }
     }
-  }, [userData, profileLoading, navigate]);
+  }, [userData, profileLoading, navigate, step]);
 
   useEffect(() => {
+    if (step === "COMPLETADO") return;
     if (!servicio) return;
 
     if (servicio.estado === "DESENGANCHADO") {
@@ -86,12 +82,9 @@ export const DesenganchePage: React.FC = () => {
 
   useEffect(() => {
     if (!servicio) return;
-
-    if (servicio.corralon && servicio.encargadoDeposito) {
+    if (servicio.corralon) {
       setSelectedCorralonId(servicio.corralon);
-      setEncargadoDeposito(servicio.encargadoDeposito);
       setLlegadaRegistrada(true);
-      setStep((current) => (current === "LLEGADA" ? "FOTOS_EGRESO" : current));
       return;
     }
 
@@ -101,31 +94,15 @@ export const DesenganchePage: React.FC = () => {
         const yaRegistrada = await servicioService.tieneEventoLlegadaCorralon(servicio.id);
         if (!cancelled && yaRegistrada) {
           if (servicio.corralon) setSelectedCorralonId(servicio.corralon);
-          if (servicio.encargadoDeposito) setEncargadoDeposito(servicio.encargadoDeposito);
           setLlegadaRegistrada(true);
-          setStep((current) => (current === "LLEGADA" ? "FOTOS_EGRESO" : current));
         }
       } catch (err) {
         console.error("Error al verificar llegada al corralón:", err);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [servicio]);
 
-  useEffect(() => {
-    setPasosVisitados((prev) => marcarPasoVisitado(prev, step));
-  }, [step]);
-
-  useEffect(() => {
-    if (servicio?.corralon && servicio?.encargadoDeposito) {
-      setPasosVisitados((prev) => marcarPasoVisitado(prev, "FOTOS_EGRESO"));
-    }
-  }, [servicio?.corralon, servicio?.encargadoDeposito]);
-
-  // Load corralon assets to display the friendly human name in paso 3
   useEffect(() => {
     const listCorralones = async () => {
       try {
@@ -138,24 +115,33 @@ export const DesenganchePage: React.FC = () => {
     listCorralones();
   }, []);
 
-  const handleLlegadaCompleted = (
-    corralonId: string,
-    encargado: string,
-    geo?: { lat: number; lng: number }
-  ) => {
+  const handleCapturaCompleted = (corralonId: string, fotos: FotosLoteResult) => {
     setSelectedCorralonId(corralonId);
-    setEncargadoDeposito(encargado);
-    if (geo) {
-      setGeoCoords(geo);
-    }
     setLlegadaRegistrada(true);
-    setStep("FOTOS_EGRESO");
+    setCapturedFotos(fotos);
+    setStep("CONFIRMACION_FINAL");
   };
 
-  const handleFotosCompleted = (result: FotosLoteResult) => {
-    setCapturedFotos(result);
-    setStep("CONFIRMACION_FINAL");
-    setPasosVisitados((prev) => marcarPasoVisitado(prev, "CONFIRMACION_FINAL"));
+  const confirmarConRetry = async (servicioId: string, observacion: string | undefined) => {
+    const maxRetries = 3;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await servicioService.confirmarDesenganche(
+          servicioId,
+          capturedFotos!.fotosMeta,
+          observacion,
+          capturedFotos!.fotosBase64,
+          capturedFotos!.fotosSubidas
+        );
+        return;
+      } catch (err) {
+        if (attempt < maxRetries && esErrorDeRed(err)) {
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          continue;
+        }
+        throw err;
+      }
+    }
   };
 
   const handleFinalConfirm = async (observacionExtra: string) => {
@@ -167,17 +153,21 @@ export const DesenganchePage: React.FC = () => {
         .filter(Boolean)
         .join(" · ");
 
-      await servicioService.confirmarDesenganche(
+      await confirmarConRetry(
         userData.servicioActivoId,
-        capturedFotos.fotosMeta,
-        observacion || undefined,
-        capturedFotos.fotosBase64,
-        capturedFotos.fotosSubidas
+        observacion || undefined
       );
       await limpiarBorradorFotos(claveBorradorFotos(userData.servicioActivoId, "desenganche"));
-      await updateServicioActivo(null);
 
-      navigate("/", { replace: true, state: { successMsg: "Servicio de secuestro cerrado con éxito. Grúa liberada." } });
+      if (servicio) {
+        setServicioCompletado({ ...servicio, estado: "DESENGANCHADO" });
+        setCorralonCompletadoNombre(activeCorralonName);
+      }
+      setStep("COMPLETADO");
+
+      updateServicioActivo(null).catch((err) =>
+        console.error("Error al liberar servicio activo:", err)
+      );
     } catch (err: any) {
       console.error(err);
       const msg: string = err.message || "";
@@ -186,11 +176,14 @@ export const DesenganchePage: React.FC = () => {
         msg.includes("ya fue entregado") ||
         servicio?.estado === "DESENGANCHADO"
       ) {
-        await updateServicioActivo(null);
-        navigate("/", {
-          replace: true,
-          state: { successMsg: "Servicio de secuestro cerrado con éxito. Grúa liberada." },
-        });
+        if (servicio) {
+          setServicioCompletado({ ...servicio, estado: "DESENGANCHADO" });
+          setCorralonCompletadoNombre(activeCorralonName);
+        }
+        setStep("COMPLETADO");
+        updateServicioActivo(null).catch((err2) =>
+          console.error("Error al liberar servicio activo:", err2)
+        );
         return;
       }
       setPageError(msg || "Fallo crítico al completar la confirmación del desenganche.");
@@ -200,13 +193,13 @@ export const DesenganchePage: React.FC = () => {
   };
 
   const showBlockingLoader =
-    (profileLoading && !userData) || (serviceLoading && !servicio);
+    step !== "COMPLETADO" && ((profileLoading && !userData) || (serviceLoading && !servicio));
 
   if (showBlockingLoader) {
     return <LoadingSpinner fullScreen message="Cargando..." />;
   }
 
-  if (!servicio) {
+  if (!servicio && step !== "COMPLETADO") {
     return (
       <Layout>
         <div className="flex flex-col items-center justify-center p-12 text-center max-w-sm mx-auto space-y-4">
@@ -222,12 +215,13 @@ export const DesenganchePage: React.FC = () => {
     );
   }
 
-  const activeCorralonName = corralones.find(c => c.id === selectedCorralonId)?.nombre || "Corralón Seleccionado";
+  const activeCorralon = corralones.find(c => c.id === selectedCorralonId);
+  const activeCorralonName = activeCorralon?.nombre || "Corralón Seleccionado";
 
   return (
     <Layout>
       <div className="w-full min-w-0 max-w-2xl mx-auto space-y-6 overflow-x-hidden">
-        
+
         <div className="w-full min-w-0 bg-white border border-brand-seashell p-4 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3 min-w-0 flex-1">
             <div className="p-2 bg-brand-cta/10 text-brand-cta rounded-lg shrink-0">
@@ -235,24 +229,24 @@ export const DesenganchePage: React.FC = () => {
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="text-sm font-black text-brand-purply tracking-tight leading-snug">
-                {step === "LLEGADA" && "1. Ubicación del desenganche"}
-                {step === "FOTOS_EGRESO" && "2. Fotos del desenganche"}
-                {step === "CONFIRMACION_FINAL" && "3. Cerrar acta"}
+                {step === "CAPTURA" && "1. Destino y fotos del desenganche"}
+                {step === "CONFIRMACION_FINAL" && "2. Cerrar acta"}
+                {step === "COMPLETADO" && "Servicio completado"}
               </h1>
               <p className="text-[10px] text-brand-pale mt-1">
-                {step === "LLEGADA" && "Corralón de entrega y ubicación GPS del desenganche."}
-                {step === "FOTOS_EGRESO" && "Subí 4 fotos del vehículo."}
+                {step === "CAPTURA" && "Seleccioná el destino y subí las 4 fotos del vehículo."}
                 {step === "CONFIRMACION_FINAL" && "Revise y confirme el cierre del servicio."}
+                {step === "COMPLETADO" && "El vehículo fue entregado. Podés compartir el acta."}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 font-mono text-[9px] text-brand-pale font-bold bg-brand-bg px-2.5 py-1 rounded shrink-0 self-start sm:self-center">
-            <span className={step === "LLEGADA" ? "text-brand-cta underline" : ""}>Ubicación</span>
-            <span>•</span>
-            <span className={step === "FOTOS_EGRESO" ? "text-brand-cta underline" : ""}>Fotos</span>
+            <span className={step === "CAPTURA" ? "text-brand-cta underline" : ""}>Captura</span>
             <span>•</span>
             <span className={step === "CONFIRMACION_FINAL" ? "text-emerald-600 underline" : ""}>Acta</span>
+            <span>•</span>
+            <span className={step === "COMPLETADO" ? "text-emerald-600 underline" : ""}>Listo</span>
           </div>
         </div>
 
@@ -263,47 +257,40 @@ export const DesenganchePage: React.FC = () => {
           </div>
         )}
 
-        {/* Pasos montados en keep-alive: ocultos con CSS para conservar estado al volver */}
-        {pasosVisitados.has("LLEGADA") && (
-          <div className={step === "LLEGADA" ? undefined : "hidden"}>
-            <LlegadaCorralon
-              servicioId={servicio.id}
-              geoEnganche={geoEngancheDeServicio(servicio)}
-              initialCorralonId={selectedCorralonId}
-              initialEncargado={encargadoDeposito}
-              llegadaYaRegistrada={llegadaRegistrada}
-              onCompleted={handleLlegadaCompleted}
-              onBack={() => navigate("/traslado")}
-              backLabel="Volver al traslado"
-            />
-          </div>
+        {step === "CAPTURA" && servicio && (
+          <DesengancheCaptura
+            servicioId={servicio.id}
+            geoEnganche={geoEngancheDeServicio(servicio)}
+            initialCorralonId={selectedCorralonId}
+            llegadaYaRegistrada={llegadaRegistrada}
+            onCompleted={handleCapturaCompleted}
+            onBack={() => navigate("/traslado")}
+            backLabel="Volver al traslado"
+          />
         )}
 
-        {pasosVisitados.has("FOTOS_EGRESO") && (
-          <div className={step === "FOTOS_EGRESO" ? undefined : "hidden"}>
-            <FotoDesenganche
-              servicioId={servicio.id}
-              onCompleted={handleFotosCompleted}
-              onBack={() => setStep("LLEGADA")}
-              backLabel="Volver"
-            />
-          </div>
+        {step === "CONFIRMACION_FINAL" && capturedFotos && (
+          <ConfirmacionFinal
+            corralonId={selectedCorralonId}
+            corralonNombre={activeCorralonName}
+            tipoDestino={activeCorralon?.tipo}
+            fotos={capturedFotos.previewFotos}
+            initialObservacion={capturedFotos.comentario ?? ""}
+            onConfirm={handleFinalConfirm}
+            onBack={() => setStep("CAPTURA")}
+            backLabel="Cambiar fotos"
+            isSubmitting={isFinishing}
+          />
         )}
 
-        {pasosVisitados.has("CONFIRMACION_FINAL") && capturedFotos && (
-          <div className={step === "CONFIRMACION_FINAL" ? undefined : "hidden"}>
-            <ConfirmacionFinal
-              corralonId={selectedCorralonId}
-              corralonNombre={activeCorralonName}
-              encargadoDeposito={encargadoDeposito}
-              fotos={capturedFotos.previewFotos}
-              initialObservacion={capturedFotos.comentario ?? ""}
-              onConfirm={handleFinalConfirm}
-              onBack={() => setStep("FOTOS_EGRESO")}
-              backLabel="Cambiar fotos"
-              isSubmitting={isFinishing}
-            />
-          </div>
+        {step === "COMPLETADO" && servicioCompletado && (
+          <DesengancheCompletado
+            servicio={servicioCompletado}
+            corralonNombre={corralonCompletadoNombre}
+            patenteGrua={resolverLabelGrua(servicioCompletado.grua)}
+            tipoFlota={tipoFlotaDeServicio(servicioCompletado)}
+            onVolverInicio={() => navigate("/", { replace: true, state: { successMsg: "Servicio de secuestro cerrado con éxito. Grúa liberada." } })}
+          />
         )}
 
       </div>

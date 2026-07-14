@@ -41,12 +41,12 @@ export const ExportActaPdfDialog: React.FC<ExportActaPdfDialogProps> = ({
           </div>
           <div className="space-y-1.5 flex-grow min-w-0">
             <h3 className="text-brand-purply font-bold text-sm tracking-tight">
-              {exportando ? "Generando PDF…" : "Exportar acta a PDF"}
+              {exportando ? "Generando PDFs…" : "Exportar acta a PDF"}
             </h3>
             <p className="text-brand-pale text-xs leading-relaxed">
               {exportando
-                ? "Esto puede tardar unos segundos si el informe incluye fotografías."
-                : "Elegí si querés incluir las fotografías en un anexo al final del documento."}
+                ? "Se generan dos informes (enganche y desenganche). Puede tardar si incluye fotografías."
+                : "Se descargarán dos PDFs: uno de enganche y otro de desenganche, con los mismos datos generales."}
             </p>
           </div>
           <button
@@ -91,7 +91,7 @@ export const ExportActaPdfDialog: React.FC<ExportActaPdfDialogProps> = ({
               <span className="text-xs text-gray-700 leading-snug">
                 <span className="font-bold text-gray-900 block">Incluir fotografías</span>
                 {cantidadFotos > 0
-                  ? `Se agregarán ${cantidadFotos} foto(s) al final del PDF.`
+                  ? `Se agregarán las fotos en el anexo de cada PDF (enganche / desenganche).`
                   : "Esta acta no tiene fotos registradas."}
               </span>
             </label>
@@ -113,7 +113,7 @@ export const ExportActaPdfDialog: React.FC<ExportActaPdfDialogProps> = ({
                 onClick={() => onConfirm(incluirFotos && cantidadFotos > 0)}
                 className="px-4 py-2 bg-brand-orange hover:bg-brand-orange/90 text-white rounded-xl cursor-pointer"
               >
-                Exportar PDF
+                Exportar PDFs
               </button>
             </>
           ) : (

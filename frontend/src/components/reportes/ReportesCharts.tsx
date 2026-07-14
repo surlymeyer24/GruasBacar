@@ -1,4 +1,5 @@
 import React from "react";
+import { displayPatente } from "@gruasbacar/shared";
 import {
   Area,
   AreaChart,
@@ -266,39 +267,6 @@ export const ReportesCharts: React.FC<ReportesChartsProps> = ({
         )}
       </div>
 
-      {/* Tabla inspector */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-x-auto">
-        <h3 className="text-sm font-bold text-gray-800 mb-4">
-          Tiempo de resolución por inspector
-        </h3>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100">
-              <th className="text-left py-2 px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                Inspector
-              </th>
-              <th className="text-right py-2 px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                Actas
-              </th>
-              <th className="text-right py-2 px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                Tiempo prom. (hs)
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {aggregations.porInspector.map((row) => (
-              <tr key={row.inspector} className="border-b border-gray-50 hover:bg-gray-50/50">
-                <td className="py-2.5 px-3 text-gray-800">{row.inspector}</td>
-                <td className="py-2.5 px-3 text-right font-mono text-gray-700">{row.actas}</td>
-                <td className="py-2.5 px-3 text-right font-mono text-gray-700">
-                  {row.promedioHoras !== null ? `${row.promedioHoras} hs` : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
       {/* Tabla resumen */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-x-auto">
         <h3 className="text-sm font-bold text-gray-800 mb-1">Detalle de actas</h3>
@@ -321,7 +289,7 @@ export const ReportesCharts: React.FC<ReportesChartsProps> = ({
           <tbody>
             {aggregations.tablaResumen.map((row, i) => (
               <tr key={`${row.patente}-${i}`} className="border-b border-gray-50 hover:bg-gray-50/50">
-                <td className="py-2 px-3 font-mono text-gray-800">{row.patente}</td>
+                <td className="py-2 px-3 font-mono text-gray-800">{displayPatente(row.patente)}</td>
                 <td className="py-2 px-3 text-gray-700">{row.acta}</td>
                 <td className="py-2 px-3 text-gray-700">{row.estado}</td>
                 <td className="py-2 px-3 text-gray-700">{row.dupla}</td>

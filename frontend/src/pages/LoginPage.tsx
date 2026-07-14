@@ -102,7 +102,7 @@ export const LoginPage: React.FC = () => {
             Plataforma de control operativo de flota
           </h2>
           <p className="text-brand-pale max-w-md leading-relaxed">
-            Gestione remolques, inspectores y evidencias fotográficas con
+            Gestione remolques y evidencias fotográficas con
             trazabilidad completa en tiempo real.
           </p>
         </div>

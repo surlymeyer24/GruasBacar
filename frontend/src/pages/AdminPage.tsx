@@ -3,8 +3,8 @@ import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import AdminUsuariosPanel from "../components/admin/AdminUsuariosPanel";
-import AdminDuplasPanel from "../components/admin/AdminDuplasPanel";
 import AdminListFilters from "../components/admin/AdminListFilters";
+import AdminSectionToolbar from "../components/admin/AdminSectionToolbar";
 import { CustomSelect } from "../components/shared/CustomSelect";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import { useAdminCatalog } from "../hooks/useAdminCatalog";
@@ -18,7 +18,6 @@ import {
   MapPin,
   Users,
   Pencil,
-  UserPlus,
   Tag,
   Trash2,
   Settings,
@@ -30,14 +29,13 @@ import { Grua, Corralon, TipoFlota, TIPO_FLOTA_OPTIONS, TIPO_FLOTA_FILTER_OPTION
 import { codigoInternoVisible } from "../utils/codigoVisible";
 import { GruaDoc, CorralonDoc } from "../services/adminCatalog.cache";
 
-type ConfigTab = "GRUAS" | "CORRALONES" | "DUPLAS" | "USUARIOS";
+type ConfigTab = "GRUAS" | "CORRALONES" | "USUARIOS";
 
 type DeleteTarget =
   | { kind: "grua"; item: GruaDoc }
   | { kind: "corralon"; item: CorralonDoc };
 
 const TABS: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
-  { id: "DUPLAS", label: "Duplas", icon: <UserPlus className="w-4 h-4" /> },
   { id: "GRUAS", label: "Grúas", icon: <Truck className="w-4 h-4" /> },
   { id: "CORRALONES", label: "Corralones", icon: <Building2 className="w-4 h-4" /> },
   { id: "USUARIOS", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
@@ -71,7 +69,7 @@ export const AdminPage: React.FC = () => {
   const [corralonNombre, setCorralonNombre] = useState("");
   const [corralonDireccion, setCorralonDireccion] = useState("");
 
-  const [activeTab, setActiveTab] = useState<ConfigTab>("DUPLAS");
+  const [activeTab, setActiveTab] = useState<ConfigTab>("GRUAS");
   const [savingState, setSavingState] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
 
@@ -93,7 +91,6 @@ export const AdminPage: React.FC = () => {
 
   const gruas = data?.gruas ?? [];
   const corralones = data?.corralones ?? [];
-  const duplas = data?.duplas ?? [];
   const usuarios = data?.usuarios ?? [];
 
   const filteredGruas = useMemo(() => {
@@ -426,13 +423,13 @@ export const AdminPage: React.FC = () => {
             Configuración
           </h1>
           <p className="text-sm text-brand-pale mt-1">
-            Gestione grúas, corralones, duplas y usuarios. Los cambios impactan en tiempo real en la operación.
+            Gestione grúas, corralones y usuarios. Los cambios impactan en tiempo real en la operación.
           </p>
         </div>
 
-        <div className="border border-brand-seashell rounded-2xl shadow-sm overflow-hidden">
-          <div className="bg-gray-100/80 px-2 pt-2">
-            <nav className="grid grid-cols-2 sm:grid-cols-4 gap-0.5" role="tablist" aria-label="Secciones de configuración">
+        <div className="border border-brand-seashell rounded-2xl shadow-sm overflow-hidden bg-white">
+          <div className="bg-gray-100/80 px-2 pt-2 border-b border-brand-seashell/50">
+            <nav className="grid grid-cols-3 gap-0.5" role="tablist" aria-label="Secciones de configuración">
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
                 return (
@@ -459,7 +456,7 @@ export const AdminPage: React.FC = () => {
             </nav>
           </div>
 
-        {pageError && activeTab !== "USUARIOS" && activeTab !== "DUPLAS" && (
+        {pageError && activeTab !== "USUARIOS" && (
           <div className="mx-4 mt-4 p-4 bg-red-50 text-red-700 rounded-xl border border-red-200 flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
             <p className="text-xs font-semibold">{pageError}</p>
@@ -467,15 +464,6 @@ export const AdminPage: React.FC = () => {
         )}
 
         {/* Pestañas montadas en DOM: cambio instantáneo sin recargas */}
-        <div className={activeTab === "DUPLAS" ? "" : "hidden"}>
-          <AdminDuplasPanel
-            duplas={duplas}
-            gruas={gruas}
-            onDuplasChange={(next) => sync({ ...data, duplas: next })}
-            usuarios={usuarios}
-          />
-        </div>
-
         <div className={activeTab === "USUARIOS" ? "" : "hidden"}>
           <AdminUsuariosPanel
             usuarios={usuarios}
@@ -485,7 +473,7 @@ export const AdminPage: React.FC = () => {
 
         <div className={activeTab === "GRUAS" || activeTab === "CORRALONES" ? "" : "hidden"}>
           <div className="bg-white overflow-hidden">
-            <div className="p-4 border-b border-brand-seashell/80">
+            <AdminSectionToolbar>
               {activeTab === "GRUAS" && (
                 <AdminListFilters
                   search={gruaSearch}
@@ -515,7 +503,7 @@ export const AdminPage: React.FC = () => {
                   className="mb-0"
                 />
               )}
-            </div>
+            </AdminSectionToolbar>
 
             <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
@@ -865,7 +853,7 @@ export const AdminPage: React.FC = () => {
                     type="text"
                     value={corralonNombre}
                     onChange={(e) => setCorralonNombre(e.target.value)}
-                    placeholder="Ej: Playa Secuestro Central"
+                    placeholder="Ej: Playa de Servicio Central"
                     className="w-full px-3 py-2 bg-brand-bg border border-brand-seashell rounded-lg text-xs"
                     required
                   />

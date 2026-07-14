@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
-import { setDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
-import { Users, Plus, Power, Pencil, ListPlus, AlertCircle, Tag, Trash2, Truck, X, LayoutGrid, FileSpreadsheet } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { setDoc, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore";
+import { Users, Plus, Power, Pencil, ListPlus, AlertCircle, Tag, Trash2, Truck, X, LayoutGrid, FileSpreadsheet, ChevronUp, ChevronDown, RotateCw } from "lucide-react";
 import { isMock, db } from "../../firebase";
 import AdminListFilters from "./AdminListFilters";
+import AdminSectionToolbar from "./AdminSectionToolbar";
 import { DuplaDoc, GruaDoc } from "../../services/adminCatalog.cache";
 import { codigoInternoVisible } from "../../utils/codigoVisible";
 import {
@@ -15,6 +16,7 @@ import {
   normalizeTipoFlota,
   matchesTipoFlotaFilter,
   enganchadorDeDupla,
+  nombresCoinciden,
 } from "@gruasbacar/shared";
 import { CustomSelect } from "../shared/CustomSelect";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
@@ -38,16 +40,34 @@ function matchesActivoFilter(activa: boolean, filter: string): boolean {
   return true;
 }
 
-function getPrefix(name: string): string {
+function getApellido(name: string): string {
   if (!name) return "";
   const words = name.trim().split(" ");
-  const surname = words.length > 1 ? words[words.length - 1] : words[0];
+  return words.length > 1 ? words[words.length - 1] : words[0];
+}
+
+function getPrefix(name: string): string {
+  const surname = getApellido(name);
   return surname.substring(0, 2).toUpperCase();
+}
+
+/** Orden inicial del diagrama de rotación (apellido del chofer, sin acentos). */
+const SEED_ORDEN_DIAGRAMA = ["QUIROGA", "GRANADO", "BENITEZ", "HEREDIA", "ASCARI", "PRANDI"];
+
+function nombreCortoDupla(d: { chofer: string; enganchador?: string; ayudante?: string }): string {
+  return `${getApellido(d.chofer)}-${getApellido(enganchadorDeDupla(d))}`;
+}
+
+function apellidoKey(nombre: string): string {
+  return getApellido(nombre)
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase();
 }
 
 function gruaLabel(g: GruaDoc): string {
   const desc = g.descripcion?.trim();
-  return desc ? `${g.patente} — ${desc}` : g.patente;
+  return desc ? `${desc} — ${g.patente}` : g.patente;
 }
 
 function resolveGrua(gruas: GruaDoc[], gruaId?: string): GruaDoc | undefined {
@@ -82,6 +102,8 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
   const [pageError, setPageError] = useState<string | null>(null);
   const [deleteDuplaTarget, setDeleteDuplaTarget] = useState<DuplaDoc | null>(null);
   const [showDiagramaModal, setShowDiagramaModal] = useState(false);
+  const [showRotarConfirm, setShowRotarConfirm] = useState(false);
+  const [rotando, setRotando] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
 
   const [editDuplaDocId, setEditDuplaDocId] = useState<string | null>(null);
@@ -120,7 +142,15 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
   }, [duplas]);
 
   const duplasParaDiagrama = useMemo(
-    () => duplas.filter((d) => d.activa).sort((a, b) => a.chofer.localeCompare(b.chofer, "es")),
+    () =>
+      duplas
+        .filter((d) => d.activa)
+        .sort((a, b) => {
+          const oa = typeof a.orden === "number" ? a.orden : Number.MAX_SAFE_INTEGER;
+          const ob = typeof b.orden === "number" ? b.orden : Number.MAX_SAFE_INTEGER;
+          if (oa !== ob) return oa - ob;
+          return a.chofer.localeCompare(b.chofer, "es");
+        }),
     [duplas]
   );
 
@@ -172,6 +202,122 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
     }
   };
 
+  /** Renumera las duplas dadas como orden 1..N y lo persiste (Firestore o mock local). */
+  const persistirOrden = async (ordenadas: DuplaDoc[]) => {
+    setPageError(null);
+    try {
+      if (!isMock && db) {
+        const batch = writeBatch(db);
+        ordenadas.forEach((d, i) => batch.update(doc(db, "duplas", d.docId), { orden: i + 1 }));
+        await batch.commit();
+      }
+      const ordenPorDoc = new Map(ordenadas.map((d, i) => [d.docId, i + 1]));
+      const next = duplas.map((d) =>
+        ordenPorDoc.has(d.docId) ? { ...d, orden: ordenPorDoc.get(d.docId) } : d
+      );
+      onDuplasChange(next);
+      if (isMock) persistLocal(next);
+    } catch (err) {
+      console.error(err);
+      setPageError("No se pudo guardar el orden de las duplas.");
+    }
+  };
+
+  // Al abrir el diagrama, si alguna dupla activa no tiene orden, se inicializa con el
+  // orden operativo conocido (por apellido del chofer) y el resto va al final.
+  useEffect(() => {
+    if (!showDiagramaModal) return;
+    const activas = duplas.filter((d) => d.activa);
+    if (activas.length === 0 || activas.every((d) => typeof d.orden === "number")) return;
+
+    const restantes = [...activas];
+    const ordenadas: DuplaDoc[] = [];
+    for (const apellido of SEED_ORDEN_DIAGRAMA) {
+      const idx = restantes.findIndex((d) => apellidoKey(d.chofer) === apellido);
+      if (idx >= 0) ordenadas.push(...restantes.splice(idx, 1));
+    }
+    restantes.sort((a, b) => a.chofer.localeCompare(b.chofer, "es"));
+    ordenadas.push(...restantes);
+    void persistirOrden(ordenadas);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showDiagramaModal, duplas]);
+
+  const moverDupla = async (index: number, dir: -1 | 1) => {
+    const j = index + dir;
+    if (j < 0 || j >= duplasParaDiagrama.length) return;
+    const nueva = [...duplasParaDiagrama];
+    [nueva[index], nueva[j]] = [nueva[j], nueva[index]];
+    await persistirOrden(nueva);
+  };
+
+  const patchDuplaTipo = async (target: DuplaDoc, tipo: TipoFlota) => {
+    if (normalizeTipoFlota(target.tipo) === tipo) return;
+    setPageError(null);
+    const grua = resolveGrua(gruas, target.gruaId);
+    const conservaGrua = Boolean(grua && matchesTipoFlotaFilter(grua.tipo, tipo));
+    try {
+      if (!isMock && db) {
+        const updates: { tipo: TipoFlota; gruaId?: string } = { tipo };
+        if (target.gruaId && !conservaGrua) updates.gruaId = "";
+        await updateDoc(doc(db, "duplas", target.docId), updates);
+      }
+      const next = duplas.map((d) =>
+        d.docId === target.docId
+          ? { ...d, tipo, gruaId: conservaGrua ? d.gruaId : undefined }
+          : d
+      );
+      onDuplasChange(next);
+      if (isMock) persistLocal(next);
+    } catch (err) {
+      console.error(err);
+      setPageError("No se pudo cambiar el tipo de la dupla.");
+    }
+  };
+
+  /** Rotación mensual: la última pasa al puesto 1 como tránsito y la nueva última queda como transporte. */
+  const rotarMes = async () => {
+    if (duplasParaDiagrama.length < 2) return;
+    setRotando(true);
+    setPageError(null);
+    const nueva = [
+      duplasParaDiagrama[duplasParaDiagrama.length - 1],
+      ...duplasParaDiagrama.slice(0, -1),
+    ];
+    const cambios = new Map(
+      nueva.map((d, i) => {
+        const tipo: TipoFlota = i === nueva.length - 1 ? "TRANSPORTE" : "TRANSITO";
+        const grua = resolveGrua(gruas, d.gruaId);
+        const conservaGrua = Boolean(grua && matchesTipoFlotaFilter(grua.tipo, tipo));
+        return [d.docId, { orden: i + 1, tipo, gruaId: conservaGrua ? d.gruaId : undefined }];
+      })
+    );
+    try {
+      if (!isMock && db) {
+        const batch = writeBatch(db);
+        for (const [docId, c] of cambios) {
+          batch.update(doc(db, "duplas", docId), {
+            orden: c.orden,
+            tipo: c.tipo,
+            gruaId: c.gruaId ?? "",
+          });
+        }
+        await batch.commit();
+      }
+      const next = duplas.map((d) => {
+        const c = cambios.get(d.docId);
+        return c ? { ...d, orden: c.orden, tipo: c.tipo, gruaId: c.gruaId } : d;
+      });
+      onDuplasChange(next);
+      if (isMock) persistLocal(next);
+      setShowRotarConfirm(false);
+    } catch (err) {
+      console.error(err);
+      setPageError("No se pudo aplicar la rotación del mes.");
+    } finally {
+      setRotando(false);
+    }
+  };
+
   const handleCreateDupla = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!duplaChofer.trim() || !duplaEnganchador.trim()) {
@@ -194,6 +340,10 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
     }
 
     const gruaId = duplaGruaId.trim() || undefined;
+    const choferUsuario = choferes.find((c) => nombresCoinciden(c.nombre, duplaChofer));
+    const enganchadorUsuario = enganchadores.find((e) => nombresCoinciden(e.nombre, duplaEnganchador));
+    const legajoChofer = choferUsuario?.legajo?.trim() || undefined;
+    const legajoEnganchador = enganchadorUsuario?.legajo?.trim() || undefined;
 
     const newDupla: DuplaDoc = {
       id,
@@ -203,6 +353,8 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
       activa: true,
       tipo: duplaTipo,
       gruaId,
+      legajoChofer,
+      legajoEnganchador,
     };
 
     try {
@@ -214,6 +366,8 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
           activa: true,
           tipo: newDupla.tipo,
           ...(gruaId ? { gruaId } : {}),
+          ...(legajoChofer ? { legajoChofer } : {}),
+          ...(legajoEnganchador ? { legajoEnganchador } : {}),
         });
       }
 
@@ -292,11 +446,17 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
     setPageError(null);
     try {
       const gruaId = editGruaId.trim() || undefined;
+      const choferUsuario = choferes.find((c) => nombresCoinciden(c.nombre, editChofer));
+      const enganchadorUsuario = enganchadores.find((e) => nombresCoinciden(e.nombre, editEnganchador));
+      const legajoChofer = choferUsuario?.legajo?.trim() || "";
+      const legajoEnganchador = enganchadorUsuario?.legajo?.trim() || "";
       const updates = {
         chofer: editChofer.trim(),
         enganchador: editEnganchador.trim(),
         tipo: editTipo,
         gruaId: gruaId ?? "",
+        legajoChofer,
+        legajoEnganchador,
       };
       if (!isMock && db) {
         await updateDoc(doc(db, "duplas", editDuplaDocId), updates);
@@ -304,7 +464,15 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
       const next = duplas
         .map((d) =>
           d.docId === editDuplaDocId
-            ? { ...d, chofer: updates.chofer, enganchador: updates.enganchador, tipo: updates.tipo, gruaId }
+            ? {
+                ...d,
+                chofer: updates.chofer,
+                enganchador: updates.enganchador,
+                tipo: updates.tipo,
+                gruaId,
+                legajoChofer: legajoChofer || undefined,
+                legajoEnganchador: legajoEnganchador || undefined,
+              }
             : d
         )
         .sort((a, b) => a.chofer.localeCompare(b.chofer, "es"));
@@ -328,7 +496,7 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
         </div>
       )}
 
-      <div className={`p-4 border-b border-brand-seashell/80 ${pageError ? "pt-3" : ""}`}>
+      <AdminSectionToolbar className={pageError ? "pt-3" : ""}>
         <AdminListFilters
           search={duplaSearch}
           onSearchChange={setDuplaSearch}
@@ -345,7 +513,7 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
             icon: Tag,
           }}
         />
-      </div>
+      </AdminSectionToolbar>
 
       <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -434,11 +602,11 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-sans font-bold text-sm text-gray-900">
-                                {d.chofer}
+                                {getApellido(d.chofer)}
                               </span>
                               <span className="text-xs text-brand-pale">+</span>
                               <span className="font-sans font-semibold text-sm text-brand-purply">
-                                {enganchadorDeDupla(d)}
+                                {getApellido(enganchadorDeDupla(d))}
                               </span>
                               {codigo && (
                                 <span className="text-[10px] font-mono px-2 py-0.5 bg-gray-100 text-zinc-600 rounded border">
@@ -655,7 +823,8 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
                   Diagramar grúa por dupla
                 </h3>
                 <p className="text-xs text-brand-pale mt-1">
-                  Asigná la grúa habitual de cada dupla activa. Solo se listan grúas del mismo tipo operativo.
+                  Ordená las duplas, asigná la grúa habitual y marcá cuál es la de transporte del mes.
+                  Con «Rotar mes» la última pasa al puesto 1 y la anteúltima queda como transporte.
                 </p>
               </div>
               <button
@@ -674,7 +843,7 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
                   No hay duplas activas para diagramar.
                 </p>
               ) : (
-                duplasParaDiagrama.map((d) => {
+                duplasParaDiagrama.map((d, index) => {
                   const tipo = normalizeTipoFlota(d.tipo);
                   const gruaAsignada = resolveGrua(gruas, d.gruaId);
                   const duplicada = d.gruaId && gruasDuplicadas.has(d.gruaId);
@@ -682,17 +851,57 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
                   return (
                     <div
                       key={`diagram-${d.docId}`}
-                      className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center hover:bg-slate-50/50"
+                      className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 hover:bg-slate-50/50"
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-900 truncate">
-                          {d.chofer}
-                          <span className="text-brand-pale font-normal mx-1">+</span>
-                          {enganchadorDeDupla(d)}
-                        </p>
-                        <p className="text-[10px] text-brand-pale mt-0.5">{labelTipoFlota(d.tipo)}</p>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex flex-col shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => moverDupla(index, -1)}
+                            disabled={index === 0}
+                            className="p-0.5 rounded text-brand-pale hover:text-brand-cta hover:bg-brand-bg disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                            aria-label={`Subir ${d.chofer}`}
+                          >
+                            <ChevronUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moverDupla(index, 1)}
+                            disabled={index === duplasParaDiagrama.length - 1}
+                            className="p-0.5 rounded text-brand-pale hover:text-brand-cta hover:bg-brand-bg disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer"
+                            aria-label={`Bajar ${d.chofer}`}
+                          >
+                            <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 truncate">
+                            <span className="font-mono text-brand-pale mr-1.5">{index + 1}.</span>
+                            {getApellido(d.chofer)}
+                            <span className="text-brand-pale font-normal mx-1">+</span>
+                            {getApellido(enganchadorDeDupla(d))}
+                          </p>
+                          <div className="flex gap-1 mt-1.5">
+                            {TIPO_FLOTA_OPTIONS.map((opt) => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => patchDuplaTipo(d, opt.value)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                                  tipo === opt.value
+                                    ? opt.value === "TRANSPORTE"
+                                      ? "bg-brand-orange text-white border-brand-orange"
+                                      : "bg-brand-cta text-white border-brand-cta"
+                                    : "bg-brand-bg text-brand-pale border-brand-seashell hover:border-brand-cta/50"
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1">
+                      <div className="sm:w-48 shrink-0 space-y-1">
                         <CustomSelect
                           value={d.gruaId ?? SIN_GRUA}
                           onChange={(v) => patchDuplaGrua(d.docId, v)}
@@ -714,7 +923,16 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
               )}
             </div>
 
-            <div className="px-5 py-4 bg-brand-bg border-t border-brand-seashell flex justify-end shrink-0">
+            <div className="px-5 py-4 bg-brand-bg border-t border-brand-seashell flex justify-between items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowRotarConfirm(true)}
+                disabled={rotando || duplasParaDiagrama.length < 2}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white border border-brand-seashell hover:border-brand-orange text-brand-orange rounded-xl disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <RotateCw className={`w-3.5 h-3.5 ${rotando ? "animate-spin" : ""}`} />
+                Rotar mes
+              </button>
               <button
                 type="button"
                 onClick={() => setShowDiagramaModal(false)}
@@ -726,6 +944,20 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={showRotarConfirm}
+        onClose={() => setShowRotarConfirm(false)}
+        onConfirm={rotarMes}
+        title="¿Aplicar rotación del mes?"
+        message={
+          duplasParaDiagrama.length >= 2
+            ? `${nombreCortoDupla(duplasParaDiagrama[duplasParaDiagrama.length - 1])} pasa al puesto 1 como Tránsito y ${nombreCortoDupla(duplasParaDiagrama[duplasParaDiagrama.length - 2])} queda como Transporte del mes.`
+            : ""
+        }
+        confirmText="Rotar"
+        cancelText="Cancelar"
+      />
 
       <DuplasImportModal
         isOpen={showImportModal}

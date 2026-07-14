@@ -26,14 +26,11 @@ export const NuevaActaManualPage: React.FC = () => {
   const [loadingCatalog, setLoadingCatalog] = useState(true);
 
   const [patente, setPatente] = useState("");
-  const [numeroInfraccion, setNumeroInfraccion] = useState("");
   const [grua, setGrua] = useState("");
   const [legajo, setLegajo] = useState("");
   const [chofer, setChofer] = useState("");
   const [enganchador, setEnganchador] = useState("");
-  const [inspector, setInspector] = useState("");
   const [corralon, setCorralon] = useState("");
-  const [encargadoDeposito, setEncargadoDeposito] = useState("");
   const [ubicacionEnganche, setUbicacionEnganche] = useState("");
   const [ubicacionLlegada, setUbicacionLlegada] = useState("");
   const [observacion, setObservacion] = useState("");
@@ -104,12 +101,12 @@ export const NuevaActaManualPage: React.FC = () => {
       setError("Completá las fotos de enganche antes de registrar la acta.");
       return;
     }
-    if (!patente.trim() || !numeroInfraccion.trim() || !grua.trim()) {
-      setError("Patente, número de acta y grúa son obligatorios.");
+    if (!patente.trim() || !grua.trim()) {
+      setError("Patente y grúa son obligatorios.");
       return;
     }
-    if (!chofer.trim() || !enganchador.trim() || !inspector.trim()) {
-      setError("Completá los datos de la dupla e inspector.");
+    if (!chofer.trim() || !enganchador.trim()) {
+      setError("Completá los datos de la dupla.");
       return;
     }
     if (!legajo.trim()) {
@@ -124,17 +121,21 @@ export const NuevaActaManualPage: React.FC = () => {
     setSubmitting(true);
     setError(null);
     try {
+      const choferUser = choferes.find((u) => u.nombre === chofer);
+      const enganchadorUser = enganchadores.find((u) => u.nombre === enganchador);
+
       const res = await crearActaManual({
         patente: patente.trim(),
-        numeroInfraccion: numeroInfraccion.trim(),
         grua: grua.trim(),
         legajoEnganchador: legajo.trim(),
         corralon: corralon.trim() || null,
-        encargadoDeposito: encargadoDeposito.trim() || null,
         dupla: {
           chofer: chofer.trim(),
           enganchador: enganchador.trim(),
-          inspector: inspector.trim(),
+          ...(choferUser?.legajo ? { legajoChofer: choferUser.legajo.trim() } : {}),
+          ...(enganchadorUser?.legajo ? { legajoEnganchador: enganchadorUser.legajo.trim() } : {}),
+          ...(choferUser?.uid ? { uidChofer: choferUser.uid } : {}),
+          ...(enganchadorUser?.uid ? { uidEnganchador: enganchadorUser.uid } : {}),
         },
         ubicacionEnganche: ubicacionEnganche.trim() || undefined,
         ubicacionLlegada: ubicacionLlegada.trim() || undefined,
@@ -198,18 +199,13 @@ export const NuevaActaManualPage: React.FC = () => {
               <input
                 value={patente}
                 onChange={(e) => setPatente(e.target.value)}
+                placeholder="Ej: AA123BB o sin si no tiene"
                 className="w-full px-3 py-2 bg-brand-bg border border-gray-200 rounded-lg text-sm font-mono uppercase"
                 required
               />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Nº infracción / acta</label>
-              <input
-                value={numeroInfraccion}
-                onChange={(e) => setNumeroInfraccion(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-200 rounded-lg text-sm font-mono uppercase"
-                required
-              />
+              <p className="text-[10px] text-gray-400 font-medium mt-1">
+                Si el vehículo no tiene patente, escribí <span className="font-mono font-bold">sin</span>.
+              </p>
             </div>
             <div>
               <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Grúa</label>
@@ -218,7 +214,7 @@ export const NuevaActaManualPage: React.FC = () => {
                 onChange={setGrua}
                 options={gruas.map((g) => ({
                   value: g.patente,
-                  label: `${g.patente}${g.descripcion ? ` — ${g.descripcion}` : ""}`,
+                  label: `${g.descripcion ? `${g.descripcion} — ` : ""}${g.patente}`,
                 }))}
                 placeholder="Seleccioná grúa"
                 icon={Truck}
@@ -262,15 +258,6 @@ export const NuevaActaManualPage: React.FC = () => {
                 required
               />
             </div>
-            <div className="sm:col-span-2">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Inspector</label>
-              <input
-                value={inspector}
-                onChange={(e) => setInspector(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-200 rounded-lg text-sm"
-                required
-              />
-            </div>
           </div>
         </section>
 
@@ -309,6 +296,7 @@ export const NuevaActaManualPage: React.FC = () => {
             confirmLabel="Confirmar fotos de enganche"
             permitirGaleria
             limpiarCacheAlConfirmar={false}
+            maxExtras={3}
             onConfirm={async (result) => {
               setFotosEnganche(result);
             }}
@@ -317,26 +305,16 @@ export const NuevaActaManualPage: React.FC = () => {
 
         <section className="bg-white rounded-2xl border border-brand-seashell p-5 space-y-4 shadow-sm">
           <h2 className="text-sm font-bold text-gray-900">Corralón (opcional)</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Corralón</label>
-              <CustomSelect
-                value={corralon}
-                onChange={setCorralon}
-                options={corralones.map((c) => ({ value: c.id, label: c.nombre }))}
-                placeholder="Sin corralón"
-                icon={Building2}
-                ariaLabel="Corralón"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Encargado depósito</label>
-              <input
-                value={encargadoDeposito}
-                onChange={(e) => setEncargadoDeposito(e.target.value)}
-                className="w-full px-3 py-2 bg-brand-bg border border-gray-200 rounded-lg text-sm"
-              />
-            </div>
+          <div>
+            <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Corralón</label>
+            <CustomSelect
+              value={corralon}
+              onChange={setCorralon}
+              options={corralones.map((c) => ({ value: c.id, label: c.nombre }))}
+              placeholder="Sin corralón"
+              icon={Building2}
+              ariaLabel="Corralón"
+            />
           </div>
           <div>
             <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">
@@ -373,6 +351,7 @@ export const NuevaActaManualPage: React.FC = () => {
               confirmLabel="Confirmar fotos de desenganche"
               permitirGaleria
               limpiarCacheAlConfirmar={false}
+              maxExtras={3}
               onConfirm={async (result) => {
                 setFotosDesenganche(result);
               }}

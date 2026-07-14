@@ -52,7 +52,14 @@ import { useAuth } from "../hooks/useAuth";
 - **Modo mock/simulación** en frontend controlado por `isMock` flag global. Cada servicio tiene ramas `if (!isMock && app)` para producción y fallback local.
 - **Context + Hook** para estado global: un `Context` define la interfaz, un `Provider` la implementa, un `useX` hook la consume con validación.
 - **Componentes agrupados por dominio** dentro de `components/`: `auth/`, `enganche/`, `traslado/`, `desenganche/`, `admin/`, `shared/`.
-- **Middleware de auth en functions** con helpers `verificarAuth`, `verificarAdmin`, `verificarGestionActas`, `verificarOperador` que extraen y validan el contexto de autenticación.
+- **Middleware de auth en functions** con helpers `verificarAuth`, `verificarAdmin`, `verificarGestionActas`, `verificarOperador` que extraen y validan el contexto de autenticación. Internamente usan `esAdmin()` de shared (SUPERADMIN hereda permisos de ADMIN).
+- **Chequeos de rol via helpers de shared** — `esAdmin(roles)`, `esSuperAdmin(roles)`, `esOperador(roles)`, etc. Nunca `roles.includes('ADMIN')` a mano: se saltea la herencia de SUPERADMIN.
+- **Handlers `onCall` envueltos con `withHttpsErrorHandling`** (`functions/src/utils/callableHandler.ts`) — todo error no-`HttpsError` se loguea y se re-lanza como `HttpsError('internal', ...)` con mensaje descriptivo. Patrón:
+  ```ts
+  export const miFuncion = onCall(callable,
+    withHttpsErrorHandling('miFuncion', async (request) => { ... })
+  );
+  ```
 - **Compresión de fotos en cliente** (canvas resize, JPEG 0.7, max 1200px) antes de enviar base64 al backend.
 - **Iconos con lucide-react**, no Material Icons ni otro paquete.
 - **Animaciones con motion** (Framer Motion), no CSS puro para transiciones complejas.
@@ -68,7 +75,9 @@ import { useAuth } from "../hooks/useAuth";
 - **Nada de ORM ni capa de abstracción sobre Firestore** — Se usa el SDK directo.
 - **Nada de edición de servicios** — Un servicio solo avanza de estado o se anula. No se modifican campos retroactivamente (excepción: admin y supervisor con `actualizarServicio` para correcciones).
 - **No duplicar tipos de `shared/`** — Si el tipo existe en `@gruasbacar/shared`, importarlo. No redefinirlo en frontend o functions.
-- **No crear roles nuevos** sin actualizar `shared/src/types.ts` — Los roles son `ADMIN | SUPERVISOR | ENGANCHADOR | CHOFER` (CHOFER es legacy equivalente a ENGANCHADOR). Agregar helpers de permiso en `shared/` si el rol tiene reglas de acceso propias.
+- **No crear roles nuevos** sin actualizar `shared/src/types.ts` — Los roles son `SUPERADMIN | ADMIN | SUPERVISOR | ENGANCHADOR | CHOFER` (CHOFER es legacy equivalente a ENGANCHADOR; SUPERADMIN hereda de ADMIN). Agregar helpers de permiso en `shared/` si el rol tiene reglas de acceso propias.
+- **No pedir número de acta ni inspector en formularios** — El `numeroInfraccion` se auto-genera en backend (`generarNumeroActa()`); el inspector y el encargado de depósito fueron eliminados del flujo (jul 2026).
+- **Validar strings con límite de longitud en backend** — Usar `validarString(valor, campo, maxLength)` / `validarStringOpcional(...)` de `functions/src/utils/validators.ts` en toda function que reciba texto libre.
 
 ## TypeScript
 

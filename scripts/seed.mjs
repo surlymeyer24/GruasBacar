@@ -15,7 +15,7 @@ const admin = require('firebase-admin');
 const useEmulator = process.argv.includes('--emulator');
 
 if (useEmulator) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
   process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
   admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'gruasbacar' });
 } else {
@@ -51,6 +51,7 @@ const DUPLAS = [
 const USUARIOS_PRUEBA = [
   { email: 'admin@bacar.com', password: 'Admin123!', nombre: 'Admin BACAR', rol: 'ADMIN' },
   { email: 'chofer@bacar.com', password: 'Chofer123!', nombre: 'Enganchador BACAR', rol: 'ENGANCHADOR', legajo: 'CH001' },
+  { email: 'visor@bacar.com', password: 'Visor123!', nombre: 'Visualizador BACAR', rol: 'VISOR' },
 ];
 
 async function seedGruas() {
@@ -141,8 +142,9 @@ async function main() {
   console.log('\nUsuarios de prueba:');
   await seedUsuarios();
   console.log('\nListo. Credenciales:');
-  console.log('  Admin:  admin@bacar.com  / Admin123!');
-  console.log('  Enganchador: chofer@bacar.com / Chofer123!');
+  console.log('  Admin:         admin@bacar.com  / Admin123!');
+  console.log('  Enganchador:   chofer@bacar.com / Chofer123!');
+  console.log('  Visualizador:  visor@bacar.com  / Visor123!');
 }
 
 main().catch((err) => {

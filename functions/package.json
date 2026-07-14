@@ -21,7 +21,7 @@
     "googleapis": "^173.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3"
+    "typescript": "^5.9.3"
   },
   "private": true
 }

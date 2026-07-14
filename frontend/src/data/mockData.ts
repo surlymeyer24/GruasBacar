@@ -11,7 +11,7 @@ export const CORRALONES: Corralon[] = [
   { id: "SEM", nombre: "SEM", direccion: "Servicio de Examen Municipal", activo: true },
   { id: "C-NORTE", nombre: "Corralón Municipal Zona Norte", direccion: "Av. de los Constituyentes 4500", activo: true },
   { id: "C-SUR", nombre: "Depósito Judicial Zona Sur", direccion: "Calle de la Herrería 120", activo: true },
-  { id: "C-ESTE", nombre: "Playa de Secuestro Este", direccion: "Ruta 9 - Km 12.5", activo: true },
+  { id: "C-ESTE", nombre: "Playa de Servicio Este", direccion: "Ruta 9 - Km 12.5", activo: true },
 ];
 
 const SERVICES_STORE_KEY = "gruas_bacar_services_db";
@@ -24,7 +24,7 @@ const DEFAULT_MOCK_SERVICES: Servicio[] = [
     identificadorCompuesto: "INF-881273-89383-KLO-981",
     estado: "ENGANCHADO",
     grua: buildGruaId("AB123CD"),
-    dupla: { chofer: "Miguel Ángel Chofer", enganchador: "Roberto Pérez", inspector: "Insp. Daniel López" },
+    dupla: { chofer: "Miguel Ángel Chofer", enganchador: "Roberto Pérez" },
     creadoPor: "chofer-uid-2",
     legajoChofer: "89383",
     fechaCreacion: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 mins ago
@@ -59,7 +59,7 @@ const DEFAULT_MOCK_SERVICES: Servicio[] = [
     estado: "DESENGANCHADO",
     grua: buildGruaId("EF456GH"),
     corralon: "C-NORTE",
-    dupla: { chofer: "Esteban Gomis", enganchador: "Mateo Díaz", inspector: "Insp. María Sanabria" },
+    dupla: { chofer: "Esteban Gomis", enganchador: "Mateo Díaz" },
     creadoPor: "chofer-uid-1",
     legajoChofer: "CH001",
     fechaCreacion: new Date(Date.now() - 5 * 3600 * 1000).toISOString(),

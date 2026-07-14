@@ -30,6 +30,13 @@ npm run dev
 ```
 Emulador UI en `http://localhost:4000`. Functions en `http://localhost:5001`.
 
+### Levantar el frontend contra Firebase real (sin emuladores)
+Si necesitás probar contra el proyecto real (por ejemplo porque no tenés los emuladores levantados, o querés ver datos reales) sin tocar tu `.env.local`:
+```bash
+cd frontend && npm run dev:live
+```
+Usa `frontend/.env.live` (copiá `.env.live.example` si no existe) y fuerza `VITE_USE_EMULATORS=false`, sin importar lo que diga `.env.local`. Ojo: esto escribe/lee contra el proyecto real, no un sandbox.
+
 ### Seed de datos de prueba
 ```bash
 npm run seed:emulator    # carga grúas, corralones, duplas y usuarios de prueba en los emuladores
@@ -38,6 +45,18 @@ npm run seed             # carga en producción (requiere ServiceAccountKey.json
 Credenciales de prueba:
 - Admin: `admin@bacar.com` / `Admin123!`
 - Enganchador: `chofer@bacar.com` / `Chofer123!`
+
+### Clonar datos de producción a los emuladores
+```bash
+npm run pull-prod    # requiere ServiceAccountKey.json y emuladores levantados
+```
+Descarga `usuarios`, `gruas`, `corralones`, `duplas` y `servicios` (con subcolecciones `eventos`, `fotosStaging`, `versiones`) de producción y los carga en los emuladores. Copia también los usuarios de Auth con contraseña de prueba `Test1234!`.
+
+### Carga batch de duplas y usuarios nuevos
+```bash
+node scripts/cargar-nuevas-duplas.mjs [--emulator] [--dry-run]
+```
+Script de operaciones puntual: crea usuarios (Auth + Firestore) y duplas del catálogo, con validación de legajos únicos y rollback en Auth si falla Firestore. Sin flags escribe contra producción.
 
 ---
 
@@ -69,7 +88,7 @@ cd shared && npm run build
 ### 4. Si agregás una Cloud Function nueva
 
 1. Crear la lógica en `functions/src/services/{servicio}.service.ts`
-2. Exportar la function en `functions/src/index.ts` con `onCall(callable, ...)`
+2. Exportar la function en `functions/src/index.ts` con `onCall(callable, ...)` y **envolver el handler con `withHttpsErrorHandling('nombreDeLaFunction', async (request) => {...})`** (de `functions/src/utils/callableHandler.ts`) — garantiza que los errores lleguen al frontend como `HttpsError` con mensaje útil
 3. Agregar middleware de auth al inicio: `verificarAuth`, `verificarAdmin`, `verificarGestionActas`, o `verificarOperador`
 4. Crear el servicio frontend en `frontend/src/services/` que llame a `httpsCallable(functions, "nombreDeLaFunction")`
 5. Después del primer deploy, ejecutar `npm run fix-invokers` para habilitar invocación pública en Cloud Run (sino da error de CORS)
@@ -150,6 +169,9 @@ Script PowerShell que habilita invocación pública (`allUsers` → `roles/run.i
 | Comando | Qué hace |
 |---|---|
 | `npm run dev` | Levanta frontend en dev (Vite) |
+| `npm run dev:live` | Frontend en dev contra Firebase real (usa `frontend/.env.live`) |
+| `npm run pull-prod` | Clona datos de producción a los emuladores locales |
+| `node scripts/cargar-nuevas-duplas.mjs` | Carga batch de usuarios y duplas (soporta `--emulator` y `--dry-run`) |
 | `npm run emulators` | Compila shared + functions y levanta emuladores Firebase |
 | `npm run build` | Compila los tres workspaces en orden |
 | `npm run deploy` | Build completo + deploy a Firebase |

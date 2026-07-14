@@ -6,8 +6,15 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "cwd": "frontend",
-      "port": 5173,
+      "port": [5173, 5174],
       "autoPort": true
+    },
+    {
+      "name": "frontend-alt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5199", "--strictPort"],
+      "cwd": "frontend",
+      "port": 5199
     }
   ]
 }

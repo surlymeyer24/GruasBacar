@@ -1,6 +1,6 @@
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { RolUsuario, esOperador, esSupervisor } from '@gruasbacar/shared';
+import { RolUsuario, esOperador, esSupervisor, esAdmin } from '@gruasbacar/shared';
 
 export interface AuthContext {
   uid: string;
@@ -40,7 +40,7 @@ export async function verificarAuth(authData: { uid: string } | undefined): Prom
 
 export async function verificarAdmin(authData: { uid: string } | undefined): Promise<AuthContext> {
   const ctx = await verificarAuth(authData);
-  if (!ctx.roles.includes('ADMIN')) {
+  if (!esAdmin(ctx.roles)) {
     throw new HttpsError('permission-denied', 'Se requiere rol de administrador.');
   }
   return ctx;
@@ -49,7 +49,7 @@ export async function verificarAdmin(authData: { uid: string } | undefined): Pro
 /** Editar o anular actas: administrador o supervisor. */
 export async function verificarGestionActas(authData: { uid: string } | undefined): Promise<AuthContext> {
   const ctx = await verificarAuth(authData);
-  if (!ctx.roles.includes('ADMIN') && !esSupervisor(ctx.roles)) {
+  if (!esAdmin(ctx.roles) && !esSupervisor(ctx.roles)) {
     throw new HttpsError('permission-denied', 'Se requiere rol de administrador o supervisor.');
   }
   return ctx;
@@ -66,7 +66,7 @@ export async function verificarEnganchador(authData: { uid: string } | undefined
 /** Enganche / traslado / desenganche: operadores de campo y admins (demo o supervisión). */
 export async function verificarOperador(authData: { uid: string } | undefined): Promise<AuthContext> {
   const ctx = await verificarAuth(authData);
-  if (!ctx.roles.includes('ADMIN') && !esOperador(ctx.roles)) {
+  if (!esAdmin(ctx.roles) && !esOperador(ctx.roles)) {
     throw new HttpsError(
       'permission-denied',
       'Se requiere rol ENGANCHADOR o CHOFER en tu cuenta de login (Admin → Usuarios del Sistema). Las duplas operativas no son cuentas de usuario.'

@@ -21,14 +21,13 @@ import {
 } from "@gruasbacar/shared";
 
 export interface IniciarEngancheData {
-  numeroInfraccion: string;
+  numeroInfraccion?: string;
   patente: string;
   grua: string;
   gruaPatente?: string;
   dupla: string;
   duplaChofer: string;
   duplaEnganchador: string;
-  inspector: string;
   legajoEnganchador?: string;
   geo?: GeoPoint;
 }
@@ -41,31 +40,36 @@ export const servicioService = {
     if (!isMock && app) {
       const cloudFn = httpsCallable<
         {
-          numeroInfraccion: string;
+          numeroInfraccion?: string;
           patente: string;
           grua: string;
-          dupla: { chofer: string; enganchador: string; inspector: string };
+          dupla: { chofer: string; enganchador: string };
           geo: { lat: number; lng: number };
         },
         { servicioId: string }
       >(functions, "iniciarEnganche");
-      const res = await cloudFn({
-        numeroInfraccion: data.numeroInfraccion,
-        patente: data.patente,
-        grua: gruaPatente,
-        dupla: {
-          chofer: data.duplaChofer?.trim() || userDisplayName,
-          enganchador: data.duplaEnganchador?.trim() || "—",
-          inspector: data.inspector.trim(),
-        },
-        geo,
-      });
-      return res.data;
+      try {
+        const res = await cloudFn({
+          numeroInfraccion: data.numeroInfraccion,
+          patente: data.patente,
+          grua: gruaPatente,
+          dupla: {
+            chofer: data.duplaChofer?.trim() || "—",
+            enganchador: data.duplaEnganchador?.trim() || "—",
+          },
+          geo,
+        });
+        return res.data;
+      } catch (err) {
+        throw new Error(
+          getFirebaseErrorMessage(err, "No se pudo iniciar el enganche. Revisá los datos e intentá de nuevo.")
+        );
+      }
     }
 
     // Local / Simulation Flow
     const allDuplasSaved = localStorage.getItem("duplas_bacar_asset_catalog");
-    let selectedDuplaObj = { chofer: "Chofer Simulado", enganchador: "Enganchador Simulado", inspector: data.inspector };
+    let selectedDuplaObj = { chofer: "Chofer Simulado", enganchador: "Enganchador Simulado" };
     
     if (allDuplasSaved) {
       try {
@@ -75,7 +79,6 @@ export const servicioService = {
           selectedDuplaObj = {
             chofer: match.chofer,
             enganchador: enganchadorDeDupla(match),
-            inspector: data.inspector
           };
         }
       } catch (e) {
@@ -84,7 +87,7 @@ export const servicioService = {
     }
 
     const patente = data.patente.toUpperCase().trim();
-    const numeroInfraccion = data.numeroInfraccion.toUpperCase().trim();
+    const numeroInfraccion = data.numeroInfraccion?.toUpperCase().trim() || undefined;
     const legajoChofer = data.legajoEnganchador?.trim() || "SIM";
     const gruaId = normalizeGruaId(patenteGruaParaServicio(data.gruaPatente, data.grua));
     const identificadorCompuesto = buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente);
@@ -92,7 +95,7 @@ export const servicioService = {
     const mockServicio: Servicio = {
       id: identificadorCompuesto,
       patente,
-      numeroInfraccion,
+      ...(numeroInfraccion ? { numeroInfraccion } : {}),
       identificadorCompuesto,
       estado: "ENGANCHADO",
       grua: gruaId,
@@ -211,7 +214,6 @@ export const servicioService = {
   async registrarLlegada(
     servicioId: string,
     corralon: string,
-    encargadoDeposito: string,
     geo?: { lat: number; lng: number }
   ): Promise<{ ok: true; yaRegistrada?: boolean }> {
     if (!servicioId?.trim()) {
@@ -228,13 +230,12 @@ export const servicioService = {
         {
           servicioId: string;
           corralon: string;
-          encargadoDeposito: string;
           geo?: { lat: number; lng: number };
         },
         { ok: boolean; yaRegistrada?: boolean }
       >(functions, "registrarLlegadaCorralon");
       try {
-        const res = await cloudFn({ servicioId, corralon, encargadoDeposito, geo });
+        const res = await cloudFn({ servicioId, corralon, geo });
         return { ok: true, yaRegistrada: res.data.yaRegistrada };
       } catch (err) {
         const msg = getFirebaseErrorMessage(
@@ -253,7 +254,6 @@ export const servicioService = {
     const found = services.find(s => s.id === servicioId);
     if (found) {
       found.corralon = corralon;
-      found.encargadoDeposito = encargadoDeposito.trim();
       if (!found.eventos) found.eventos = [];
       if (!found.eventos.some((e) => e.tipo === "LLEGADA_CORRALON")) {
         found.eventos.push({
@@ -261,7 +261,6 @@ export const servicioService = {
           timestamp: new Date().toISOString(),
           geo,
           corralon,
-          encargadoDeposito: encargadoDeposito.trim(),
         });
       }
       updateMockService(found);
@@ -331,7 +330,6 @@ export const servicioService = {
         observacionGeneral: observacionGeneral || "Desenganche completado.",
         ...(llegada?.geo ? { geo: llegada.geo } : {}),
         ...(found.corralon ? { corralon: found.corralon } : {}),
-        ...(found.encargadoDeposito ? { encargadoDeposito: found.encargadoDeposito } : {}),
       };
       if (idx !== -1) {
         found.eventos[idx] = { ...found.eventos[idx], ...updatedEvent };
@@ -347,29 +345,29 @@ export const servicioService = {
 export async function actualizarServicio(data: ActualizarServicioPayload): Promise<void> {
   if (!isMock) {
     const fn = httpsCallable<ActualizarServicioPayload, { ok: boolean }>(functions, "actualizarServicio");
-    await fn(data);
-    return;
+    try {
+      await fn(data);
+      return;
+    } catch (err) {
+      throw new Error(
+        getFirebaseErrorMessage(err, "No se pudo guardar los cambios del acta. Revisá los datos e intentá de nuevo.")
+      );
+    }
   }
 
   const services = getMockServices();
   const found = services.find((s) => s.id === data.servicioId);
   if (!found) throw new Error("Servicio no encontrado.");
   const patente = data.patente.toUpperCase().trim();
-  const numeroInfraccion = data.numeroInfraccion.toUpperCase().trim();
-  const legajoChofer = found.legajoChofer?.trim() || "SIM";
+  const numeroInfraccion = data.numeroInfraccion?.toUpperCase().trim() || undefined;
   const gruaId = normalizeGruaId(data.grua);
   Object.assign(found, {
     patente,
-    numeroInfraccion,
-    identificadorCompuesto: buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente),
+    numeroInfraccion: numeroInfraccion ?? null,
     grua: gruaId,
     dupla: data.dupla,
     corralon: data.corralon ?? found.corralon,
     tipoFlota: data.tipoFlota ?? found.tipoFlota,
-    encargadoDeposito:
-      data.encargadoDeposito !== undefined
-        ? data.encargadoDeposito?.trim() || undefined
-        : found.encargadoDeposito,
   });
   updateMockService(found);
 }
@@ -382,8 +380,12 @@ export async function agregarComentarioFoto(
       functions,
       "agregarComentarioFoto"
     );
-    const res = await fn(data);
-    return res.data.comentario;
+    try {
+      const res = await fn(data);
+      return res.data.comentario;
+    } catch (err) {
+      throw new Error(getFirebaseErrorMessage(err, "No se pudo guardar el comentario. Intentá de nuevo."));
+    }
   }
 
   const services = getMockServices();
@@ -417,8 +419,12 @@ export async function agregarComentarioFoto(
 export async function anularServicio(data: AnularServicioPayload): Promise<void> {
   if (!isMock) {
     const fn = httpsCallable<AnularServicioPayload, { ok: boolean }>(functions, "anularServicio");
-    await fn(data);
-    return;
+    try {
+      await fn(data);
+      return;
+    } catch (err) {
+      throw new Error(getFirebaseErrorMessage(err, "No se pudo anular el servicio. Intentá de nuevo."));
+    }
   }
 
   const services = getMockServices();
@@ -435,12 +441,18 @@ export async function crearActaManual(data: CrearActaManualPayload): Promise<{ s
       functions,
       "crearActaManual"
     );
-    const res = await fn(data);
-    return res.data;
+    try {
+      const res = await fn(data);
+      return res.data;
+    } catch (err) {
+      throw new Error(
+        getFirebaseErrorMessage(err, "No se pudo crear la acta manual. Revisá los datos e intentá de nuevo.")
+      );
+    }
   }
 
   const patente = data.patente.toUpperCase().trim();
-  const numeroInfraccion = data.numeroInfraccion.toUpperCase().trim();
+  const numeroInfraccion = data.numeroInfraccion?.toUpperCase().trim() || undefined;
   const legajoChofer = data.legajoEnganchador.trim();
   if (!legajoChofer) throw new Error("El legajo del enganchador es obligatorio.");
   const gruaId = normalizeGruaId(data.grua);
@@ -448,12 +460,11 @@ export async function crearActaManual(data: CrearActaManualPayload): Promise<{ s
   addMockService({
     id: identificadorCompuesto,
     patente,
-    numeroInfraccion,
+    ...(numeroInfraccion ? { numeroInfraccion } : {}),
     identificadorCompuesto,
     estado: "DESENGANCHADO",
     grua: gruaId,
     corralon: data.corralon ?? undefined,
-    encargadoDeposito: data.encargadoDeposito ?? undefined,
     creadoPor: "mock-supervisor",
     legajoChofer,
     dupla: data.dupla,

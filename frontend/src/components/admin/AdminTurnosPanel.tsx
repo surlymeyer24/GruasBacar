@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import { updateDoc, doc } from "firebase/firestore";
 import {
   Clock,
   Pencil,
@@ -9,8 +8,9 @@ import {
   User,
   X,
   CircleOff,
+  Search,
 } from "lucide-react";
-import { isMock, db } from "../../firebase";
+import { isMock } from "../../firebase";
 import {
   Usuario,
   AsignacionDiaria,
@@ -25,7 +25,10 @@ import {
 } from "@gruasbacar/shared";
 import { DuplaDoc, GruaDoc } from "../../services/adminCatalog.cache";
 import { CustomSelect } from "../shared/CustomSelect";
+import AdminSectionToolbar from "./AdminSectionToolbar";
+import AdminSubTabs from "./AdminSubTabs";
 import { fechaHoyArgentina } from "../../utils/formatters";
+import { asignarTurnoOperador } from "../../services/notificacion.service";
 
 interface AdminTurnosPanelProps {
   usuarios: Usuario[];
@@ -50,7 +53,11 @@ const DUPLA_MANUAL = "__manual__";
 function gruaLabelPorPatente(gruas: GruaDoc[], patente: string): string {
   const g = gruas.find((gr) => gr.patente === patente);
   if (!g || !g.descripcion?.trim()) return patente;
-  return `${patente} — ${g.descripcion.trim()}`;
+  return `${g.descripcion.trim()} — ${patente}`;
+}
+
+function matchesSearch(text: string, query: string): boolean {
+  return text.toLowerCase().includes(query.trim().toLowerCase());
 }
 
 export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
@@ -70,7 +77,7 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
   const [editDuplaId, setEditDuplaId] = useState("");
   const [editChofer, setEditChofer] = useState("");
   const [editEnganchador, setEditEnganchador] = useState("");
-  const [editInspector, setEditInspector] = useState("");
+  const [turnoSearch, setTurnoSearch] = useState("");
 
   const hoy = fechaHoyArgentina();
 
@@ -111,10 +118,50 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
     [duplas, turnosActivosDuplaIds]
   );
 
+  const filteredTurnosActivos = useMemo(() => {
+    if (!turnoSearch.trim()) return turnosActivos;
+    return turnosActivos.filter((u) => {
+      const a = u.asignacionDiaria;
+      if (!a) return false;
+      const gruaText = gruaLabelPorPatente(gruas, a.gruaPatente);
+      return (
+        matchesSearch(u.nombre, turnoSearch) ||
+        matchesSearch(a.gruaPatente, turnoSearch) ||
+        matchesSearch(gruaText, turnoSearch) ||
+        matchesSearch(a.duplaChofer, turnoSearch) ||
+        matchesSearch(a.duplaEnganchador, turnoSearch)
+      );
+    });
+  }, [turnosActivos, turnoSearch, gruas]);
+
+  const filteredDuplasSinTurno = useMemo(() => {
+    if (!turnoSearch.trim()) return duplasSinTurno;
+    return duplasSinTurno.filter((d) => {
+      const eng = enganchadorDeDupla(d);
+      const gruaAsignada = gruas.find((g) => g.id === d.gruaId || g.docId === d.gruaId);
+      const gruaText = gruaAsignada ? gruaLabelPorPatente(gruas, gruaAsignada.patente) : "";
+      return (
+        matchesSearch(d.chofer, turnoSearch) ||
+        matchesSearch(eng, turnoSearch) ||
+        matchesSearch(gruaText, turnoSearch)
+      );
+    });
+  }, [duplasSinTurno, turnoSearch, gruas]);
+
   const turnosActivosUids = useMemo(() => {
     const uids = new Set<string>();
     for (const u of turnosActivos) uids.add(u.uid);
     return uids;
+  }, [turnosActivos]);
+
+  const nombresEnTurnoActivo = useMemo(() => {
+    const nombres = new Set<string>();
+    for (const u of turnosActivos) {
+      const a = u.asignacionDiaria;
+      if (a?.duplaChofer) nombres.add(a.duplaChofer.trim().toLowerCase());
+      if (a?.duplaEnganchador) nombres.add(a.duplaEnganchador.trim().toLowerCase());
+    }
+    return nombres;
   }, [turnosActivos]);
 
   const operadoresSinTurno = useMemo(
@@ -124,10 +171,11 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
           (u) =>
             u.activo !== false &&
             esOperador(normalizeRoles(u.roles, u.rol)) &&
-            !turnosActivosUids.has(u.uid)
+            !turnosActivosUids.has(u.uid) &&
+            !nombresEnTurnoActivo.has(u.nombre.trim().toLowerCase())
         )
         .sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
-    [usuarios, turnosActivosUids]
+    [usuarios, turnosActivosUids, nombresEnTurnoActivo]
   );
 
   const operadorOptions = useMemo(
@@ -155,7 +203,7 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
         ? [{ value: "", label: "Sin grúas de este tipo" }]
         : gruasFiltradas.map((g) => ({
             value: g.patente,
-            label: `${g.patente}${g.descripcion?.trim() ? ` — ${g.descripcion.trim()}` : ""}`,
+            label: `${g.descripcion?.trim() ? `${g.descripcion.trim()} — ` : ""}${g.patente}`,
           })),
     [gruasFiltradas]
   );
@@ -191,7 +239,6 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
     setEditGruaPatente(a.gruaPatente);
     setEditChofer(a.duplaChofer);
     setEditEnganchador(a.duplaEnganchador);
-    setEditInspector(a.inspector);
     setModalError(null);
 
     const matchesCatalog = duplas.some(
@@ -208,7 +255,6 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
     setEditDuplaId(d.id);
     setEditChofer(d.chofer);
     setEditEnganchador(enganchadorDeDupla(d));
-    setEditInspector("");
     setModalError(null);
 
     const gruaAsignada = gruas.find((g) => g.id === d.gruaId || g.docId === d.gruaId);
@@ -223,7 +269,6 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
     setEditDuplaId("");
     setEditChofer("");
     setEditEnganchador("");
-    setEditInspector("");
     setEditTipoFlota("TRANSITO");
     setModalError(null);
   };
@@ -237,42 +282,60 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
       return;
     }
 
-    if (!editGruaPatente.trim() || !editChofer.trim() || !editEnganchador.trim() || !editInspector.trim()) {
-      setModalError("Completá grúa, chofer, enganchador e inspector.");
+    if (!editGruaPatente.trim() || !editChofer.trim() || !editEnganchador.trim()) {
+      setModalError("Completá grúa, chofer y enganchador.");
       return;
     }
 
     setSavingState(true);
     setModalError(null);
 
-    const duplaId = editDuplaId === DUPLA_MANUAL
-      ? (selectedUser?.asignacionDiaria?.duplaId ?? "")
-      : editDuplaId;
+    const duplaId = editDuplaId === DUPLA_MANUAL ? "" : editDuplaId;
 
+    const duplaCatalogo = editDuplaId !== DUPLA_MANUAL
+      ? duplasFiltradas.find((d) => d.id === editDuplaId)
+      : undefined;
+    const legajoChofer = duplaCatalogo?.legajoChofer
+      || choferes.find((c) => c.nombre === editChofer.trim())?.legajo;
+    const legajoEnganchador = duplaCatalogo?.legajoEnganchador
+      || enganchadores.find((e) => e.nombre === editEnganchador.trim())?.legajo;
+
+    const gruaDesc = gruas.find((g) => g.patente === editGruaPatente.trim())?.descripcion?.trim();
     const updated: AsignacionDiaria = isCreating
       ? {
           fecha: hoy,
           gruaPatente: editGruaPatente.trim(),
+          ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
           duplaId,
           duplaChofer: editChofer.trim(),
           duplaEnganchador: editEnganchador.trim(),
-          inspector: editInspector.trim(),
           tipoFlota: editTipoFlota,
           inicioEn: new Date().toISOString(),
+          ...(legajoChofer ? { legajoChofer } : {}),
+          ...(legajoEnganchador ? { legajoEnganchador } : {}),
         }
       : {
           ...selectedUser!.asignacionDiaria!,
           gruaPatente: editGruaPatente.trim(),
+          ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
           duplaId,
           duplaChofer: editChofer.trim(),
           duplaEnganchador: editEnganchador.trim(),
-          inspector: editInspector.trim(),
           tipoFlota: editTipoFlota,
+          legajoChofer: legajoChofer ?? undefined,
+          legajoEnganchador: legajoEnganchador ?? undefined,
         };
 
+    // Firestore no acepta `undefined`: si no hay legajo de catálogo, quitamos el campo en vez de mandarlo vacío.
+    if (!updated.legajoChofer) delete updated.legajoChofer;
+    if (!updated.legajoEnganchador) delete updated.legajoEnganchador;
+
     try {
-      if (!isMock && db) {
-        await updateDoc(doc(db, "usuarios", targetUid!), { asignacionDiaria: updated });
+      if (!isMock) {
+        await asignarTurnoOperador({
+          operadorUid: targetUid!,
+          asignacionDiaria: updated,
+        });
       }
       const next = usuarios.map((u) =>
         u.uid === targetUid ? { ...u, asignacionDiaria: updated } : u
@@ -295,43 +358,40 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
 
   return (
     <div className="bg-white overflow-hidden">
-      {/* Pestañas */}
-      <div className="flex border-b border-brand-seashell">
-        <button
-          type="button"
-          onClick={() => setActiveTab("activos")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-bold transition-colors cursor-pointer ${
-            activeTab === "activos"
-              ? "text-brand-cta border-b-2 border-brand-cta bg-brand-cta/5"
-              : "text-brand-pale hover:text-gray-700 hover:bg-gray-50"
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          Activos ({turnosActivos.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("sinTurno")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-bold transition-colors cursor-pointer ${
-            activeTab === "sinTurno"
-              ? "text-brand-cta border-b-2 border-brand-cta bg-brand-cta/5"
-              : "text-brand-pale hover:text-gray-700 hover:bg-gray-50"
-          }`}
-        >
-          <CircleOff className="w-4 h-4" />
-          Sin turno ({duplasSinTurno.length})
-        </button>
-      </div>
+      <AdminSectionToolbar>
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-brand-pale absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={turnoSearch}
+            onChange={(e) => setTurnoSearch(e.target.value)}
+            placeholder="Buscar por operador, grúa o dupla..."
+            className="w-full pl-9 pr-3 py-2.5 bg-white border border-brand-seashell rounded-xl text-[13px] leading-tight text-brand-purply placeholder:text-brand-pale focus:outline-none focus:ring-2 focus:ring-brand-cta/25 focus:border-brand-cta/40 transition-shadow shadow-sm"
+          />
+        </div>
+      </AdminSectionToolbar>
+
+      <AdminSubTabs
+        ariaLabel="Vista de turnos"
+        active={activeTab}
+        onChange={setActiveTab}
+        tabs={[
+          { id: "activos" as const, label: "Activos", icon: <Clock className="w-4 h-4" />, count: filteredTurnosActivos.length },
+          { id: "sinTurno" as const, label: "Sin turno", icon: <CircleOff className="w-4 h-4" />, count: filteredDuplasSinTurno.length },
+        ]}
+      />
 
       {/* Contenido de la pestaña activa */}
       {activeTab === "activos" && (
         <div className="divide-y divide-gray-100">
-          {turnosActivos.length === 0 ? (
+          {filteredTurnosActivos.length === 0 ? (
             <p className="p-6 text-sm text-brand-pale text-center">
-              No hay turnos activos en este momento.
+              {turnosActivos.length === 0
+                ? "No hay turnos activos en este momento."
+                : "No hay turnos que coincidan con la búsqueda."}
             </p>
           ) : (
-            turnosActivos.map((u) => {
+            filteredTurnosActivos.map((u) => {
               const a = u.asignacionDiaria!;
 
               return (
@@ -363,10 +423,6 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
                           <Users className="w-3.5 h-3.5 text-brand-pale shrink-0" />
                           {a.duplaChofer} + {a.duplaEnganchador}
                         </p>
-                        <p className="text-xs text-brand-purply/80 flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-brand-pale shrink-0" />
-                          {a.inspector}
-                        </p>
                       </div>
                     </div>
 
@@ -391,12 +447,14 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
 
       {activeTab === "sinTurno" && (
         <div className="divide-y divide-gray-100">
-          {duplasSinTurno.length === 0 ? (
+          {filteredDuplasSinTurno.length === 0 ? (
             <p className="p-6 text-sm text-brand-pale text-center">
-              Todas las duplas activas tienen turno configurado.
+              {duplasSinTurno.length === 0
+                ? "Todas las duplas activas tienen turno configurado."
+                : "No hay duplas que coincidan con la búsqueda."}
             </p>
           ) : (
-            duplasSinTurno.map((d) => {
+            filteredDuplasSinTurno.map((d) => {
               const gruaAsignada = gruas.find((g) => g.id === d.gruaId || g.docId === d.gruaId);
 
               return (
@@ -520,10 +578,6 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
                     <span className="font-bold text-gray-900 text-sm">
                       {modalAsignacion.duplaChofer} + {modalAsignacion.duplaEnganchador}
                     </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block mb-0.5">Inspector</span>
-                    <span className="font-bold text-gray-900 text-sm">{modalAsignacion.inspector}</span>
                   </div>
                 </div>
               )}
@@ -653,21 +707,6 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
                     Dupla personalizada para hoy: {editChofer || "—"} + {editEnganchador || "—"}
                   </p>
                 )}
-
-                <div className="space-y-1">
-                  <label className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    <User className="w-3.5 h-3.5" />
-                    Inspector
-                  </label>
-                  <input
-                    type="text"
-                    value={editInspector}
-                    onChange={(e) => setEditInspector(e.target.value)}
-                    disabled={savingState}
-                    placeholder="Ej: Inspector Daniel López"
-                    className="w-full px-3 py-2.5 bg-brand-bg border border-brand-seashell rounded-xl text-sm text-brand-purply font-medium placeholder:text-brand-pale/70"
-                  />
-                </div>
               </div>
             </div>
 

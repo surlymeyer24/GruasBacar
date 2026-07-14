@@ -1,5 +1,6 @@
 import React from "react";
 import { DatosFormFields } from "./DatosForm";
+import { displayPatente } from "@gruasbacar/shared";
 import { ClipboardCheck, Check, Truck, Users, User } from "lucide-react";
 import { FlowBackButton } from "../shared/FlowBackButton";
 
@@ -13,7 +14,7 @@ interface ResumenConfirmacionProps {
 }
 
 function formatGrua(values: DatosFormFields): string {
-  const label = [values.gruaPatente, values.gruaDescripcion].filter(Boolean).join(" — ");
+  const label = [values.gruaDescripcion, values.gruaPatente].filter(Boolean).join(" — ");
   return label || "Sin grúa asignada";
 }
 
@@ -53,11 +54,7 @@ export const ResumenConfirmacion: React.FC<ResumenConfirmacionProps> = ({
         <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-gray-200 gap-4 sm:gap-0 pb-3 border-b border-gray-200">
           <div className="flex-1 space-y-1 sm:pr-4">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Patente / Dominio Encontrado</span>
-            <span className="font-mono font-extrabold text-xl text-brand-purply tracking-widest">{values.patente}</span>
-          </div>
-          <div className="flex-1 space-y-1 pt-3 sm:pt-0 sm:pl-4">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Número de Infracción / Acta</span>
-            <span className="font-mono font-bold text-lg text-brand-cta tracking-wider">{values.numeroInfraccion}</span>
+            <span className="font-mono font-extrabold text-xl text-brand-purply tracking-widest">{displayPatente(values.patente)}</span>
           </div>
         </div>
 
@@ -92,16 +89,6 @@ export const ResumenConfirmacion: React.FC<ResumenConfirmacionProps> = ({
             <div>
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Enganchador</span>
               <span className="font-medium text-gray-800">{formatEnganchador(values)}</span>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2.5 sm:col-span-2 pt-2 border-t border-brand-seashell/40">
-            <div className="p-2 bg-slate-100 w-fit rounded-lg text-slate-500">
-              <User className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Inspector</span>
-              <span className="font-semibold text-gray-800">{values.inspector}</span>
             </div>
           </div>
 

@@ -2,7 +2,7 @@ import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import LoadingSpinner from "../shared/LoadingSpinner";
-import { RolUsuario, esOperador, rutaInicioPorRoles, tieneRol } from "@gruasbacar/shared";
+import { RolUsuario, esAdmin, esOperador, esVisor, rutaInicioPorRoles, tieneRol } from "@gruasbacar/shared";
 
 interface RoleGuardProps {
   children: React.ReactNode;
@@ -27,7 +27,7 @@ function destinoFallback(
   if ((allowedRole === "ENGANCHADOR" || allowedRole === "CHOFER") && !esOperador(roles)) {
     return rutaInicioPorRoles(roles);
   }
-  if (allowedRole === "ADMIN" && !roles.includes("ADMIN")) {
+  if (allowedRole === "ADMIN" && !esAdmin(roles)) {
     return esOperador(roles) ? "/" : rutaInicioPorRoles(roles);
   }
   return rutaInicioPorRoles(roles);

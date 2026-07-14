@@ -97,7 +97,7 @@ export function diffEdicionServicio(
   const duplaActual = (actual.dupla ?? {}) as DuplasServicio;
 
   pushCambio(cambios, 'patente', 'Patente', actual.patente, data.patente);
-  pushCambio(cambios, 'numeroInfraccion', 'Nº infracción', actual.numeroInfraccion, data.numeroInfraccion);
+  pushCambio(cambios, 'numeroInfraccion', 'Nº infracción', actual.numeroInfraccion ?? '', data.numeroInfraccion ?? '');
   pushCambio(cambios, 'grua', 'Grúa', actual.grua, data.grua, 'grua');
 
   if (data.corralon !== undefined) {
@@ -106,16 +106,6 @@ export function diffEdicionServicio(
   if (data.tipoFlota !== undefined) {
     pushCambio(cambios, 'tipoFlota', 'Tipo flota', actual.tipoFlota, data.tipoFlota, 'tipoFlota');
   }
-  if (data.encargadoDeposito !== undefined) {
-    pushCambio(
-      cambios,
-      'encargadoDeposito',
-      'Encargado depósito',
-      actual.encargadoDeposito,
-      data.encargadoDeposito ?? null
-    );
-  }
-
   pushCambio(cambios, 'dupla.chofer', 'Chofer', duplaActual.chofer, data.dupla.chofer);
   pushCambio(
     cambios,
@@ -124,7 +114,6 @@ export function diffEdicionServicio(
     enganchadorDeDuplaServicio(duplaActual),
     enganchadorDeDuplaServicio(data.dupla)
   );
-  pushCambio(cambios, 'dupla.inspector', 'Inspector', duplaActual.inspector, data.dupla.inspector);
 
   return cambios;
 }
@@ -153,7 +142,7 @@ export function cambiosAnulacion(
 }
 
 export function rolEditorVersion(roles: RolUsuario[]): VersionActa['editadoPorRol'] {
-  if (roles.includes('ADMIN')) return 'ADMIN';
+  if (roles.includes('SUPERADMIN') || roles.includes('ADMIN')) return 'ADMIN';
   if (roles.includes('SUPERVISOR')) return 'SUPERVISOR';
   return 'OPERADOR';
 }

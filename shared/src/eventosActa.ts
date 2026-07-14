@@ -11,7 +11,7 @@ export function eventoLlegadaCorralon(eventos: Evento[]): Evento | undefined {
  */
 export function eventosParaVistaActa(
   eventos: Evento[],
-  servicio?: Pick<Servicio, 'corralon' | 'encargadoDeposito'>
+  servicio?: Pick<Servicio, 'corralon'>
 ): Evento[] {
   const llegada = eventoLlegadaCorralon(eventos);
 
@@ -23,8 +23,6 @@ export function eventosParaVistaActa(
         ...e,
         geo: e.geo ?? llegada?.geo,
         corralon: e.corralon ?? llegada?.corralon ?? servicio?.corralon,
-        encargadoDeposito:
-          e.encargadoDeposito ?? llegada?.encargadoDeposito ?? servicio?.encargadoDeposito,
       };
     });
 }

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
   EstadoServicio,
@@ -26,10 +27,13 @@ import {
   cambiosAnulacion,
   rolEditorVersion,
   RolUsuario,
+  AsignacionDiaria,
+  DuplasServicio,
 } from '@gruasbacar/shared';
 import {
   validarPatente,
   validarString,
+  validarStringOpcional,
   buildIdentificadorCompuesto,
   buildRutaFoto,
   validarLoteFotos,
@@ -69,7 +73,7 @@ function registrarVersionActa(
   tx.set(versionRef, {
     version: nextVersion,
     tipo,
-    editadoEn: admin.firestore.FieldValue.serverTimestamp(),
+    editadoEn: FieldValue.serverTimestamp(),
     editadoPorUid: editor.uid,
     editadoPorNombre: editor.nombre?.trim() || 'Usuario',
     editadoPorRol: rolEditorVersion(editor.roles),
@@ -80,7 +84,7 @@ function registrarVersionActa(
   tx.update(servicioRef, {
     versionCount: nextVersion,
     ultimaEdicionPor: editor.uid,
-    ultimaEdicionEn: admin.firestore.FieldValue.serverTimestamp(),
+    ultimaEdicionEn: FieldValue.serverTimestamp(),
   });
 
   return nextVersion;
@@ -98,18 +102,61 @@ function buildServicioActivoResumen(
   };
 }
 
-async function tipoFlotaDesdeGrua(gruaInput: string): Promise<ReturnType<typeof normalizeTipoFlota>> {
+/** Correlativo global de actas (6 dígitos, con ceros a la izquierda). Atómico vía transacción. */
+async function generarNumeroActa(): Promise<string> {
+  const counterRef = db().collection('contadores').doc('actas');
+  const siguiente = await db().runTransaction(async (tx) => {
+    const snap = await tx.get(counterRef);
+    const ultimo = (snap.data()?.ultimo as number | undefined) ?? 0;
+    const next = ultimo + 1;
+    tx.set(counterRef, { ultimo: next }, { merge: true });
+    return next;
+  });
+  return String(siguiente).padStart(6, '0');
+}
+
+interface GruaValidada {
+  docId: string;
+  tipoFlota: ReturnType<typeof normalizeTipoFlota>;
+}
+
+async function validarGruaExiste(gruaInput: string): Promise<GruaValidada> {
   const gruaId = normalizeGruaId(gruaInput);
   const gruaDoc = await db().collection('gruas').doc(gruaId).get();
   if (gruaDoc.exists) {
-    return normalizeTipoFlota(gruaDoc.data()?.tipo as string | undefined);
+    const data = gruaDoc.data()!;
+    if (data.activa === false) {
+      throw new HttpsError('failed-precondition', `La grúa ${gruaId} no está activa.`);
+    }
+    return { docId: gruaDoc.id, tipoFlota: normalizeTipoFlota(data.tipo as string | undefined) };
   }
   const patente = patenteDesdeGruaId(gruaInput);
   const gruaSnap = await db().collection('gruas').where('patente', '==', patente).limit(1).get();
   if (!gruaSnap.empty) {
-    return normalizeTipoFlota(gruaSnap.docs[0].data().tipo as string | undefined);
+    const data = gruaSnap.docs[0].data();
+    if (data.activa === false) {
+      throw new HttpsError('failed-precondition', `La grúa con patente ${patente} no está activa.`);
+    }
+    return { docId: gruaSnap.docs[0].id, tipoFlota: normalizeTipoFlota(data.tipo as string | undefined) };
   }
-  return 'TRANSITO';
+  throw new HttpsError('not-found', `No se encontró la grúa "${gruaInput}" en el sistema.`);
+}
+
+interface CorralonValidado {
+  corralonId: string;
+  corralonNombre: string;
+}
+
+async function validarCorralonExiste(corralonInput: string): Promise<CorralonValidado> {
+  const corralonDoc = await db().collection('corralones').doc(corralonInput).get();
+  if (corralonDoc.exists) {
+    const data = corralonDoc.data()!;
+    if (data.activo === false) {
+      throw new HttpsError('failed-precondition', 'El corralón seleccionado no está activo.');
+    }
+    return { corralonId: corralonDoc.id, corralonNombre: (data.nombre as string) || corralonDoc.id };
+  }
+  throw new HttpsError('not-found', `No se encontró el corralón "${corralonInput}" en el sistema.`);
 }
 
 export async function iniciarEnganche(
@@ -118,11 +165,9 @@ export async function iniciarEnganche(
   driveFolderId?: string
 ): Promise<{ servicioId: string }> {
   const patente = validarPatente(data.patente);
-  const numeroInfraccion = validarString(data.numeroInfraccion, 'numeroInfraccion');
-  validarString(data.grua, 'grua');
-  validarString(data.dupla?.chofer, 'dupla.chofer');
-  validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador');
-  validarString(data.dupla?.inspector, 'dupla.inspector');
+  validarString(data.grua, 'grua', 20);
+  validarString(data.dupla?.chofer, 'dupla.chofer', 100);
+  validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador', 100);
 
   const usuarioRef = db().collection('usuarios').doc(uid);
   const usuarioSnap = await usuarioRef.get();
@@ -136,19 +181,17 @@ export async function iniciarEnganche(
   let legajoChofer: string;
   const rolesUsuario = normalizeRoles(usuarioData.roles as string[] | undefined, usuarioData.rol as string | undefined);
   const isOperador = esOperador(rolesUsuario);
-  if (isOperador && !rolesUsuario.includes('ADMIN')) {
+  if (isOperador && !rolesUsuario.includes('ADMIN') && !rolesUsuario.includes('SUPERADMIN')) {
     legajoChofer = validarString(legajoRaw, 'legajo');
   } else {
     legajoChofer = legajoRaw?.trim() || `ADMIN_${uid.slice(0, 8)}`;
   }
 
+  const numeroInfraccion = await generarNumeroActa();
   const identificadorCompuesto = buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente);
   const gruaId = normalizeGruaId(data.grua);
-
-  let tipoFlota = normalizeTipoFlota(
-    (usuarioData.asignacionDiaria as { tipoFlota?: string } | undefined)?.tipoFlota
-  );
-  tipoFlota = await tipoFlotaDesdeGrua(gruaId);
+  const grua = await validarGruaExiste(gruaId);
+  const tipoFlota = grua.tipoFlota;
 
   const servicioRef = db().collection('servicios').doc(identificadorCompuesto);
   const existente = await servicioRef.get();
@@ -160,18 +203,27 @@ export async function iniciarEnganche(
   const geoEnganche: GeoPoint = data.geo ?? { lat: 0, lng: 0 };
 
   await db().runTransaction(async (tx) => {
+    const asignacion = usuarioData.asignacionDiaria as AsignacionDiaria | undefined;
+    const duplaEnriquecida: DuplasServicio = {
+      ...data.dupla,
+      ...(asignacion?.duplaId ? { duplaId: asignacion.duplaId } : {}),
+      ...(asignacion?.legajoChofer ? { legajoChofer: asignacion.legajoChofer } : {}),
+      ...(asignacion?.legajoEnganchador ? { legajoEnganchador: asignacion.legajoEnganchador } : {}),
+    };
+
     tx.set(servicioRef, {
       patente,
       numeroInfraccion,
       identificadorCompuesto,
       estado: 'ENGANCHADO' as EstadoServicio,
       grua: gruaId,
+      gruaDocId: grua.docId,
       tipoFlota,
       creadoPor: uid,
       legajoChofer,
-      dupla: data.dupla,
+      dupla: duplaEnriquecida,
       geoEnganche,
-      creadoEn: admin.firestore.FieldValue.serverTimestamp(),
+      creadoEn: FieldValue.serverTimestamp(),
     });
     tx.update(usuarioRef, {
       servicioActivoId: servicioRef.id,
@@ -264,7 +316,7 @@ async function resolverFotosConUrl(
 
   const legajo = await legajoParaFotosDesdeServicio(servicio);
   const patente = servicio.patente as string;
-  const numeroInfraccion = servicio.numeroInfraccion as string;
+  const numeroInfraccion = servicio.numeroInfraccion as string | undefined;
 
   try {
     const drive = await driveService();
@@ -277,7 +329,8 @@ async function resolverFotosConUrl(
           numeroInfraccion,
           carpeta,
           fotos[i].etiqueta,
-          i
+          i,
+          servicio.creadoEn
         ),
         base64,
       }))
@@ -335,7 +388,7 @@ export async function subirFotoEvento(
 
   const legajo = await legajoParaFotosDesdeServicio(servicio);
   const patente = servicio.patente as string;
-  const numeroInfraccion = servicio.numeroInfraccion as string;
+  const numeroInfraccion = servicio.numeroInfraccion as string | undefined;
 
   try {
     const drive = await driveService();
@@ -347,7 +400,8 @@ export async function subirFotoEvento(
           numeroInfraccion,
           carpeta,
           etiqueta as EtiquetaFoto,
-          index
+          index,
+          servicio.creadoEn
         ),
         base64: fotoBase64,
       },
@@ -372,9 +426,10 @@ export async function registrarEventoEnganche(
     const servicioId = validarString(data.servicioId, 'servicioId');
     const fotos = Array.isArray(data.fotos) ? data.fotos : [];
     const fotosBase64 = Array.isArray(data.fotosBase64) ? data.fotosBase64 : [];
-    const { geo, observacionGeneral } = data;
+    const geo = data.geo;
+    const observacionGeneral = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
 
-    validarLoteFotos(fotos, fotosBase64);
+    validarLoteFotos(fotos, fotosBase64, 3);
 
     const servicioRef = db().collection('servicios').doc(servicioId);
     const servicioSnap = await servicioRef.get();
@@ -413,19 +468,26 @@ export async function registrarEventoEnganche(
       ? `${observacionGeneral.trim()}${notaDrive}`
       : notaDrive.trim() || null;
 
-    await servicioRef.collection('eventos').add({
-      tipo: 'ENGANCHE',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      geo: geoEvento,
-      fotos: fotosParaFirestore(fotosConUrl),
-      observacionGeneral: obsFinal,
-    });
-
-    if (fotosConUrl.length > 0) {
-      await servicioRef.update({
-        totalFotos: admin.firestore.FieldValue.increment(fotosConUrl.length),
+    await db().runTransaction(async (tx) => {
+      tx.set(servicioRef.collection('eventos').doc(), {
+        tipo: 'ENGANCHE',
+        timestamp: FieldValue.serverTimestamp(),
+        geo: geoEvento,
+        fotos: fotosParaFirestore(fotosConUrl),
+        observacionGeneral: obsFinal,
       });
-    }
+
+      const updates: Record<string, unknown> = {};
+      if (fotosConUrl.length > 0) {
+        updates.totalFotos = FieldValue.increment(fotosConUrl.length);
+      }
+      if (esGeoValida(geoEvento) && !esGeoValida(servicio.geoEnganche as GeoPoint | undefined)) {
+        updates.geoEnganche = geoEvento;
+      }
+      if (Object.keys(updates).length > 0) {
+        tx.update(servicioRef, updates);
+      }
+    });
 
     const fotoStorage = await import('./fotoStorage.service');
     await fotoStorage.limpiarFotosStaging(servicioId, 'enganche');
@@ -485,12 +547,12 @@ export async function iniciarTraslado(servicioIdRaw: unknown, uid: string): Prom
     tx.update(servicioRef, { estado: 'EN_TRASLADO' as EstadoServicio });
     tx.set(servicioRef.collection('eventos').doc(), {
       tipo: 'TRASLADO',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
     });
     tx.update(usuarioRef, {
       servicioActivoResumen: buildServicioActivoResumen(servicioId, {
         patente: servicio.patente as string,
-        numeroInfraccion: servicio.numeroInfraccion as string,
+        numeroInfraccion: servicio.numeroInfraccion as string | undefined,
         estado: 'EN_TRASLADO',
       }),
     });
@@ -501,10 +563,11 @@ export async function registrarLlegadaCorralon(
   data: RegistrarLlegadaCorralónPayload,
   uid: string
 ): Promise<{ yaRegistrada: boolean }> {
-  const { servicioId, corralon, encargadoDeposito, geo } = data;
+  const { servicioId, geo } = data;
   validarString(servicioId, 'servicioId');
-  validarString(corralon, 'corralon');
-  validarString(encargadoDeposito, 'encargadoDeposito');
+  const corralonInput = validarString(data.corralon, 'corralon', 200);
+
+  const corralonValidado = await validarCorralonExiste(corralonInput);
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
@@ -531,13 +594,16 @@ export async function registrarLlegadaCorralon(
   }
 
   await db().runTransaction(async (tx) => {
-    tx.update(servicioRef, { corralon, encargadoDeposito: encargadoDeposito.trim() });
+    tx.update(servicioRef, {
+      corralon: corralonValidado.corralonNombre,
+      corralonId: corralonValidado.corralonId,
+    });
     tx.set(servicioRef.collection('eventos').doc(), {
       tipo: 'LLEGADA_CORRALON',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
       geo,
-      corralon,
-      encargadoDeposito: encargadoDeposito.trim(),
+      corralon: corralonValidado.corralonNombre,
+      corralonId: corralonValidado.corralonId,
     });
   });
 
@@ -551,9 +617,9 @@ export async function confirmarDesenganche(
 ): Promise<void> {
   const servicioId = validarString(data.servicioId, 'servicioId');
   const { fotos, fotosBase64 } = normalizarPayloadFotos(data);
-  const { observacionGeneral } = data;
+  const observacionGeneral = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
 
-  validarLoteFotos(fotos, fotosBase64);
+  validarLoteFotos(fotos, fotosBase64, 3);
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
@@ -590,7 +656,6 @@ export async function confirmarDesenganche(
     .get();
 
   const corralon = (servicio.corralon as string | undefined)?.trim();
-  const encargadoDeposito = (servicio.encargadoDeposito as string | undefined)?.trim();
   const llegadaData = llegadaSnap.empty ? undefined : llegadaSnap.docs[0].data();
   const geoDesenganche = llegadaData?.geo as { lat: number; lng: number } | undefined;
 
@@ -613,19 +678,18 @@ export async function confirmarDesenganche(
   await db().runTransaction(async (tx) => {
     tx.update(servicioRef, {
       estado: 'DESENGANCHADO' as EstadoServicio,
-      finalizadoEn: admin.firestore.FieldValue.serverTimestamp(),
+      finalizadoEn: FieldValue.serverTimestamp(),
       ...(fotosConUrl.length > 0
-        ? { totalFotos: admin.firestore.FieldValue.increment(fotosConUrl.length) }
+        ? { totalFotos: FieldValue.increment(fotosConUrl.length) }
         : {}),
     });
     tx.set(servicioRef.collection('eventos').doc(), {
       tipo: 'DESENGANCHE',
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
       fotos: fotosParaFirestore(fotosConUrl),
       observacionGeneral: observacionGeneral?.trim() || null,
       ...(geoDesenganche ? { geo: geoDesenganche } : {}),
       ...(corralon ? { corralon } : {}),
-      ...(encargadoDeposito ? { encargadoDeposito } : {}),
     });
     tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
   });
@@ -639,7 +703,8 @@ export async function anularServicio(
   editor: EditorContext,
   puedeGestionarActas: boolean
 ): Promise<void> {
-  const { servicioId, motivo } = data;
+  const { servicioId } = data;
+  const motivo = validarStringOpcional(data.motivo, 'motivo', 500);
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
@@ -667,7 +732,7 @@ export async function anularServicio(
       estado: 'ANULADO' as EstadoServicio,
       motivoAnulacion: motivo ?? null,
       anuladoPor: editor.uid,
-      anuladoEn: admin.firestore.FieldValue.serverTimestamp(),
+      anuladoEn: FieldValue.serverTimestamp(),
     });
     tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
     registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
@@ -675,46 +740,39 @@ export async function anularServicio(
 }
 
 export async function actualizarServicio(data: ActualizarServicioPayload, editor: EditorContext): Promise<void> {
-  const { servicioId, corralon, dupla } = data;
+  const { servicioId, dupla } = data;
   const patente = validarPatente(data.patente);
-  const numeroInfraccion = validarString(data.numeroInfraccion, 'numeroInfraccion');
-  const grua = normalizeGruaId(validarString(data.grua, 'grua'));
-  validarString(dupla?.chofer, 'dupla.chofer');
-  validarString(enganchadorDeDuplaServicio(dupla), 'dupla.enganchador');
-  validarString(dupla?.inspector, 'dupla.inspector');
+  const numeroInfraccion = data.numeroInfraccion?.trim().toUpperCase() || undefined;
+  if (numeroInfraccion && numeroInfraccion.length > 50) {
+    throw new HttpsError('invalid-argument', 'numeroInfraccion: máximo 50 caracteres.');
+  }
+  const gruaInput = normalizeGruaId(validarString(data.grua, 'grua', 20));
+  const gruaValidada = await validarGruaExiste(gruaInput);
+  validarString(dupla?.chofer, 'dupla.chofer', 100);
+  validarString(enganchadorDeDuplaServicio(dupla), 'dupla.enganchador', 100);
+  const corralonInput = validarStringOpcional(data.corralon, 'corralon', 200);
+  let corralonValidado: CorralonValidado | null = null;
+  if (corralonInput) {
+    corralonValidado = await validarCorralonExiste(corralonInput);
+  }
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
   if (!servicioSnap.exists) throw new HttpsError('not-found', 'Servicio no encontrado.');
 
   const actual = servicioSnap.data()!;
-  const legajoChofer =
-    (actual.legajoChofer as string | undefined)?.trim() ||
-    (await legajoParaFotosDesdeServicio(actual));
-  const identificadorCompuesto = buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente);
-  if (identificadorCompuesto !== actual.identificadorCompuesto) {
-    const existenteRef = db().collection('servicios').doc(identificadorCompuesto);
-    const existente = await existenteRef.get();
-    if (existente.exists && existente.id !== servicioId) {
-      throw new HttpsError('already-exists', 'Ya existe otra acta con esa infracción, legajo y patente.');
-    }
-  }
 
   const updates: Record<string, unknown> = {
     patente,
-    numeroInfraccion,
-    identificadorCompuesto,
-    grua,
+    numeroInfraccion: numeroInfraccion ?? null,
+    grua: gruaInput,
+    gruaDocId: gruaValidada.docId,
+    tipoFlota: gruaValidada.tipoFlota,
     dupla,
   };
-  if (corralon !== undefined) {
-    updates.corralon = corralon?.trim() || null;
-  }
-  if (data.tipoFlota !== undefined) {
-    updates.tipoFlota = normalizeTipoFlota(data.tipoFlota);
-  }
-  if (data.encargadoDeposito !== undefined) {
-    updates.encargadoDeposito = data.encargadoDeposito?.trim() || null;
+  if (corralonInput !== undefined) {
+    updates.corralon = corralonValidado ? corralonValidado.corralonNombre : null;
+    updates.corralonId = corralonValidado ? corralonValidado.corralonId : null;
   }
 
   const cambios = diffEdicionServicio(actual, data);
@@ -802,6 +860,9 @@ async function parseUbicacionInput(
 ): Promise<{ geo?: GeoPoint; referencia?: string }> {
   const trimmed = raw?.trim();
   if (!trimmed) return {};
+  if (trimmed.length > 500) {
+    throw new HttpsError('invalid-argument', 'La ubicación no puede superar los 500 caracteres.');
+  }
 
   if (esUrlMaps(trimmed)) {
     const maps = await import('./maps.service');
@@ -839,24 +900,23 @@ export async function crearActaManual(
   driveFolderId: string
 ): Promise<{ servicioId: string }> {
   const patente = validarPatente(data.patente);
-  const numeroInfraccion = validarString(data.numeroInfraccion, 'numeroInfraccion');
-  const gruaId = normalizeGruaId(validarString(data.grua, 'grua'));
-  validarString(data.dupla?.chofer, 'dupla.chofer');
-  validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador');
-  validarString(data.dupla?.inspector, 'dupla.inspector');
+  const gruaId = normalizeGruaId(validarString(data.grua, 'grua', 20));
+  validarString(data.dupla?.chofer, 'dupla.chofer', 100);
+  validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador', 100);
 
   const fotosEnganche = Array.isArray(data.fotosEnganche) ? data.fotosEnganche : [];
   const fotosEngancheBase64 = Array.isArray(data.fotosEngancheBase64) ? data.fotosEngancheBase64 : [];
   const fotosDesenganche = Array.isArray(data.fotosDesenganche) ? data.fotosDesenganche : [];
   const fotosDesengancheBase64 = Array.isArray(data.fotosDesengancheBase64) ? data.fotosDesengancheBase64 : [];
 
-  validarLoteFotos(fotosEnganche, fotosEngancheBase64);
+  validarLoteFotos(fotosEnganche, fotosEngancheBase64, 3);
   const tieneDesenganche = fotosDesengancheBase64.length > 0;
   if (tieneDesenganche) {
-    validarLoteFotos(fotosDesenganche, fotosDesengancheBase64);
+    validarLoteFotos(fotosDesenganche, fotosDesengancheBase64, 3);
   }
 
-  const legajoChofer = validarString(data.legajoEnganchador, 'legajoEnganchador');
+  const legajoChofer = validarString(data.legajoEnganchador, 'legajoEnganchador', 50);
+  const numeroInfraccion = await generarNumeroActa();
   const identificadorCompuesto = buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente);
   const servicioRef = db().collection('servicios').doc(identificadorCompuesto);
   const existente = await servicioRef.get();
@@ -864,10 +924,15 @@ export async function crearActaManual(
     throw new HttpsError('already-exists', 'Ya existe un servicio con esa infracción, legajo y patente.');
   }
 
-  const corralon = data.corralon?.trim() || '';
-  const encargadoDeposito = data.encargadoDeposito?.trim() || '';
+  const gruaValidada = await validarGruaExiste(gruaId);
+  const tipoFlota = gruaValidada.tipoFlota;
 
-  const tipoFlota = await tipoFlotaDesdeGrua(gruaId);
+  const corralonInput = validarStringOpcional(data.corralon, 'corralon', 200);
+  let corralonValidado: CorralonValidado | null = null;
+  if (corralonInput) {
+    corralonValidado = await validarCorralonExiste(corralonInput);
+  }
+  const corralon = corralonValidado ? corralonValidado.corralonNombre : '';
 
   const [ubicEnganche, ubicLlegada] = await Promise.all([
     parseUbicacionInput(data.ubicacionEnganche),
@@ -905,12 +970,13 @@ export async function crearActaManual(
       ? ubicEnganche.geo
       : { lat: 0, lng: 0 };
 
-  const obsGeneral = data.observacionGeneral?.trim()
-    ? `${data.observacionGeneral.trim()} [Acta cargada manualmente]`
+  const obsValidada = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
+  const obsGeneral = obsValidada
+    ? `${obsValidada} [Acta cargada manualmente]`
     : 'Acta cargada manualmente por supervisor';
 
   const eventosRef = servicioRef.collection('eventos');
-  const ts = admin.firestore.FieldValue.serverTimestamp();
+  const ts = FieldValue.serverTimestamp();
 
   await db().runTransaction(async (tx) => {
     tx.set(servicioRef, {
@@ -919,9 +985,10 @@ export async function crearActaManual(
       identificadorCompuesto,
       estado: 'DESENGANCHADO' as EstadoServicio,
       grua: gruaId,
+      gruaDocId: gruaValidada.docId,
       tipoFlota,
       corralon: corralon || null,
-      encargadoDeposito: encargadoDeposito || null,
+      corralonId: corralonValidado?.corralonId ?? null,
       creadoPor: editor.uid,
       legajoChofer,
       dupla: data.dupla,
@@ -951,7 +1018,6 @@ export async function crearActaManual(
         tipo: 'LLEGADA_CORRALON',
         timestamp: ts,
         corralon,
-        encargadoDeposito: encargadoDeposito || null,
         ...camposUbicacionEvento(ubicLlegada),
       });
     }
@@ -990,22 +1056,38 @@ export async function obtenerDatosIniciales(): Promise<{
   gruas: unknown[];
   corralones: unknown[];
   duplas: unknown[];
+  operadores: { nombre: string; legajo: string; roles: string[] }[];
 }> {
-  const [gruasSnap, corralónesSnap, duplasSnap] = await Promise.all([
+  const [gruasSnap, corralónesSnap, duplasSnap, usuariosSnap] = await Promise.all([
     db().collection('gruas').where('activa', '==', true).get(),
     db().collection('corralones').where('activo', '==', true).get(),
     db().collection('duplas').get(),
+    db().collection('usuarios').where('activo', '!=', false).get(),
   ]);
+
+  const operadores = usuariosSnap.docs
+    .map((d) => {
+      const data = d.data();
+      const roles = normalizeRoles(data.roles as any[] | undefined, data.rol as string | undefined);
+      if (!esOperador(roles)) return null;
+      return {
+        nombre: (data.nombre as string) ?? '',
+        legajo: (data.legajo as string) ?? '',
+        roles: roles as string[],
+      };
+    })
+    .filter(Boolean) as { nombre: string; legajo: string; roles: string[] }[];
 
   return {
     gruas: gruasSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     corralones: corralónesSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     duplas: duplasSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    operadores,
   };
 }
 
 /** Desvincula servicioActivoId del operador (servicio huérfano o liberación manual desde inicio). */
-export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ liberado: boolean }> {
+export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ liberado: boolean; anulado?: boolean }> {
   const usuarioRef = db().collection('usuarios').doc(uid);
   const usuarioSnap = await usuarioRef.get();
   if (!usuarioSnap.exists) {
@@ -1017,7 +1099,37 @@ export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ li
     return { liberado: true };
   }
 
-  // Solo desvincula el puntero en el usuario; no modifica el servicio en sí.
+  const servicioRef = db().collection('servicios').doc(servicioActivoId);
+  const servicioSnap = await servicioRef.get();
+  if (servicioSnap.exists) {
+    const servicio = servicioSnap.data()!;
+    const estado = servicio.estado as EstadoServicio | undefined;
+    if (estado && estado !== 'DESENGANCHADO' && estado !== 'ANULADO') {
+      const usuarioData = usuarioSnap.data()!;
+      const editor: EditorContext = {
+        uid,
+        nombre: usuarioData.nombre ?? 'Operador',
+        roles: normalizeRoles(usuarioData.roles ?? usuarioData.rol),
+      };
+      const motivo = 'Liberado por el operador';
+      const versionCount = (servicio.versionCount as number | undefined) ?? 0;
+      const cambios = cambiosAnulacion(estado, motivo);
+
+      await db().runTransaction(async (tx) => {
+        tx.update(servicioRef, {
+          estado: 'ANULADO' as EstadoServicio,
+          motivoAnulacion: motivo,
+          anuladoPor: uid,
+          anuladoEn: FieldValue.serverTimestamp(),
+        });
+        tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
+        registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
+      });
+
+      return { liberado: true, anulado: true };
+    }
+  }
+
   await usuarioRef.update(LIMPIAR_SERVICIO_ACTIVO_USUARIO);
   return { liberado: true };
 }

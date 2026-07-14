@@ -7,10 +7,16 @@ export interface CustomSelectOption {
   label: string;
 }
 
+export interface CustomSelectGroup {
+  label: string;
+  options: CustomSelectOption[];
+}
+
 interface CustomSelectProps {
   value: string;
   onChange: (value: string) => void;
   options: CustomSelectOption[];
+  groups?: CustomSelectGroup[];
   ariaLabel?: string;
   icon?: LucideIcon;
   className?: string;
@@ -23,6 +29,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   value,
   onChange,
   options,
+  groups,
   ariaLabel,
   icon: Icon,
   className = "w-full",
@@ -36,8 +43,9 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
 
-  const selectedOption = options.find((o) => o.value === value);
-  const label = selectedOption?.label ?? placeholder ?? options[0]?.label ?? "";
+  const allOptions = groups ? groups.flatMap((g) => g.options) : options;
+  const selectedOption = allOptions.find((o) => o.value === value);
+  const label = selectedOption?.label ?? placeholder ?? allOptions[0]?.label ?? "";
   const hasValue = Boolean(selectedOption);
   const isSm = size === "sm";
   const isFilter = size === "filter";
@@ -98,6 +106,34 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
     };
   }, [open, size]);
 
+  const renderOption = (option: CustomSelectOption) => {
+    const selected = value === option.value;
+    return (
+      <li key={option.value} role="option" aria-selected={selected}>
+        <button
+          type="button"
+          onClick={() => {
+            onChange(option.value);
+            setOpen(false);
+          }}
+          className={`w-full text-left transition-colors ${
+            isSm
+              ? "px-3 py-2 text-xs"
+              : isFilter
+                ? "px-3 py-2 text-[13px] leading-tight"
+                : "px-4 py-2.5 text-sm"
+          } ${
+            selected
+              ? "bg-brand-cta/10 text-red-800 font-semibold"
+              : "text-brand-purply hover:bg-brand-bg"
+          }`}
+        >
+          {option.label}
+        </button>
+      </li>
+    );
+  };
+
   const menuList = (
     <ul
       ref={menuRef}
@@ -106,33 +142,17 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       style={menuStyle}
       className={menuClassName}
     >
-      {options.map((option) => {
-        const selected = value === option.value;
-        return (
-          <li key={option.value} role="option" aria-selected={selected}>
-            <button
-              type="button"
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={`w-full text-left transition-colors ${
-                isSm
-                  ? "px-3 py-2 text-xs"
-                  : isFilter
-                    ? "px-3 py-2 text-[13px] leading-tight"
-                    : "px-4 py-2.5 text-sm"
-              } ${
-                selected
-                  ? "bg-brand-cta/10 text-red-800 font-semibold"
-                  : "text-brand-purply hover:bg-brand-bg"
-              }`}
-            >
-              {option.label}
-            </button>
-          </li>
-        );
-      })}
+      {groups
+        ? groups.map((group, gi) => (
+            <li key={group.label} role="group" aria-label={group.label}>
+              {gi > 0 && <hr className="border-brand-seashell my-1" />}
+              <span className="block px-4 pt-2 pb-1 text-[9px] font-bold uppercase tracking-wider text-brand-pale select-none">
+                {group.label}
+              </span>
+              <ul role="group">{group.options.map(renderOption)}</ul>
+            </li>
+          ))
+        : options.map(renderOption)}
     </ul>
   );
 

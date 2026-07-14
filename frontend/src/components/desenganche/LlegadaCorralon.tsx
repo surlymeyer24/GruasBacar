@@ -4,7 +4,7 @@ import { corralonService } from "../../services/corralon.service";
 import { resolverIdCorralonSem } from "../../utils/corralonDisplay";
 import { servicioService } from "../../services/servicio.service";
 import { Corralon, GeoPoint } from "@gruasbacar/shared";
-import { Building2, AlertCircle, ArrowRight, User, MapPin } from "lucide-react";
+import { Building2, AlertCircle, ArrowRight, MapPin } from "lucide-react";
 import { MapaCoordenadasPreview } from "../shared/MapaCoordenadasPreview";
 import { FlowBackButton } from "../shared/FlowBackButton";
 import { CustomSelect } from "../shared/CustomSelect";
@@ -12,11 +12,10 @@ import { CustomSelect } from "../shared/CustomSelect";
 interface LlegadaCorralonProps {
   servicioId: string;
   geoEnganche?: GeoPoint | null;
-  onCompleted: (corralonId: string, encargadoDeposito: string, geo?: { lat: number; lng: number }) => void;
+  onCompleted: (corralonId: string, geo?: { lat: number; lng: number }) => void;
   onBack?: () => void;
   backLabel?: string;
   initialCorralonId?: string;
-  initialEncargado?: string;
   /** La llegada al corralón ya quedó registrada; confirmar solo continúa a fotos. */
   llegadaYaRegistrada?: boolean;
 }
@@ -28,13 +27,11 @@ export const LlegadaCorralon: React.FC<LlegadaCorralonProps> = ({
   onBack,
   backLabel = "Volver al traslado",
   initialCorralonId = "",
-  initialEncargado = "",
   llegadaYaRegistrada = false,
 }) => {
   const { coordinates, getPosition } = useGeolocation(true);
   const [corralones, setCorralones] = useState<Corralon[]>([]);
   const [selectedCorralonId, setSelectedCorralonId] = useState(initialCorralonId);
-  const [encargadoDeposito, setEncargadoDeposito] = useState(initialEncargado);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -42,10 +39,6 @@ export const LlegadaCorralon: React.FC<LlegadaCorralonProps> = ({
   useEffect(() => {
     if (initialCorralonId) setSelectedCorralonId(initialCorralonId);
   }, [initialCorralonId]);
-
-  useEffect(() => {
-    if (initialEncargado) setEncargadoDeposito(initialEncargado);
-  }, [initialEncargado]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -73,23 +66,10 @@ export const LlegadaCorralon: React.FC<LlegadaCorralonProps> = ({
       setApiError("Debe seleccionar un corralón de destino.");
       return;
     }
-    if (!encargadoDeposito.trim()) {
-      setApiError("Indicá el nombre del encargado del depósito.");
-      return;
-    }
 
     setIsSubmitting(true);
     setApiError(null);
     try {
-      if (llegadaYaRegistrada) {
-        onCompleted(
-          selectedCorralonId,
-          encargadoDeposito.trim(),
-          coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : undefined
-        );
-        return;
-      }
-
       let geo: { lat: number; lng: number } | undefined = coordinates
         ? { lat: coordinates.lat, lng: coordinates.lng }
         : undefined;
@@ -108,13 +88,13 @@ export const LlegadaCorralon: React.FC<LlegadaCorralonProps> = ({
         }
       }
 
-      await servicioService.registrarLlegada(
-        servicioId,
-        selectedCorralonId,
-        encargadoDeposito.trim(),
-        geo
-      );
-      onCompleted(selectedCorralonId, encargadoDeposito.trim(), geo);
+      if (llegadaYaRegistrada) {
+        onCompleted(selectedCorralonId, geo);
+        return;
+      }
+
+      await servicioService.registrarLlegada(servicioId, selectedCorralonId, geo);
+      onCompleted(selectedCorralonId, geo);
     } catch (err: any) {
       console.error(err);
       setApiError(err.message || "Fallo al registrar la llegada al corralón en el servidor.");
@@ -205,23 +185,6 @@ export const LlegadaCorralon: React.FC<LlegadaCorralonProps> = ({
             </div>
           </div>
         )}
-
-        <div className="space-y-2">
-          <label className="block text-[10px] font-bold text-brand-pale uppercase tracking-wider">
-            Encargado del depósito
-          </label>
-          <div className="relative">
-            <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-pale pointer-events-none" />
-            <input
-              type="text"
-              value={encargadoDeposito}
-              onChange={(e) => setEncargadoDeposito(e.target.value)}
-              placeholder="Nombre de quien recibe en el corralón"
-              className="w-full pl-10 pr-4 py-2.5 bg-brand-bg border border-brand-seashell rounded-2xl text-sm text-brand-purply placeholder:text-brand-pale/70 focus:border-brand-cta/40 focus:ring-2 focus:ring-brand-cta/25 outline-none transition-all"
-              required
-            />
-          </div>
-        </div>
 
         <div className="pt-4 border-t border-brand-seashell flex flex-col-reverse sm:flex-row gap-3 sm:justify-between">
           {onBack && (

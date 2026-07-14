@@ -38,12 +38,17 @@ interface FotoLoteUploadProps {
   comentarioPlaceholder?: string;
   confirmLabel?: string;
   prefetchUpload?: PrefetchUploadConfig;
+  /** Clave estable para guardar borrador en IndexedDB antes de que exista servicioId. */
+  draftCacheKey?: string;
   /** Si es false, el borrador local se mantiene hasta que el flujo cierre en servidor (desenganche). */
   limpiarCacheAlConfirmar?: boolean;
   permitirGaleria?: boolean;
+  /** Cantidad máxima de fotos adicionales opcionales, además de las guiadas. */
+  maxExtras?: number;
   onBack?: () => void;
   backLabel?: string;
   onConfirm: (result: FotosLoteResult) => Promise<void>;
+  onFotosListas?: (listas: boolean) => void;
 }
 
 export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
@@ -53,13 +58,18 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   comentarioPlaceholder = "Ej: rayón en guardabarros, llanta baja...",
   confirmLabel,
   prefetchUpload,
+  draftCacheKey,
   limpiarCacheAlConfirmar = true,
   permitirGaleria = false,
+  maxExtras = 1,
   onBack,
   backLabel = "Volver",
   onConfirm,
+  onFotosListas,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galeriaInputRef = useRef<HTMLInputElement>(null);
+  const galeriaMasivaInputRef = useRef<HTMLInputElement>(null);
   const pendingTargetRef = useRef<PendingTarget | null>(null);
   const prefetchGenRef = useRef(0);
   const prefetchPromiseRef = useRef<Promise<Foto[] | null> | null>(null);
@@ -68,14 +78,20 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   const cacheHydratedRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const cacheKey = prefetchUpload
+  const serviceCacheKey = prefetchUpload
     ? claveBorradorFotos(prefetchUpload.servicioId, prefetchUpload.carpeta)
     : null;
+  const cacheKey = serviceCacheKey ?? draftCacheKey ?? null;
 
   const [slots, setSlots] = useState<(SlotFotoGuia | null)[]>(
     Array.from({ length: FOTOS_REQUERIDAS }, () => null)
   );
-  const [fotoExtra, setFotoExtra] = useState<SlotFotoGuia | null>(null);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const MAX_EXTRAS = maxExtras;
+  const [fotosExtra, setFotosExtra] = useState<SlotFotoGuia[]>([]);
+  const fotosExtraRef = useRef(fotosExtra);
+  fotosExtraRef.current = fotosExtra;
   const [comentario, setComentario] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -121,13 +137,20 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         );
         if (cancelled) return;
 
-        const restoredExtra = borrador.fotoExtra ? await cachedToSlot(borrador.fotoExtra) : null;
+        const restoredExtras: SlotFotoGuia[] = [];
+        if (borrador.fotosExtra && Array.isArray(borrador.fotosExtra)) {
+          for (const fe of borrador.fotosExtra) {
+            if (fe) restoredExtras.push(await cachedToSlot(fe));
+          }
+        } else if (borrador.fotoExtra) {
+          restoredExtras.push(await cachedToSlot(borrador.fotoExtra));
+        }
         if (cancelled) return;
 
         setSlots(restoredSlots);
-        setFotoExtra(restoredExtra);
+        setFotosExtra(restoredExtras.slice(0, MAX_EXTRAS));
         setComentario(borrador.comentario);
-        if (restoredSlots.some(Boolean) || restoredExtra) {
+        if (restoredSlots.some(Boolean) || restoredExtras.length > 0) {
           setCacheRestored(true);
         }
       }
@@ -140,18 +163,20 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     };
   }, [cacheKey, cachedToSlot]);
 
+  const buildBorradorData = useCallback(() => ({
+    slots: slotsRef.current.map((s) => (s ? slotToCached(s) : null)),
+    fotosExtra: fotosExtraRef.current.map((s) => slotToCached(s)),
+    comentario,
+  }), [comentario, slotToCached]);
+
   const persistBorrador = useCallback(() => {
     if (!cacheKey || !cacheHydratedRef.current) return;
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      void guardarBorradorFotos(cacheKey, {
-        slots: slots.map((s) => (s ? slotToCached(s) : null)),
-        fotoExtra: fotoExtra ? slotToCached(fotoExtra) : null,
-        comentario,
-      });
+      void guardarBorradorFotos(cacheKey, buildBorradorData());
     }, 400);
-  }, [cacheKey, slots, fotoExtra, comentario, slotToCached]);
+  }, [cacheKey, buildBorradorData]);
 
   useEffect(() => {
     persistBorrador();
@@ -160,8 +185,46 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     };
   }, [persistBorrador]);
 
+  // Guardado inmediato si la página pierde visibilidad (cierre, cambio de tab, etc.)
+  useEffect(() => {
+    if (!cacheKey) return;
+    const flush = () => {
+      if (document.visibilityState === "hidden" && cacheHydratedRef.current) {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        void guardarBorradorFotos(cacheKey, buildBorradorData());
+      }
+    };
+    document.addEventListener("visibilitychange", flush);
+    return () => document.removeEventListener("visibilitychange", flush);
+  }, [cacheKey, buildBorradorData]);
+
+  // Migrate draft cache → service cache when servicioId arrives
+  useEffect(() => {
+    if (!serviceCacheKey || !draftCacheKey || serviceCacheKey === draftCacheKey) return;
+    if (!cacheHydratedRef.current) return;
+    const data = {
+      slots: slots.map((s) => (s ? slotToCached(s) : null)),
+      fotosExtra: fotosExtra.map((s) => slotToCached(s)),
+      comentario,
+    };
+    void guardarBorradorFotos(serviceCacheKey, data).then(() =>
+      limpiarBorradorFotos(draftCacheKey)
+    );
+  }, [serviceCacheKey]);
+
   const fotosCargadas = slots.filter(Boolean).length;
   const todasListas = fotosCargadas === FOTOS_REQUERIDAS;
+
+  const onFotosListasRef = useRef(onFotosListas);
+  onFotosListasRef.current = onFotosListas;
+  const prevTodasListasRef = useRef(false);
+
+  useEffect(() => {
+    if (todasListas !== prevTodasListasRef.current) {
+      prevTodasListasRef.current = todasListas;
+      onFotosListasRef.current?.(todasListas);
+    }
+  }, [todasListas]);
 
   const slotsSignature = slots.map((s) => s?.base64 ?? "").join("|");
   const prefetchServicioId = prefetchUpload?.servicioId;
@@ -244,14 +307,95 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     });
   };
 
-  const quitarFotoExtra = () => {
-    if (fotoExtra?.previewUrl) URL.revokeObjectURL(fotoExtra.previewUrl);
-    setFotoExtra(null);
+  const quitarFotoExtra = (index: number) => {
+    setFotosExtra((prev) => {
+      const next = [...prev];
+      if (next[index]?.previewUrl) URL.revokeObjectURL(next[index].previewUrl);
+      next.splice(index, 1);
+      return next;
+    });
   };
 
   const abrirSelectorExtra = () => {
     pendingTargetRef.current = "extra";
     fileInputRef.current?.click();
+  };
+
+  const abrirGaleriaExtra = () => {
+    pendingTargetRef.current = "extra";
+    galeriaInputRef.current?.click();
+  };
+
+  const abrirGaleriaMasiva = () => {
+    galeriaMasivaInputRef.current?.click();
+  };
+
+  const [procesandoGaleria, setProcesandoGaleria] = useState(false);
+
+  const handleGaleriaMasiva = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setErrorText(null);
+    setProcesandoGaleria(true);
+
+    try {
+      const buffers = await Promise.all(
+        Array.from(files).map(async (f) => ({
+          buf: await f.arrayBuffer(),
+          type: f.type || "image/jpeg",
+        }))
+      );
+
+      e.target.value = "";
+
+      const blobs = buffers.map((b) => new Blob([b.buf], { type: b.type }));
+
+      const currentSlots = slotsRef.current;
+      const emptySlotIndices = currentSlots
+        .map((s, i) => (s ? -1 : i))
+        .filter((i) => i >= 0);
+      const extraSpace = MAX_EXTRAS - fotosExtraRef.current.length;
+      const total = emptySlotIndices.length + extraSpace;
+
+      const forSlots = blobs.slice(0, emptySlotIndices.length);
+      const forExtras = blobs.slice(emptySlotIndices.length, total);
+
+      if (blobs.length > total) {
+        setErrorText(
+          `Se seleccionaron ${blobs.length} fotos pero solo hay lugar para ${total}. Se usaron las primeras.`
+        );
+      }
+
+      for (let i = 0; i < forSlots.length; i++) {
+        const compressed = await compressImage(forSlots[i]);
+        const previewUrl = URL.createObjectURL(compressed);
+        const base64 = await fotoService.blobToBase64(compressed);
+        const targetIndex = emptySlotIndices[i];
+        const etiqueta = PASOS_FOTO[targetIndex].etiqueta;
+        setSlots((prev) => {
+          const next = [...prev];
+          if (next[targetIndex]?.previewUrl) URL.revokeObjectURL(next[targetIndex]!.previewUrl);
+          next[targetIndex] = { blob: compressed, previewUrl, etiqueta, base64 };
+          return next;
+        });
+      }
+
+      for (let i = 0; i < forExtras.length; i++) {
+        const compressed = await compressImage(forExtras[i]);
+        const previewUrl = URL.createObjectURL(compressed);
+        const base64 = await fotoService.blobToBase64(compressed);
+        setFotosExtra((prev) => [
+          ...prev,
+          { blob: compressed, previewUrl, etiqueta: "OBSERVACION" as const, base64 },
+        ]);
+      }
+    } catch (err) {
+      console.error("Error procesando fotos de galería:", err);
+      setErrorText("No se pudieron procesar algunas imágenes. Intentá de nuevo.");
+    } finally {
+      setProcesandoGaleria(false);
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -267,8 +411,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         Promise.resolve(URL.createObjectURL(compressed)),
         fotoService.blobToBase64(compressed),
       ]);
-      if (fotoExtra?.previewUrl) URL.revokeObjectURL(fotoExtra.previewUrl);
-      setFotoExtra({ blob: compressed, previewUrl, etiqueta: "OBSERVACION", base64 });
+      setFotosExtra((prev) => [...prev, { blob: compressed, previewUrl, etiqueta: "OBSERVACION", base64 }]);
     } catch (err) {
       console.error(err);
       setErrorText("No se pudo procesar la imagen.");
@@ -282,7 +425,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
 
     try {
       const fotosList: SlotFotoGuia[] = slots.map((s) => s!);
-      if (fotoExtra) fotosList.push(fotoExtra);
+      fotosList.push(...fotosExtra);
 
       const fotosMeta: Omit<Foto, "url" | "driveFileId">[] = fotosList.map((s) => ({
         etiqueta: s.etiqueta,
@@ -307,19 +450,18 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         }
       }
 
-      if (fotoExtra && prefetchServicioId && prefetchCarpeta) {
-        const extraYaSubida = fotosSubidasConfirm?.some((f) => f.etiqueta === fotoExtra.etiqueta);
-        if (!extraYaSubida) {
-          const [extraSubida] = await fotoService.subirFotosEventoLote(
-            prefetchServicioId,
-            prefetchCarpeta,
-            [{ etiqueta: fotoExtra.etiqueta }],
-            [fotoExtra.base64]
-          );
-          fotosSubidasConfirm = fotosSubidasConfirm
-            ? [...fotosSubidasConfirm, extraSubida]
-            : [extraSubida];
-        }
+      if (fotosExtra.length > 0 && prefetchServicioId && prefetchCarpeta) {
+        const extrasMeta = fotosExtra.map((fe) => ({ etiqueta: fe.etiqueta }));
+        const extrasBase64 = fotosExtra.map((fe) => fe.base64);
+        const extrasSubidas = await fotoService.subirFotosEventoLote(
+          prefetchServicioId,
+          prefetchCarpeta,
+          extrasMeta,
+          extrasBase64
+        );
+        fotosSubidasConfirm = fotosSubidasConfirm
+          ? [...fotosSubidasConfirm, ...extrasSubidas]
+          : extrasSubidas;
       }
 
       const previewFotos: Foto[] = fotosList.map((s) => ({
@@ -335,7 +477,10 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         fotosSubidas: fotosSubidasConfirm,
       });
 
-      if (cacheKey && limpiarCacheAlConfirmar) await limpiarBorradorFotos(cacheKey);
+      if (limpiarCacheAlConfirmar) {
+        if (cacheKey) await limpiarBorradorFotos(cacheKey);
+        if (draftCacheKey && draftCacheKey !== cacheKey) await limpiarBorradorFotos(draftCacheKey);
+      }
       setCacheRestored(false);
     } catch (err: unknown) {
       console.error(err);
@@ -357,10 +502,29 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        {...(!permitirGaleria ? { capture: "environment" as const } : {})}
+        capture="environment"
         className="hidden"
         onChange={handleFileChange}
       />
+      {permitirGaleria && (
+        <>
+          <input
+            ref={galeriaInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <input
+            ref={galeriaMasivaInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={handleGaleriaMasiva}
+          />
+        </>
+      )}
 
       <FotoGuiaModal
         isOpen={modalOpen}
@@ -446,19 +610,41 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => abrirGuia(todasListas ? 0 : fotosCargadas > 0 ? slots.findIndex((s) => !s) : 0)}
-        disabled={isUploading}
-        className="w-full py-4 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-60 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-      >
-        <Camera className="w-5 h-5" />
-        {fotosCargadas === 0
-          ? "Sacar fotos del vehículo"
-          : todasListas
-            ? "Revisar o cambiar fotos"
-            : "Continuar sacando fotos"}
-      </button>
+      <div className="flex gap-2 w-full">
+        <button
+          type="button"
+          onClick={() => abrirGuia(todasListas ? 0 : fotosCargadas > 0 ? slots.findIndex((s) => !s) : 0)}
+          disabled={isUploading}
+          className={`${permitirGaleria ? "flex-1" : "w-full"} py-4 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-60 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm`}
+        >
+          <Camera className="w-5 h-5" />
+          {fotosCargadas === 0
+            ? "Sacar fotos"
+            : todasListas
+              ? "Revisar fotos"
+              : "Continuar"}
+        </button>
+        {permitirGaleria && (
+          <button
+            type="button"
+            onClick={abrirGaleriaMasiva}
+            disabled={isUploading || procesandoGaleria}
+            className="flex-1 py-4 border-2 border-brand-orange text-brand-orange hover:bg-brand-orange/5 disabled:opacity-60 font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+          >
+            {procesandoGaleria ? (
+              <>
+                <div className="w-5 h-5 rounded-full border-2 border-brand-orange/30 border-t-brand-orange animate-spin" />
+                Procesando...
+              </>
+            ) : (
+              <>
+                <ImagePlus className="w-5 h-5" />
+                Subir desde galería
+              </>
+            )}
+          </button>
+        )}
+      </div>
 
       {fotosCargadas > 0 && (
         <div className="grid grid-cols-2 gap-3 w-full min-w-0">
@@ -496,33 +682,51 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
       )}
 
       {todasListas && (
-        <div className="w-full min-w-0">
-          {fotoExtra ? (
-            <div className="relative aspect-[16/7] max-h-40 rounded-xl border border-gray-200 bg-brand-bg overflow-hidden">
-              <img src={fotoExtra.previewUrl} alt="Foto adicional" className="w-full h-full object-cover" />
+        <div className="w-full min-w-0 space-y-3">
+          {fotosExtra.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {fotosExtra.map((fe, idx) => (
+                <div key={idx} className="relative aspect-[4/3] rounded-xl border border-gray-200 bg-brand-bg overflow-hidden">
+                  <img src={fe.previewUrl} alt={`Foto adicional ${idx + 1}`} className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => quitarFotoExtra(idx)}
+                    disabled={isUploading}
+                    className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white cursor-pointer"
+                    aria-label={`Quitar foto adicional ${idx + 1}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="absolute bottom-2 left-2 text-[9px] font-bold uppercase tracking-wide bg-black/50 text-white px-2 py-0.5 rounded">
+                    Extra {idx + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {fotosExtra.length < MAX_EXTRAS && (
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={quitarFotoExtra}
+                onClick={abrirSelectorExtra}
                 disabled={isUploading}
-                className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white cursor-pointer"
-                aria-label="Quitar foto adicional"
+                className="flex-1 py-3 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors"
               >
-                <X className="w-3.5 h-3.5" />
+                <Camera className="w-4 h-4" />
+                Sacar foto extra
               </button>
-              <span className="absolute bottom-2 left-2 text-[9px] font-bold uppercase tracking-wide bg-black/50 text-white px-2 py-0.5 rounded">
-                Foto adicional
-              </span>
+              {permitirGaleria && (
+                <button
+                  type="button"
+                  onClick={abrirGaleriaExtra}
+                  disabled={isUploading}
+                  className="flex-1 py-3 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  Subir desde galería
+                </button>
+              )}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={abrirSelectorExtra}
-              disabled={isUploading}
-              className="w-full py-3 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Agregar otra foto (detalle u observación)
-            </button>
           )}
         </div>
       )}

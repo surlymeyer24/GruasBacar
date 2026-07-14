@@ -1,0 +1,15 @@
+---
+description: Contexto del flujo operador (enganchador/chofer) en gruasBacar
+globs: frontend/src/pages/{HomePage,EnganchePage,TrasladoPage,DesenganchePage,MisActasPage}.tsx,frontend/src/components/{enganche,traslado,desenganche,operador}/**,frontend/src/context/ServicioActivoProvider.tsx,frontend/src/services/{servicio,foto,fotoStorage,fotoCache,engancheDraft}*.ts
+alwaysApply: false
+---
+
+# Flujo operador
+
+- ENGANCHADO → EN_TRASLADO → DESENGANCHADO; CHOFER y ENGANCHADOR son equivalentes (`esOperador`)
+- Rutas: `/`, `/enganche`, `/traslado`, `/desenganche`, `/mis-actas`
+- 1 servicio activo por operador (`servicioActivoId`); transiciones solo vía Cloud Functions
+- Fotos: mínimo 4 + hasta 3 extras; borrador IndexedDB; pipeline Storage → Drive
+- No offline-first: mutaciones requieren red; timestamps del servidor
+- Al cambiar transiciones: revisar `functions/src/services/servicio.service.ts` y `ServicioActivoProvider`
+- Subagente especializado: `.cursor/agents/operador.md`

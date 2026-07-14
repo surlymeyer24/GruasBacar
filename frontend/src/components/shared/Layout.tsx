@@ -9,7 +9,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { userData } = useAuth();
-  const isAdmin = userData?.roles?.includes("ADMIN");
+  const isAdmin = userData?.roles?.includes("SUPERADMIN") || userData?.roles?.includes("ADMIN");
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg text-brand-purply transition-colors duration-200">

@@ -5,6 +5,7 @@ import { servicioService } from "../../services/servicio.service";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { EstadoServicio } from "@gruasbacar/shared";
 import { FotoLoteUpload, FotosLoteResult } from "../shared/FotoLoteUpload";
+import { claveBorradorDraft } from "../../services/fotoCache.service";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { FlowBackButton } from "../shared/FlowBackButton";
 import { CheckCircle2, Truck } from "lucide-react";
@@ -212,9 +213,12 @@ export const FotoGuiada: React.FC<FotoGuiadaProps> = ({
       descripcion="Tocá el botón principal: te guiamos paso a paso (delantera, copiloto, trasera, piloto)."
       comentarioId="comentario-enganche"
       prefetchUpload={prefetchUpload}
+      draftCacheKey={claveBorradorDraft(servicioId, "enganche")}
       onBack={onBack}
       backLabel={backLabel}
       onConfirm={handleConfirmFotos}
+      permitirGaleria
+      maxExtras={3}
     />
   );
 };

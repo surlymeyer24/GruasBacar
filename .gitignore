@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+.backups/
 
 # Environment (secrets)
 .env
@@ -35,3 +36,10 @@ functions/package-lock.json
 
 # Shared build
 shared/dist/
+
+# Misc
+debug.log
+firebase-export-*/
+*.jpg
+*.png
+*.jpeg

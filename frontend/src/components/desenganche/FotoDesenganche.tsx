@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { FotoLoteUpload, FotosLoteResult } from "../shared/FotoLoteUpload";
+import { claveBorradorDraft } from "../../services/fotoCache.service";
 
 interface FotoDesengancheProps {
   servicioId: string;
@@ -26,7 +27,10 @@ export const FotoDesenganche: React.FC<FotoDesengancheProps> = ({
       comentarioId="comentario-desenganche"
       comentarioPlaceholder="Ej: entrega con llaves, daño preexistente..."
       prefetchUpload={prefetchUpload}
+      draftCacheKey={claveBorradorDraft(servicioId, "desenganche")}
       limpiarCacheAlConfirmar={false}
+      permitirGaleria
+      maxExtras={3}
       onBack={onBack}
       backLabel={backLabel}
       onConfirm={async (result) => {

@@ -24,13 +24,16 @@ export interface ProgresoSubidaFotos {
 export function buildStorageFotoPath(
   servicioId: string,
   carpeta: CarpetaFoto,
-  etiqueta: EtiquetaFoto
+  etiqueta: EtiquetaFoto,
+  index?: number
 ): string {
-  return `servicios/${servicioId}/${carpeta}/${etiqueta}.jpg`;
+  const suffix = index != null && index > 0 ? `_${index + 1}` : "";
+  return `servicios/${servicioId}/${carpeta}/${etiqueta}${suffix}.jpg`;
 }
 
-export function stagingDocId(carpeta: CarpetaFoto, etiqueta: EtiquetaFoto): string {
-  return `${carpeta}_${etiqueta}`;
+export function stagingDocId(carpeta: CarpetaFoto, etiqueta: EtiquetaFoto, index?: number): string {
+  const suffix = index != null && index > 0 ? `_${index + 1}` : "";
+  return `${carpeta}_${etiqueta}${suffix}`;
 }
 
 interface StagingDoc {
@@ -81,15 +84,20 @@ async function withUploadLock<T>(
   }
 }
 
+export interface FotoIndex {
+  etiqueta: EtiquetaFoto;
+  index: number;
+}
+
 export async function limpiarStagingLocal(
   servicioId: string,
   carpeta: CarpetaFoto,
-  etiquetas: EtiquetaFoto[]
+  fotos: FotoIndex[]
 ): Promise<void> {
   await Promise.all(
-    etiquetas.map((etiqueta) =>
+    fotos.map((f) =>
       deleteDoc(
-        doc(db, "servicios", servicioId, "fotosStaging", stagingDocId(carpeta, etiqueta))
+        doc(db, "servicios", servicioId, "fotosStaging", stagingDocId(carpeta, f.etiqueta, f.index))
       ).catch(() => undefined)
     )
   );
@@ -108,7 +116,7 @@ export async function uploadFotoBlob(
     throw new Error("Tenés que iniciar sesión para subir fotos.");
   }
 
-  const path = buildStorageFotoPath(servicioId, carpeta, etiqueta);
+  const path = buildStorageFotoPath(servicioId, carpeta, etiqueta, index);
   const storageRef = ref(storage, path);
 
   const task = uploadBytesResumable(storageRef, blob, {
@@ -131,20 +139,23 @@ export async function uploadFotoBlob(
 export function watchFotosStaging(
   servicioId: string,
   carpeta: CarpetaFoto,
-  etiquetas: EtiquetaFoto[],
+  fotos: FotoIndex[],
   onUpdate: (progreso: ProgresoSubidaFotos, fotos?: Foto[]) => void,
   expectedUploadGen?: string
 ): Unsubscribe {
-  const byEtiqueta = new Map<EtiquetaFoto, StagingDoc>();
+  const byKey = new Map<string, StagingDoc>();
+  const total = fotos.length;
 
   const matchesUploadGen = (data: StagingDoc): boolean =>
     !expectedUploadGen || data.uploadGen === expectedUploadGen;
 
+  const fotoKey = (f: FotoIndex) => stagingDocId(carpeta, f.etiqueta, f.index);
+
   const emit = () => {
     let errorMsg: string | null = null;
 
-    for (const etiqueta of etiquetas) {
-      const data = byEtiqueta.get(etiqueta);
+    for (const f of fotos) {
+      const data = byKey.get(fotoKey(f));
       if (!data) continue;
       if (data.status === "error") {
         errorMsg = data.error?.trim() || "No se pudo procesar una foto.";
@@ -155,27 +166,27 @@ export function watchFotosStaging(
     if (errorMsg) {
       onUpdate({
         fase: "error",
-        storageCompletadas: etiquetas.length,
-        storageTotal: etiquetas.length,
+        storageCompletadas: total,
+        storageTotal: total,
         driveCompletadas: 0,
-        driveTotal: etiquetas.length,
+        driveTotal: total,
         mensaje: errorMsg,
       });
       return;
     }
 
-    const driveReady = etiquetas.filter((e) => {
-      const s = byEtiqueta.get(e);
+    const driveReady = fotos.filter((f) => {
+      const s = byKey.get(fotoKey(f));
       return s?.status === "ready" && s.url && s.driveFileId;
     });
 
-    const driveProcessing = etiquetas.filter((e) => byEtiqueta.get(e)?.status === "processing");
+    const driveProcessing = fotos.filter((f) => byKey.get(fotoKey(f))?.status === "processing");
 
-    if (driveReady.length === etiquetas.length) {
-      const fotos: Foto[] = etiquetas.map((etiqueta) => {
-        const s = byEtiqueta.get(etiqueta)!;
+    if (driveReady.length === total) {
+      const result: Foto[] = fotos.map((f) => {
+        const s = byKey.get(fotoKey(f))!;
         return {
-          etiqueta,
+          etiqueta: f.etiqueta,
           url: s.url!,
           driveFileId: s.driveFileId!,
         };
@@ -183,12 +194,12 @@ export function watchFotosStaging(
       onUpdate(
         {
           fase: "ready",
-          storageCompletadas: etiquetas.length,
-          storageTotal: etiquetas.length,
-          driveCompletadas: etiquetas.length,
-          driveTotal: etiquetas.length,
+          storageCompletadas: total,
+          storageTotal: total,
+          driveCompletadas: total,
+          driveTotal: total,
         },
-        fotos
+        result
       );
       return;
     }
@@ -196,21 +207,21 @@ export function watchFotosStaging(
     if (driveProcessing.length > 0 || driveReady.length > 0) {
       onUpdate({
         fase: "drive",
-        storageCompletadas: etiquetas.length,
-        storageTotal: etiquetas.length,
+        storageCompletadas: total,
+        storageTotal: total,
         driveCompletadas: driveReady.length,
-        driveTotal: etiquetas.length,
-        mensaje: `Procesando en Drive (${driveReady.length}/${etiquetas.length})…`,
+        driveTotal: total,
+        mensaje: `Procesando en Drive (${driveReady.length}/${total})…`,
       });
       return;
     }
 
     onUpdate({
       fase: "drive",
-      storageCompletadas: etiquetas.length,
-      storageTotal: etiquetas.length,
+      storageCompletadas: total,
+      storageTotal: total,
       driveCompletadas: 0,
-      driveTotal: etiquetas.length,
+      driveTotal: total,
       mensaje: "Esperando procesamiento en Drive…",
     });
   };
@@ -220,27 +231,28 @@ export function watchFotosStaging(
     onUpdate({
       fase: "error",
       storageCompletadas: 0,
-      storageTotal: etiquetas.length,
+      storageTotal: total,
       driveCompletadas: 0,
-      driveTotal: etiquetas.length,
+      driveTotal: total,
       mensaje: "No se pudo verificar el estado de las fotos.",
     });
   };
 
-  const unsubs = etiquetas.map((etiqueta) => {
+  const unsubs = fotos.map((f) => {
+    const key = fotoKey(f);
     const ref = doc(
       db,
       "servicios",
       servicioId,
       "fotosStaging",
-      stagingDocId(carpeta, etiqueta)
+      key
     );
 
     return onSnapshot(
       ref,
       (snap) => {
         if (!snap.exists()) {
-          byEtiqueta.delete(etiqueta);
+          byKey.delete(key);
           emit();
           return;
         }
@@ -248,13 +260,13 @@ export function watchFotosStaging(
         const data = snap.data() as StagingDoc;
         if (
           data.carpeta !== carpeta ||
-          data.etiqueta !== etiqueta ||
+          data.etiqueta !== f.etiqueta ||
           !matchesUploadGen(data) ||
           (data.status !== "ready" && data.status !== "processing" && data.status !== "error")
         ) {
-          byEtiqueta.delete(etiqueta);
+          byKey.delete(key);
         } else {
-          byEtiqueta.set(etiqueta, data);
+          byKey.set(key, data);
         }
         emit();
       },
@@ -270,7 +282,7 @@ export function watchFotosStaging(
 export function waitForFotosEnDrive(
   servicioId: string,
   carpeta: CarpetaFoto,
-  etiquetas: EtiquetaFoto[],
+  fotos: FotoIndex[],
   timeoutMs = 180_000
 ): Promise<Foto[]> {
   return new Promise((resolve, reject) => {
@@ -282,7 +294,7 @@ export function waitForFotosEnDrive(
       reject(new Error("Tiempo de espera agotado al procesar las fotos en Drive."));
     }, timeoutMs);
 
-    const unsub = watchFotosStaging(servicioId, carpeta, etiquetas, (progreso, fotos) => {
+    const unsub = watchFotosStaging(servicioId, carpeta, fotos, (progreso, fotos) => {
       if (settled) return;
       if (progreso.fase === "error") {
         settled = true;
@@ -312,8 +324,8 @@ export async function subirFotosViaStorage(
   if (blobs.length === 0) return [];
 
   return withUploadLock(servicioId, carpeta, async () => {
-    const etiquetas = fotosMeta.map((f) => f.etiqueta);
-    await limpiarStagingLocal(servicioId, carpeta, etiquetas);
+    const fotosIdx: FotoIndex[] = fotosMeta.map((f, i) => ({ etiqueta: f.etiqueta, index: i }));
+    await limpiarStagingLocal(servicioId, carpeta, fotosIdx);
 
     return new Promise<Foto[]>((resolve, reject) => {
       let settled = false;
@@ -335,7 +347,7 @@ export async function subirFotosViaStorage(
       const unsub = watchFotosStaging(
         servicioId,
         carpeta,
-        etiquetas,
+        fotosIdx,
         (progreso, fotos) => {
           onProgress?.(progreso);
           if (progreso.fase === "error") {

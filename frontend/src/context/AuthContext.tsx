@@ -5,11 +5,11 @@ import {
   signOut, 
   onAuthStateChanged,
 } from "firebase/auth";
-import { 
-  doc, 
-  getDoc, 
-  setDoc,
+import {
+  doc,
+  getDoc,
 } from "firebase/firestore";
+import type { User } from "firebase/auth";
 import { auth, db, isMock, functions } from "../firebase";
 import { Usuario, RolUsuario, normalizeRoles, AsignacionDiaria, GuardarAsignacionDiariaPayload, Servicio, ServicioActivoResumen, servicioActivoVigente } from "@gruasbacar/shared";
 import { registrarCuenta as registrarCuentaFn, RegistrarCuentaPayload } from "../services/auth.service";
@@ -19,9 +19,16 @@ import { fechaHoyArgentina } from "../utils/formatters";
 import { invalidateAdminCatalog } from "../services/adminCatalog.cache";
 import { invalidateAdminServicios } from "../services/adminServicios.cache";
 import { clearEngancheDraft } from "../services/engancheDraft.cache";
+import { registrarFcmToken, eliminarFcmToken } from "../services/fcm.service";
 
 // Initial mock databases stored in localStorage for simulated engine
 const MOCK_USERS_KEY = "gruas_bacar_mock_usuarios";
+const MOCK_LOGGED_UID_KEY = "gruas_bacar_logged_uid";
+
+const clearMockSession = () => {
+  localStorage.removeItem(MOCK_LOGGED_UID_KEY);
+  localStorage.removeItem(MOCK_USERS_KEY);
+};
 const defaultMockUsers: Record<string, Usuario & { email: string; pass: string }> = {
   "admin-uid": {
     uid: "admin-uid",
@@ -58,6 +65,7 @@ const defaultMockUsers: Record<string, Usuario & { email: string; pass: string }
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<any>(null);
   const [userData, setUserData] = useState<Usuario | null>(null);
+  const [pendienteActivacion, setPendienteActivacion] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
@@ -76,9 +84,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
   };
 
-  const mapUserProfile = (profile: Partial<Usuario> & { uid: string }): Usuario => ({
+  const mapUserProfile = (
+    profile: Partial<Usuario> & { uid: string },
+    authUser?: Pick<User, "displayName"> | null
+  ): Usuario => ({
     uid: profile.uid,
-    nombre: profile.nombre || "Usuario Sin Nombre",
+    nombre: profile.nombre?.trim() || authUser?.displayName?.trim() || "Usuario Sin Nombre",
     roles: normalizeRoles(profile.roles, profile.rol),
     servicioActivoId: profile.servicioActivoId ?? null,
     servicioActivoResumen: profile.servicioActivoResumen ?? null,
@@ -121,20 +132,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (!isMock && auth && db) {
+      clearMockSession();
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         setSessionLoading(false);
         if (firebaseUser) {
           setUser(firebaseUser);
-          await fetchRealUserData(firebaseUser.uid);
+          await fetchRealUserData(firebaseUser.uid, firebaseUser);
         } else {
           setUser(null);
           setUserData(null);
+          setPendienteActivacion(false);
           setProfileLoading(false);
         }
       });
       return unsubscribe;
     } else {
-      const loggedUid = localStorage.getItem("gruas_bacar_logged_uid");
+      if (import.meta.env.DEV) {
+        console.info("[auth] Modo simulación activo (VITE_IS_MOCK=true). Roles desde localStorage.");
+      }
+      const loggedUid = localStorage.getItem(MOCK_LOGGED_UID_KEY);
       if (loggedUid) {
         const users = getMockUsers();
         if (users[loggedUid]) {
@@ -157,9 +173,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const fetchRealUserData = async (uid: string) => {
+  const fetchRealUserData = async (uid: string, authUser?: User | null) => {
     setProfileLoading(true);
     try {
+      const firebaseUser = authUser ?? auth.currentUser;
       const userRef = doc(db, "usuarios", uid);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
@@ -171,23 +188,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           rol: data.rol,
           servicioActivoId: data.servicioActivoId,
           servicioActivoResumen: data.servicioActivoResumen,
-          email: data.email,
+          email: data.email ?? firebaseUser?.email ?? undefined,
           legajo: data.legajo,
           activo: data.activo,
           asignacionDiaria: data.asignacionDiaria,
-        });
+        }, firebaseUser);
+
         const synced = await syncServicioActivoFromDoc(profile);
+        if (import.meta.env.DEV) {
+          console.info("[auth] Perfil Firestore:", { uid, roles: synced.roles, email: synced.email });
+        }
+        setPendienteActivacion(false);
         setUserData(synced);
+
+        registrarFcmToken().catch((err) => {
+          console.warn("[FCM] Token registration failed:", err);
+        });
       } else {
-        const defaultProfile: Usuario = {
-          uid,
-          nombre: auth.currentUser?.email?.split('@')[0] || "Trabajador Bácar",
-          roles: ["ENGANCHADOR"],
-          servicioActivoId: null,
-          servicioActivoResumen: null,
-        };
-        await setDoc(userRef, defaultProfile);
-        setUserData(defaultProfile);
+        console.warn(
+          "[auth] No existe usuarios/" + uid + " en Firestore. " +
+            "El usuario debe ser dado de alta por un administrador."
+        );
+        setUserData(null);
+        setPendienteActivacion(true);
       }
     } catch (err) {
       console.error("Error fetching real user data from Firestore", err);
@@ -198,7 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUserData = async () => {
     if (!isMock && user) {
-      await fetchRealUserData(user.uid);
+      await fetchRealUserData(user.uid, user);
     } else if (isMock && user) {
       const users = getMockUsers();
       const profile = users[user.uid];
@@ -231,7 +254,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       duplaId: data.duplaId.trim(),
       duplaChofer: data.duplaChofer.trim(),
       duplaEnganchador: data.duplaEnganchador.trim(),
-      inspector: data.inspector.trim(),
     };
 
     if (!isMock) {
@@ -261,7 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (foundKey) {
           const profile = users[foundKey];
-          localStorage.setItem("gruas_bacar_logged_uid", profile.uid);
+          localStorage.setItem(MOCK_LOGGED_UID_KEY, profile.uid);
           setUser({ uid: profile.uid, email: profile.email });
           setUserData(mapUserProfile({
             uid: profile.uid,
@@ -274,30 +296,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             legajo: profile.legajo,
             asignacionDiaria: profile.asignacionDiaria,
           }));
+        } else if (auth && import.meta.env.VITE_FIREBASE_PROJECT_ID) {
+          await signInWithEmailAndPassword(auth, email, pass);
         } else {
-          const isCheckAdmin = email.includes("admin");
-          const customUid = `dynamo-${Date.now()}`;
-          const newProfile = {
-            uid: customUid,
-            nombre: email.split("@")[0].toUpperCase(),
-            roles: [(isCheckAdmin ? "ADMIN" : "ENGANCHADOR") as RolUsuario],
-            servicioActivoId: null,
-            servicioActivoResumen: null,
-            email: email,
-            pass: pass
-          };
-          const allMocks = { ...users, [customUid]: newProfile };
-          saveMockUsers(allMocks);
-
-          localStorage.setItem("gruas_bacar_logged_uid", customUid);
-          setUser({ uid: customUid, email });
-          setUserData({
-            uid: customUid,
-            nombre: newProfile.nombre,
-            roles: newProfile.roles,
-            servicioActivoId: null,
-            servicioActivoResumen: null,
-          });
+          throw new Error(
+            "Usuario no encontrado. En modo simulación usá las cuentas de prueba o desactivá VITE_IS_MOCK."
+          );
         }
       }
     } catch (err) {
@@ -336,13 +340,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setProfileLoading(true);
     try {
+      await eliminarFcmToken().catch(console.warn);
       invalidateAdminCatalog();
       invalidateAdminServicios();
       clearEngancheDraft();
       if (!isMock && auth) {
         await signOut(auth);
       } else {
-        localStorage.removeItem("gruas_bacar_logged_uid");
+        localStorage.removeItem(MOCK_LOGGED_UID_KEY);
         setUser(null);
         setUserData(null);
       }
@@ -373,7 +378,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (err) {
             console.warn("liberarServicioActivoSiHuerfano no disponible, estado local limpiado:", err);
           }
-          await fetchRealUserData(user.uid);
+          await fetchRealUserData(user.uid, user);
 
           const userSnap = await getDoc(doc(db, "usuarios", user.uid));
           const remainingId = userSnap.data()?.servicioActivoId as string | null | undefined;
@@ -398,7 +403,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             : null
         );
         if (options?.skipFetch) return;
-        await fetchRealUserData(user.uid);
+        await fetchRealUserData(user.uid, user);
       } else {
         const users = getMockUsers();
         if (users[user.uid]) {
@@ -435,6 +440,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         userData,
+        pendienteActivacion,
         sessionLoading,
         profileLoading,
         loading,

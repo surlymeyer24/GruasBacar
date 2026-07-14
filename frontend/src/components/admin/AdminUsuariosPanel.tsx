@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { AlertCircle, ListPlus, Plus, Power, UserCog, Users, Shield } from "lucide-react";
-import { RolUsuario, Usuario, normalizeRoles, legajoYaUsado, labelRolUsuario } from "@gruasbacar/shared";
+import { RolUsuario, Usuario, normalizeRoles, legajoYaUsado, labelRolUsuario, esSuperAdmin } from "@gruasbacar/shared";
 import AdminListFilters from "./AdminListFilters";
+import AdminSectionToolbar from "./AdminSectionToolbar";
 import { CustomMultiSelect } from "../shared/CustomMultiSelect";
 import {
   actualizarUsuario,
@@ -9,13 +10,20 @@ import {
   desactivarUsuario,
   listarUsuarios,
 } from "../../services/usuario.service";
+import { useAuth } from "../../context/AuthContext";
+import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 
-const ROLES: { value: RolUsuario; label: string }[] = [
+const BASE_ROLES: { value: RolUsuario; label: string }[] = [
   { value: "ADMIN", label: "Administrador" },
   { value: "SUPERVISOR", label: "Supervisor" },
+  { value: "VISOR", label: "Visor (solo lectura)" },
   { value: "ENGANCHADOR", label: "Enganchador" },
   { value: "CHOFER", label: "Chofer" },
 ];
+
+const SUPERADMIN_ROLE: { value: RolUsuario; label: string } = {
+  value: "SUPERADMIN", label: "Super Admin",
+};
 
 const USUARIO_ESTADO_OPTIONS = [
   { value: "ALL", label: "Todos los estados" },
@@ -23,23 +31,20 @@ const USUARIO_ESTADO_OPTIONS = [
   { value: "INACTIVE", label: "Inactivos" },
 ];
 
-const USUARIO_ROL_OPTIONS = [
+const BASE_ROL_FILTER_OPTIONS = [
   { value: "ALL", label: "Todos los roles" },
+  { value: "SUPERADMIN", label: "Super Admin" },
   { value: "ADMIN", label: "Administrador" },
   { value: "SUPERVISOR", label: "Supervisor" },
+  { value: "VISOR", label: "Visor" },
   { value: "ENGANCHADOR", label: "Enganchador" },
   { value: "CHOFER", label: "Chofer" },
 ];
 
-function rolLabel(rol: string): string {
-  return ROLES.find((r) => r.value === rol)?.label ?? labelRolUsuario(rol);
-}
+const ALL_ROLES = [SUPERADMIN_ROLE, ...BASE_ROLES];
 
-function mensajeError(err: unknown): string {
-  if (err && typeof err === "object" && "message" in err) {
-    return String((err as { message: string }).message);
-  }
-  return "Ocurrió un error inesperado.";
+function rolLabel(rol: string): string {
+  return ALL_ROLES.find((r) => r.value === rol)?.label ?? labelRolUsuario(rol);
 }
 
 interface AdminUsuariosPanelProps {
@@ -51,6 +56,11 @@ export const AdminUsuariosPanel: React.FC<AdminUsuariosPanelProps> = ({
   usuarios,
   onUsuariosChange,
 }) => {
+  const { userData } = useAuth();
+  const isSuperAdmin = esSuperAdmin(userData?.roles ?? []);
+  const ROLES = isSuperAdmin ? [SUPERADMIN_ROLE, ...BASE_ROLES] : BASE_ROLES;
+  const USUARIO_ROL_OPTIONS = isSuperAdmin ? BASE_ROL_FILTER_OPTIONS : BASE_ROL_FILTER_OPTIONS.filter(o => o.value !== "SUPERADMIN");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,7 +133,7 @@ export const AdminUsuariosPanel: React.FC<AdminUsuariosPanelProps> = ({
       onUsuariosChange(fresh.sort((a, b) => a.nombre.localeCompare(b.nombre, "es")));
     } catch (err) {
       console.error(err);
-      setError(mensajeError(err));
+      setError(getFirebaseErrorMessage(err, "No se pudo crear el usuario. Revisá los datos e intentá de nuevo."));
     } finally {
       setSaving(false);
     }
@@ -184,7 +194,7 @@ export const AdminUsuariosPanel: React.FC<AdminUsuariosPanelProps> = ({
       );
     } catch (err) {
       console.error(err);
-      setError(mensajeError(err));
+      setError(getFirebaseErrorMessage(err, "No se pudo guardar los cambios del usuario."));
     } finally {
       setSaving(false);
     }
@@ -202,7 +212,7 @@ export const AdminUsuariosPanel: React.FC<AdminUsuariosPanelProps> = ({
       );
     } catch (err) {
       console.error(err);
-      setError(mensajeError(err));
+      setError(getFirebaseErrorMessage(err, "No se pudo desactivar el usuario."));
     } finally {
       setSaving(false);
     }
@@ -217,7 +227,7 @@ export const AdminUsuariosPanel: React.FC<AdminUsuariosPanelProps> = ({
         </div>
       )}
 
-      <div className={`p-4 border-b border-brand-seashell/80 ${error ? "pt-3" : ""}`}>
+      <AdminSectionToolbar className={error ? "pt-3" : ""}>
         <AdminListFilters
           search={search}
           onSearchChange={setSearch}
@@ -234,7 +244,7 @@ export const AdminUsuariosPanel: React.FC<AdminUsuariosPanelProps> = ({
             icon: Shield,
           }}
         />
-      </div>
+      </AdminSectionToolbar>
 
       <div className="p-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2">

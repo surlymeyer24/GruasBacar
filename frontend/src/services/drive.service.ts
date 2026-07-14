@@ -1,5 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../firebase';
+import { getFirebaseErrorMessage } from '../utils/firebaseError';
 
 export async function obtenerUrlsPreviewFotos(
   driveFileIds: string[]
@@ -9,8 +10,12 @@ export async function obtenerUrlsPreviewFotos(
     functions,
     'obtenerUrlsPreviewFotos'
   );
-  const res = await fn({ driveFileIds });
-  return res.data;
+  try {
+    const res = await fn({ driveFileIds });
+    return res.data;
+  } catch (err) {
+    throw new Error(getFirebaseErrorMessage(err, 'No se pudieron cargar las fotos.'));
+  }
 }
 
 export async function obtenerFotosParaPdf(
@@ -21,6 +26,10 @@ export async function obtenerFotosParaPdf(
     functions,
     'obtenerFotosParaPdf'
   );
-  const res = await fn({ driveFileIds });
-  return res.data;
+  try {
+    const res = await fn({ driveFileIds });
+    return res.data;
+  } catch (err) {
+    throw new Error(getFirebaseErrorMessage(err, 'No se pudieron cargar las fotos para el PDF.'));
+  }
 }

@@ -237,3 +237,68 @@
   - **localStorage** — Límite de ~5 MB insuficiente para varias fotos en base64
   - **sessionStorage** — Se pierde al cerrar pestaña; IndexedDB persiste mejor
 - **Estado:** Vigente. Si IndexedDB no está disponible, falla en silencio (el operador debe volver a sacar las fotos).
+
+---
+
+## Jul 2026 · Rol SUPERADMIN
+
+- **Decisión:** Se agregó el rol `SUPERADMIN` por encima de `ADMIN`. Hereda todos los permisos de admin (`esAdmin()` devuelve true para ambos) y es el único que puede asignar el rol SUPERADMIN a otros usuarios (validado en `crearUsuario`/`actualizarUsuario`, que reciben `callerRoles`).
+- **Por qué:** Se necesita separar la administración operativa (ABM de flota y usuarios) de la administración del sistema (gestión de admins, configuración, auditoría, eliminación permanente). Un admin no debería poder escalar permisos creando otro admin con más poder.
+- **Implementación:** `esAdmin()` / `esSuperAdmin()` en `shared/src/types.ts`. El middleware (`verificarAdmin`, `verificarGestionActas`, `verificarOperador`) y `RoleGuard` usan `esAdmin(roles)` en vez de `roles.includes('ADMIN')`. `firestore.rules` incluye SUPERADMIN en `isAdmin()`.
+- **Descartado:**
+  - **Flag booleano `esSuperUsuario` en el documento** — Rompe el modelo de roles existente y no pasa por los helpers centralizados.
+- **Estado:** Vigente. Nunca chequear `roles.includes('ADMIN')` a mano — usar `esAdmin()`.
+
+---
+
+## Jul 2026 · Auto-generación del número de acta (contador atómico)
+
+- **Decisión:** El número de infracción/acta ya no lo ingresa el operador. Se genera en el backend con un contador atómico en Firestore (`contadores/actas`, transacción, 6 dígitos con ceros a la izquierda). Aplica a `iniciarEnganche` y `crearActaManual`.
+- **Por qué:** El número tipeado a mano era fuente de errores de carga y duplicados. El sistema garantiza unicidad y correlatividad sin depender del papel del inspector.
+- **Consecuencias:**
+  - `numeroInfraccion` pasó a ser opcional en el tipo `Servicio` y en los payloads.
+  - El identificador compuesto cambió a `{infraccion}-{legajo}-{patente}` (con fallback `{legajo}-{patente}` si no hay infracción) y se usa como ID del documento. `sanitizeIdentificadorPart()` remueve `/` (reservado en rutas Firestore).
+- **Descartado:**
+  - **Input manual con validación de duplicados** — No elimina el error de tipeo; el contador lo resuelve de raíz.
+  - **UUID/ID de Firestore como número de acta** — No es legible ni correlativo para uso administrativo.
+- **Estado:** Vigente.
+
+---
+
+## Jul 2026 · Eliminación del inspector y del encargado de depósito del flujo
+
+- **Decisión:** Se eliminaron los campos `inspector` (asignación diaria, dupla del servicio, formularios) y `encargadoDeposito` (llegada al corralón, acta manual). Quedan solo como campos legacy opcionales (`@deprecated`) para leer actas viejas.
+- **Por qué:** En la operación real no se estaban cargando de forma confiable y no aportan al acta digital. Simplifica los formularios de campo (menos fricción para el operador).
+- **Descartado:**
+  - **Borrar los campos de los documentos históricos** — Rompería lecturas de actas ya guardadas; se dejan como opcionales deprecated.
+- **Estado:** Vigente. No volver a pedir estos datos en UI ni validarlos en backend.
+
+---
+
+## Jul 2026 · Dupla = chofer + enganchador, vinculada por legajo
+
+- **Decisión:** La dupla pasó de `{chofer, ayudante}` a `{chofer, enganchador}` (`ayudante` queda deprecated). Las duplas del catálogo ahora guardan `legajoChofer` y `legajoEnganchador` para vincular la dupla a usuarios del sistema de forma estable, más `gruaId` (grúa habitual) y `orden` (posición en la rotación mensual; la última es la de transporte).
+- **Por qué:** El pareo por nombre era frágil (variantes de escritura, orden nombre/apellido). El legajo es el vínculo estable. Además la asignación diaria captura los legajos del catálogo al guardarse, y `asignacionCoincideConUsuario()` (legajo primero, nombres como fallback con `nombresCoinciden()`) permite detectar en Home si el turno cargado no corresponde al usuario logueado.
+- **Descartado:**
+  - **Referenciar duplas por UID de usuario** — No todos los integrantes de una dupla tienen cuenta; el legajo existe siempre.
+- **Estado:** Vigente. Scripts de carga: `scripts/cargar-nuevas-duplas.mjs`.
+
+---
+
+## Jul 2026 · Patente "S/N" para vehículos sin patente
+
+- **Decisión:** Se aceptan enganches de vehículos sin patente legible usando el valor canónico `S/N` (`PATENTE_SIN_NUMERO`). `normalizarPatenteInput()` normaliza mayúsculas/espacios/guiones y colapsa "SN" → "S/N".
+- **Por qué:** En campo aparecen vehículos sin patente (robada, ilegible, moto sin chapa). Antes el formato estricto (AAA123 / AA123BB) bloqueaba el enganche.
+- **Descartado:**
+  - **Campo libre sin validación** — Se pierde la normalización y la unicidad del identificador.
+- **Estado:** Vigente.
+
+---
+
+## Jul 2026 · Wrapper de errores `withHttpsErrorHandling` en todas las Cloud Functions
+
+- **Decisión:** Todos los handlers `onCall` en `functions/src/index.ts` se envuelven con `withHttpsErrorHandling(nombreOperacion, handler)` (`functions/src/utils/callableHandler.ts`). Los `HttpsError` pasan tal cual; cualquier otro error se loguea y se re-lanza como `HttpsError('internal', 'Error inesperado en {operacion}: {detalle}')`.
+- **Por qué:** Firebase enmascara los errores no-`HttpsError` como `{code: 'internal', message: 'internal'}` — el frontend no podía mostrar nada útil ni diagnosticarse en campo.
+- **Descartado:**
+  - **try/catch manual en cada function** — Repetitivo y fácil de olvidar en functions nuevas.
+- **Estado:** Vigente. Toda Cloud Function nueva debe usar el wrapper.

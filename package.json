@@ -1,12 +1,28 @@
 {
   "name": "gruasbacar",
   "private": true,
-  "workspaces": ["shared", "functions", "frontend"],
+  "workspaces": [
+    "shared",
+    "functions",
+    "frontend"
+  ],
   "scripts": {
     "prebuild": "node scripts/ensure-deps.mjs",
     "dev": "cd frontend && npm run dev",
+    "dev:live": "cd frontend && npm run dev:live",
+    "emu": "npm run build --workspace=@gruasbacar/shared && npm run build --workspace=gruasbacar-functions && firebase emulators:start --import=.emulator-data --export-on-exit=.emulator-data",
+    "emu:seed": "node scripts/seed.mjs --emulator",
+    "emu:clean": "node scripts/vaciar-bd.mjs --emulator && node scripts/seed.mjs --emulator",
     "build": "npm run build --workspace=@gruasbacar/shared && npm run build --workspace=gruasbacar-functions && npm run build --workspace=gruasbacar-frontend",
+    "preflight": "node scripts/preflight.mjs",
+    "backup": "node scripts/backup-firestore.mjs",
+    "ship": "node scripts/ship.mjs",
+    "ship:hosting": "node scripts/ship.mjs --hosting",
+    "ship:functions": "node scripts/ship.mjs --functions",
+    "ship:rules": "node scripts/ship.mjs --rules",
+    "ship:dry": "node scripts/ship.mjs --dry-run",
     "deploy": "npm run build && firebase deploy",
+    "deploy:functions": "node functions/scripts/predeploy.mjs && firebase deploy --only functions",
     "seed": "node scripts/seed.mjs",
     "seed:emulator": "node scripts/seed.mjs --emulator",
     "sync-usuarios": "node scripts/sync-usuarios.mjs",
@@ -17,9 +33,12 @@
     "migrate-gruas:emulator": "node scripts/migrar-ids-gruas.mjs --emulator",
     "migrate-duplas": "node scripts/migrar-duplas-enganchador.mjs",
     "migrate-duplas:emulator": "node scripts/migrar-duplas-enganchador.mjs --emulator",
+    "pull-prod": "node scripts/pull-prod.mjs",
     "migrate-servicios": "node scripts/migrar-ids-servicios.mjs",
     "emulators": "npm run build --workspace=@gruasbacar/shared && npm run build --workspace=gruasbacar-functions && firebase emulators:start --import=.emulator-data --export-on-exit=.emulator-data",
-    "fix-invokers": "powershell -ExecutionPolicy Bypass -File scripts/fix-invokers.ps1",
-    "deploy:functions": "node functions/scripts/predeploy.mjs && firebase deploy --only functions"
+    "fix-invokers": "powershell -ExecutionPolicy Bypass -File scripts/fix-invokers.ps1"
+  },
+  "dependencies": {
+    "typescript": "^7.0.2"
   }
 }

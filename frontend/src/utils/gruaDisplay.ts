@@ -72,6 +72,34 @@ export function gruaIdParaServicio(
   return normalizeGruaId(candidata);
 }
 
+/** Devuelve "Descripción — PATENTE" o solo la patente si no hay descripción. */
+export function resolverLabelGrua(
+  gruaValor: string | undefined,
+  gruas: Grua[] = []
+): string {
+  if (!gruaValor?.trim()) return "—";
+
+  const val = gruaValor.trim();
+  const upper = val.toUpperCase().replace(/\s/g, "");
+
+  const byDocId = gruas.find((g) => g.id === val);
+  if (byDocId) {
+    const pat = byDocId.patente?.trim().toUpperCase() || upper;
+    const desc = byDocId.descripcion?.trim();
+    return desc ? `${desc} — ${pat}` : pat;
+  }
+
+  const patente = resolverPatenteGrua(val, gruas);
+  const byPatente = gruas.find(
+    (g) => g.patente?.trim().toUpperCase() === patente.toUpperCase()
+  );
+  if (byPatente?.descripcion?.trim()) {
+    return `${byPatente.descripcion.trim()} — ${patente}`;
+  }
+
+  return patente;
+}
+
 /** @deprecated Usar gruaIdParaServicio */
 export function patenteGruaParaServicio(
   gruaPatente: string | undefined,

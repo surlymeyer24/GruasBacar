@@ -5,6 +5,8 @@ import { RegistrarCuentaPayload } from "../services/auth.service";
 export interface AuthContextType {
   user: unknown;
   userData: Usuario | null;
+  /** true cuando el usuario existe en Auth pero no tiene doc en usuarios/. */
+  pendienteActivacion: boolean;
   /** true hasta resolver la sesión Firebase (arranque / persistencia). */
   sessionLoading: boolean;
   /** true mientras se carga el documento usuarios/{uid}. */

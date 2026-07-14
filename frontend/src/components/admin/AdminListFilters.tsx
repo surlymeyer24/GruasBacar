@@ -39,13 +39,13 @@ export const AdminListFilters: React.FC<AdminListFiltersProps> = ({
   return (
     <div className={`flex flex-col sm:flex-row gap-2.5 ${className}`}>
       <div className="relative flex-1 min-w-0">
-        <Search className="w-3.5 h-3.5 text-brand-pale absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-3.5 h-3.5 text-brand-pale absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}
-          className="w-full pl-7 pr-3 py-2 bg-brand-bg border border-brand-seashell rounded-xl text-[13px] leading-tight text-brand-purply placeholder:text-brand-pale focus:outline-none focus:ring-2 focus:ring-brand-cta/25 focus:border-brand-cta/40 transition-shadow"
+          className="w-full pl-8 pr-3 py-2.5 bg-white border border-brand-seashell rounded-xl text-[13px] leading-tight text-brand-purply placeholder:text-brand-pale focus:outline-none focus:ring-2 focus:ring-brand-cta/25 focus:border-brand-cta/40 transition-shadow shadow-sm"
         />
       </div>
 

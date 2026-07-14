@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { EtiquetaFoto } from '@gruasbacar/shared';
 import { buildRutaFoto, fotosOpcionalesEnDev } from '../utils/validators';
@@ -21,7 +22,7 @@ export interface ParsedStoragePath {
 }
 
 export function parseStorageFotoPath(filePath: string): ParsedStoragePath | null {
-  const match = filePath.match(/^servicios\/([^/]+)\/(enganche|desenganche)\/([A-Z_]+)\.jpg$/);
+  const match = filePath.match(/^servicios\/([^/]+)\/(enganche|desenganche)\/([A-Z_]+?)(?:_\d+)?\.jpg$/);
   if (!match) return null;
   const [, servicioId, carpeta, etiqueta] = match;
   if (!CARPETAS_VALIDAS.has(carpeta) || !ETIQUETAS_VALIDAS.has(etiqueta)) return null;
@@ -32,8 +33,9 @@ export function parseStorageFotoPath(filePath: string): ParsedStoragePath | null
   };
 }
 
-export function stagingDocId(carpeta: string, etiqueta: string): string {
-  return `${carpeta}_${etiqueta}`;
+export function stagingDocId(carpeta: string, etiqueta: string, index?: number): string {
+  const suffix = index != null && index > 0 ? `_${index + 1}` : "";
+  return `${carpeta}_${etiqueta}${suffix}`;
 }
 
 function isStorageNotFound(err: unknown): boolean {
@@ -80,11 +82,6 @@ export async function procesarFotoDesdeStorage(
   }
 
   const { servicioId, carpeta, etiqueta } = parsed;
-  const stagingRef = db()
-    .collection('servicios')
-    .doc(servicioId)
-    .collection('fotosStaging')
-    .doc(stagingDocId(carpeta, etiqueta));
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
@@ -104,6 +101,12 @@ export async function procesarFotoDesdeStorage(
   const index =
     typeof indexRaw === 'string' && /^\d+$/.test(indexRaw) ? parseInt(indexRaw, 10) : 0;
   const uploadGen = customMetadata?.uploadGen?.trim() ?? '';
+
+  const stagingRef = db()
+    .collection('servicios')
+    .doc(servicioId)
+    .collection('fotosStaging')
+    .doc(stagingDocId(carpeta, etiqueta, index));
 
   const stagingBefore = await stagingRef.get();
   const existing = stagingBefore.data();
@@ -141,7 +144,7 @@ export async function procesarFotoDesdeStorage(
         uploadGen: uploadGen || data?.uploadGen || null,
         status: 'processing',
         error: null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -177,7 +180,7 @@ export async function procesarFotoDesdeStorage(
 
     const legajo = await legajoParaFotosDesdeServicio(servicio);
     const patente = servicio.patente as string;
-    const numeroInfraccion = servicio.numeroInfraccion as string;
+    const numeroInfraccion = servicio.numeroInfraccion as string | undefined;
 
     const drive = await import('./drive.service');
     const relativePath = buildRutaFoto(
@@ -204,7 +207,7 @@ export async function procesarFotoDesdeStorage(
         url: uploaded.url,
         driveFileId: uploaded.driveFileId,
         error: null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -244,7 +247,7 @@ export async function procesarFotoDesdeStorage(
           url: `dev://local/${filePath}`,
           driveFileId: `dev_${servicioId}_${etiqueta}`,
           error: null,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );
@@ -267,7 +270,7 @@ export async function procesarFotoDesdeStorage(
       {
         status: 'error',
         error: message,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -314,7 +317,7 @@ export async function maybeRunStorageCleanup(driveFolderId: string): Promise<voi
     if (Date.now() - lastRunMs < STORAGE_CLEANUP_INTERVAL_MS) return false;
     tx.set(
       ref,
-      { lastRunAt: admin.firestore.FieldValue.serverTimestamp() },
+      { lastRunAt: FieldValue.serverTimestamp() },
       { merge: true }
     );
     return true;
@@ -345,11 +348,16 @@ export async function limpiarStorageFotosSubidas(driveFolderId: string): Promise
     if (storageFileAgeMs(metadata) < STORAGE_CLEANUP_MIN_AGE_MS) continue;
 
     const { servicioId, carpeta, etiqueta } = parsed;
+    const cleanupIndexRaw = (metadata as any)?.metadata?.index;
+    const cleanupIndex =
+      typeof cleanupIndexRaw === 'string' && /^\d+$/.test(cleanupIndexRaw)
+        ? parseInt(cleanupIndexRaw, 10)
+        : 0;
     const stagingRef = db()
       .collection('servicios')
       .doc(servicioId)
       .collection('fotosStaging')
-      .doc(stagingDocId(carpeta, etiqueta));
+      .doc(stagingDocId(carpeta, etiqueta, cleanupIndex));
 
     const stagingSnap = await stagingRef.get();
     if (stagingSnap.data()?.status === 'ready') {
@@ -375,7 +383,7 @@ export async function limpiarStorageFotosSubidas(driveFolderId: string): Promise
       const relativePath = buildRutaFoto(
         legajo,
         servicio.patente as string,
-        servicio.numeroInfraccion as string,
+        servicio.numeroInfraccion as string | undefined,
         carpeta,
         etiqueta,
         index,
@@ -394,7 +402,7 @@ export async function limpiarStorageFotosSubidas(driveFolderId: string): Promise
           url: enDrive.url,
           driveFileId: enDrive.driveFileId,
           error: null,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true }
       );

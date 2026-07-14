@@ -15,10 +15,12 @@ function esErrorDeRed(err: unknown): boolean {
   if (err instanceof TypeError && err.message === 'Failed to fetch') return true;
   if (err instanceof Error) {
     const m = err.message.toLowerCase();
-    if (m.includes('network') || m.includes('failed to fetch') || m.includes('err_internet')) return true;
+    if (m.includes('network') || m.includes('failed to fetch') || m.includes('err_internet') || m.includes('err_insufficient_resources')) return true;
   }
   return false;
 }
+
+export { esErrorDeRed };
 
 /** Mensaje legible desde errores de Callable / Auth / Firestore. */
 export function getFirebaseErrorMessage(err: unknown, fallback: string): string {
@@ -28,7 +30,7 @@ export function getFirebaseErrorMessage(err: unknown, fallback: string): string 
     const msg = err.message?.trim() ?? '';
     const code = err.code ?? '';
 
-    if (msg && msg !== 'internal' && !msg.startsWith('Firebase:')) {
+    if (msg && msg.toLowerCase() !== 'internal' && !msg.startsWith('Firebase:')) {
       return msg;
     }
 
@@ -74,7 +76,7 @@ export function getFirebaseErrorMessage(err: unknown, fallback: string): string 
 
   if (err instanceof Error && err.message) {
     const msg = err.message.trim();
-    if (msg && msg !== 'internal') return msg;
+    if (msg && msg.toLowerCase() !== 'internal') return msg;
   }
 
   return fallback;

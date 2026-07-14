@@ -1,0 +1,14 @@
+---
+description: Contexto admin y superadmin en gruasBacar
+globs: frontend/src/pages/{AdminDashboardPage,AdminPage,TurnosPage}.tsx,frontend/src/components/admin/**,frontend/src/hooks/useAdminCatalog.ts,frontend/src/services/{usuario,adminStats,adminCatalog,adminServicios}*.ts,functions/src/services/usuario.service.ts
+alwaysApply: false
+---
+
+# Admin / Superadmin
+
+- Rutas: `/admin-dashboard`, `/admin`, `/turnos` + historial/reportes compartidos con supervisor
+- ABM usuarios: solo Cloud Functions (`verificarAdmin`); solo SUPERADMIN puede asignar rol SUPERADMIN
+- ABM grúas/corralones/duplas: Firestore directo con `isAdmin()` en rules
+- Turnos: admin edita `asignacionDiaria` de otros operadores en `AdminTurnosPanel`
+- `tieneRol()`: SUPERADMIN bypassa cualquier RoleGuard
+- Subagente especializado: `.cursor/agents/admin.md`

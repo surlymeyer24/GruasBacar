@@ -1,0 +1,992 @@
+<title>Capacitacion Operadores — gruasBacar</title>
+<style>
+  :root {
+    --ink: #1C1917;
+    --ink-2: #44403C;
+    --ink-3: #78716C;
+    --bg: #FAFAF9;
+    --card: #FFFFFF;
+    --card-raised: #F5F5F4;
+    --border: #E7E5E4;
+    --border-soft: #F0EEEC;
+    --amber: #B45309;
+    --amber-bg: #FFFBEB;
+    --amber-border: #FDE68A;
+    --green: #15803D;
+    --green-bg: #F0FDF4;
+    --green-border: #BBF7D0;
+    --blue: #1D4ED8;
+    --blue-bg: #EFF6FF;
+    --blue-border: #BFDBFE;
+    --red: #B91C1C;
+    --red-bg: #FEF2F2;
+    --red-border: #FECACA;
+    --purple: #7C3AED;
+    --purple-bg: #F5F3FF;
+    --shadow: 0 1px 3px rgba(28,25,23,0.06);
+    --r: 8px;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'Cascadia Code', Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #E7E5E4;
+      --ink-2: #A8A29E;
+      --ink-3: #78716C;
+      --bg: #0C0A09;
+      --card: #1C1917;
+      --card-raised: #292524;
+      --border: #292524;
+      --border-soft: #1C1917;
+      --amber: #FBBF24;
+      --amber-bg: #451A0310;
+      --amber-border: #92400E;
+      --green: #4ADE80;
+      --green-bg: #14532D18;
+      --green-border: #166534;
+      --blue: #60A5FA;
+      --blue-bg: #1E3A5F20;
+      --blue-border: #1E40AF;
+      --red: #FCA5A5;
+      --red-bg: #7F1D1D18;
+      --red-border: #991B1B;
+      --purple: #A78BFA;
+      --purple-bg: #4C1D9520;
+      --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #E7E5E4; --ink-2: #A8A29E; --ink-3: #78716C;
+    --bg: #0C0A09; --card: #1C1917; --card-raised: #292524;
+    --border: #292524; --border-soft: #1C1917;
+    --amber: #FBBF24; --amber-bg: #451A0310; --amber-border: #92400E;
+    --green: #4ADE80; --green-bg: #14532D18; --green-border: #166534;
+    --blue: #60A5FA; --blue-bg: #1E3A5F20; --blue-border: #1E40AF;
+    --red: #FCA5A5; --red-bg: #7F1D1D18; --red-border: #991B1B;
+    --purple: #A78BFA; --purple-bg: #4C1D9520;
+    --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  :root[data-theme="light"] {
+    --ink: #1C1917; --ink-2: #44403C; --ink-3: #78716C;
+    --bg: #FAFAF9; --card: #FFFFFF; --card-raised: #F5F5F4;
+    --border: #E7E5E4; --border-soft: #F0EEEC;
+    --amber: #B45309; --amber-bg: #FFFBEB; --amber-border: #FDE68A;
+    --green: #15803D; --green-bg: #F0FDF4; --green-border: #BBF7D0;
+    --blue: #1D4ED8; --blue-bg: #EFF6FF; --blue-border: #BFDBFE;
+    --red: #B91C1C; --red-bg: #FEF2F2; --red-border: #FECACA;
+    --purple: #7C3AED; --purple-bg: #F5F3FF;
+    --shadow: 0 1px 3px rgba(28,25,23,0.06);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.7;
+    font-size: 16px;
+  }
+
+  .page {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 28px 80px;
+  }
+
+  @media (max-width: 600px) { .page { padding: 20px 16px 60px; } }
+
+  /* Header */
+  .header {
+    margin-bottom: 48px;
+    text-align: center;
+  }
+
+  .header-eyebrow {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+
+  .header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    text-wrap: balance;
+  }
+
+  .header-sub {
+    font-size: 15px;
+    color: var(--ink-2);
+    max-width: 520px;
+    margin: 0 auto 16px;
+  }
+
+  .header-meta {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    font-size: 13px;
+    color: var(--ink-3);
+    flex-wrap: wrap;
+  }
+
+  /* Blocks */
+  .block {
+    margin-bottom: 40px;
+    scroll-margin-top: 20px;
+  }
+
+  .block-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--blue-bg);
+    border: 2px solid var(--blue-border);
+    color: var(--blue);
+    font-size: 14px;
+    font-weight: 700;
+    margin-right: 10px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .block-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .block-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .block-time {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-3);
+    background: var(--card-raised);
+    padding: 3px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Speaker notes */
+  .say {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--ink-2);
+  }
+
+  .say p { margin-bottom: 10px; }
+  .say p:last-child { margin-bottom: 0; }
+  .say strong { color: var(--ink); font-weight: 600; }
+  .say em { font-style: normal; color: var(--amber); font-weight: 600; }
+
+  /* Tips for the presenter */
+  .tip {
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: var(--r);
+    font-size: 13px;
+    margin-bottom: 12px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+
+  .tip--do {
+    background: var(--green-bg);
+    border: 1px solid var(--green-border);
+  }
+
+  .tip--warn {
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
+  }
+
+  .tip--show {
+    background: var(--blue-bg);
+    border: 1px solid var(--blue-border);
+  }
+
+  .tip--empathy {
+    background: var(--purple-bg);
+    border: 1px solid var(--purple-border, var(--purple));
+    border-color: color-mix(in srgb, var(--purple) 30%, transparent);
+  }
+
+  .tip-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    line-height: 1.55;
+  }
+
+  .tip strong { color: var(--ink); }
+
+  /* Screen reference cards */
+  .screen {
+    background: var(--card-raised);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--blue);
+    border-radius: var(--r);
+    padding: 14px 18px;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+
+  .screen-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--blue);
+    margin-bottom: 4px;
+  }
+
+  .screen-text {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--card);
+    padding: 6px 10px;
+    border-radius: 4px;
+    display: inline-block;
+    margin: 2px 0;
+  }
+
+  /* Step lists */
+  .steps {
+    counter-reset: step;
+    list-style: none;
+    margin: 12px 0;
+    padding: 0;
+  }
+
+  .steps li {
+    counter-increment: step;
+    padding: 8px 0 8px 36px;
+    position: relative;
+    font-size: 15px;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .steps li:last-child { border-bottom: none; }
+
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--card-raised);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-3);
+  }
+
+  .steps li strong { color: var(--ink); }
+
+  /* Dividers */
+  .divider {
+    border: none;
+    border-top: 2px dashed var(--border);
+    margin: 48px 0;
+  }
+
+  /* Checklist */
+  .checklist {
+    list-style: none;
+    padding: 0;
+    margin: 12px 0;
+  }
+
+  .checklist li {
+    padding: 6px 0 6px 28px;
+    position: relative;
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+
+  .checklist li::before {
+    content: '\2610';
+    position: absolute;
+    left: 0;
+    font-size: 16px;
+    color: var(--ink-3);
+  }
+
+  /* Anchor nav */
+  .toc {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 16px 20px;
+    margin-bottom: 40px;
+  }
+
+  .toc-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 4px;
+  }
+
+  .toc a {
+    display: block;
+    padding: 4px 8px;
+    font-size: 14px;
+    color: var(--blue);
+    text-decoration: none;
+    border-radius: 4px;
+  }
+
+  .toc a:hover { background: var(--blue-bg); }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0;
+    margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;
+  }
+
+  .qa-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 14px 18px;
+    margin-bottom: 10px;
+  }
+  .qa-q {
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 4px;
+    font-size: 15px;
+  }
+  .qa-a {
+    font-size: 14px;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+</style>
+
+<h2 class="sr-only">Guion de capacitacion para operadores del sistema gruasBacar</h2>
+
+<div class="page">
+
+  <header class="header">
+    <div class="header-eyebrow">gruasBacar</div>
+    <h1>Guion de Capacitacion para Operadores</h1>
+    <p class="header-sub">Guia paso a paso para el capacitador. Todo lo que el chofer y el enganchador necesitan saber para usar el sistema en el dia a dia.</p>
+    <div class="header-meta">
+      <span>Duracion estimada: 45-60 min</span>
+      <span>Audiencia: Choferes y Enganchadores</span>
+      <span>Julio 2026</span>
+    </div>
+  </header>
+
+  <!-- TOC -->
+  <nav class="toc">
+    <div class="toc-title">Estructura de la capacitacion</div>
+    <div class="toc-grid">
+      <a href="#apertura">0. Apertura</a>
+      <a href="#preparar">1. Antes de salir</a>
+      <a href="#login">2. Entrar al sistema</a>
+      <a href="#turno">3. Configurar el turno</a>
+      <a href="#enganche">4. Nuevo enganche</a>
+      <a href="#fotos">5. Las fotos</a>
+      <a href="#traslado">6. El traslado</a>
+      <a href="#desenganche">7. El desenganche</a>
+      <a href="#completado">8. Servicio listo</a>
+      <a href="#actas">9. Mis actas</a>
+      <a href="#problemas">10. Si algo sale mal</a>
+      <a href="#preguntas">11. Preguntas frecuentes</a>
+      <a href="#cierre">12. Cierre</a>
+    </div>
+  </nav>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 0 — APERTURA -->
+  <!-- ============================== -->
+  <section class="block" id="apertura">
+    <div class="block-header">
+      <span class="block-number">0</span>
+      <span class="block-title">Apertura y contexto</span>
+      <span class="block-time">~5 min</span>
+    </div>
+
+    <div class="tip tip--empathy">
+      <span class="tip-icon">&#9829;</span>
+      <div><strong>Tono:</strong> Arrancar reconociendo su experiencia. Ellos saben de gruas; nosotros les estamos pidiendo un cambio. No minimizar eso.</div>
+    </div>
+
+    <div class="say">
+      <p><strong>Buenos dias a todos.</strong> Antes que nada quiero ser honesto: ustedes saben de gruas mucho mas que yo. Llevan anos haciendo este trabajo y lo hacen bien.</p>
+      <p>Lo que vamos a ver hoy es una herramienta nueva que <strong>no cambia lo que hacen</strong> sino <strong>como se registra</strong>. Hasta ahora todo iba por WhatsApp: las fotos, los datos, las patentes, todo por el chat. Eso funciono, pero a veces se pierde informacion, se confunden patentes, o hay que andar preguntando "che, mandaste las fotos de tal auto?".</p>
+      <p>Este sistema es para que <strong>todo quede ordenado en un solo lugar</strong>. Ustedes sacan las fotos, ponen la patente, y listo: el sistema se encarga del resto. El acta se arma sola.</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Lo que NO cambia:</strong></p>
+      <p>La grua sigue siendo la misma. El corralon sigue siendo el mismo. El trabajo en la calle sigue siendo el mismo. Lo unico nuevo es que en vez de mandar fotos por WhatsApp, las sacan desde esta aplicacion.</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Lo que SI cambia (para mejor):</strong></p>
+      <p>- No hay que acordarse de mandar las fotos a nadie, quedan guardadas automaticamente.</p>
+      <p>- No hay que mandar datos por WhatsApp ni acordarse de nada.</p>
+      <p>- Si necesitan un comprobante, pueden descargar el PDF ahi mismo y mandarlo por WhatsApp.</p>
+    </div>
+
+    <div class="tip tip--empathy">
+      <span class="tip-icon">&#9829;</span>
+      <div><strong>Si hay resistencia:</strong> "Se que puede parecer un paso mas, pero en la practica les va a sacar trabajo de encima. Lo que antes eran 3 o 4 mensajes de WhatsApp ahora son 2 toques en la pantalla. Denle una semana y me cuentan."</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 1 — ANTES DE SALIR -->
+  <!-- ============================== -->
+  <section class="block" id="preparar">
+    <div class="block-header">
+      <span class="block-number">1</span>
+      <span class="block-title">Antes de salir a la calle</span>
+      <span class="block-time">~3 min</span>
+    </div>
+
+    <div class="say">
+      <p>Antes de subirse a la grua, <strong>hay tres cosas que necesitan tener listas en el celular:</strong></p>
+    </div>
+
+    <ol class="steps">
+      <li><strong>El navegador</strong> (Chrome o Safari). El sistema funciona desde el navegador, no se baja ninguna aplicacion.</li>
+      <li><strong>La direccion del sistema.</strong> Van a tener un acceso directo en la pantalla del celular, como si fuera una app. <em>Si no lo tienen, se los vamos a configurar ahora.</em></li>
+      <li><strong>Su usuario y contrasena.</strong> Se los va a dar el administrador. <em>No los compartan con nadie.</em></li>
+    </ol>
+
+    <div class="tip tip--show">
+      <span class="tip-icon">&#128241;</span>
+      <div><strong>Demo en vivo:</strong> Mostrar como agregar el acceso directo a la pantalla de inicio del celular (Android: Chrome > Menu > "Agregar a pantalla de inicio". iPhone: Safari > Compartir > "Agregar a inicio").</div>
+    </div>
+
+    <div class="say">
+      <p>Tambien necesitan tener activados los <strong>permisos de ubicacion y camara</strong> del navegador. El sistema los va a pedir la primera vez que entren. <strong>Digan que si a los dos.</strong> Si le dicen que no, despues no van a poder sacar fotos ni registrar donde hicieron el enganche.</p>
+    </div>
+
+    <div class="tip tip--warn">
+      <span class="tip-icon">&#9888;</span>
+      <div><strong>Dato importante:</strong> Que tengan el celular cargado. Las fotos gastan bateria. Si tienen cargador en la grua, usarlo.</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 2 — LOGIN -->
+  <!-- ============================== -->
+  <section class="block" id="login">
+    <div class="block-header">
+      <span class="block-number">2</span>
+      <span class="block-title">Entrar al sistema</span>
+      <span class="block-time">~3 min</span>
+    </div>
+
+    <div class="say">
+      <p>Cuando abren la aplicacion por primera vez van a ver la pantalla de inicio de sesion. Dice <strong>"Bienvenido/a"</strong> y tiene dos campos:</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Pantalla de login</div>
+      <p>Campo 1: <span class="screen-text">Email</span> &mdash; aca ponen su correo (ej: juan@bacar.com)<br>
+      Campo 2: <span class="screen-text">Contrasena</span> &mdash; aca ponen su clave<br>
+      Boton: <span class="screen-text">Iniciar Sesion</span></p>
+    </div>
+
+    <div class="say">
+      <p>Hay un <strong>ojito</strong> al lado de la contrasena. Si lo tocan, pueden ver lo que estan escribiendo. Util para no equivocarse.</p>
+      <p>Abajo hay un cuadradito que dice <strong>"Recordar sesion"</strong>. Si lo marcan, la proxima vez que abran la app ya van a estar adentro sin tener que poner la clave de nuevo. <em>Recomiendo que lo marquen.</em></p>
+    </div>
+
+    <div class="tip tip--show">
+      <span class="tip-icon">&#128241;</span>
+      <div><strong>Demo:</strong> Hacer el login en vivo. Mostrar el ojito, mostrar "Recordar sesion". Esperar a que aparezca "Bienvenido/a! Redirigiendo..."</div>
+    </div>
+
+    <div class="say">
+      <p>Si se equivocan en la clave, va a aparecer un mensaje en rojo que dice <strong>"Acceso incorrecto. Verifique sus credenciales."</strong> No se preocupen, simplemente vuelvan a escribir. Si despues de 3 intentos no pueden entrar, llamen al administrador.</p>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 3 — TURNO -->
+  <!-- ============================== -->
+  <section class="block" id="turno">
+    <div class="block-header">
+      <span class="block-number">3</span>
+      <span class="block-title">Configurar el turno del dia</span>
+      <span class="block-time">~5 min</span>
+    </div>
+
+    <div class="say">
+      <p>Lo primero que va a pasar al entrar es que les aparece una ventanita que dice <strong>"Configura tu turno de hoy"</strong>. Esto es para que el sistema sepa con que grua salen, con quien y que tipo de operacion van a hacer.</p>
+      <p>Es como "fichar" al empezar el dia. <strong>Se hace una sola vez por dia.</strong> Dura 8 horas. Si hicieron el turno a la manana, no se los vuelve a pedir hasta el dia siguiente.</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Ventana: Configura tu turno de hoy</div>
+      <p>"Elegi tipo, grua, chofer y enganchador para este turno."</p>
+    </div>
+
+    <ol class="steps">
+      <li><strong>Tipo de operacion</strong> &mdash; Tocan "Transito" o "Policia" segun lo que les corresponda ese dia. Hay dos botoncitos, tocan el que va.</li>
+      <li><strong>Grua asignada</strong> &mdash; Se abre una lista con las gruas disponibles. Eligen la suya. <em>Solo aparecen las gruas del tipo que eligieron arriba.</em></li>
+      <li><strong>Chofer</strong> &mdash; Eligen quien maneja.</li>
+      <li><strong>Enganchador</strong> &mdash; Eligen quien engancha.</li>
+    </ol>
+
+    <div class="say">
+      <p>Cuando tengan todo, tocan <strong>"Confirmar turno del dia"</strong>. Listo, eso es todo. Los lleva a la pantalla principal.</p>
+    </div>
+
+    <div class="tip tip--warn">
+      <span class="tip-icon">&#9888;</span>
+      <div><strong>Si la grua o la dupla no aparecen:</strong> Es porque el administrador no las cargo todavia. En ese caso, toquen <strong>"Mi turno no esta bien"</strong> y el sistema le avisa al administrador. No salgan a la calle sin turno configurado.</div>
+    </div>
+
+    <div class="say">
+      <p>Si durante el dia les cambian la grua o el companero, pueden pedir un cambio desde la pantalla principal tocando el <strong>lapicito</strong> al lado de "Turno de hoy". Pero eso solo funciona si no tienen ningun servicio en curso.</p>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 4 — ENGANCHE -->
+  <!-- ============================== -->
+  <section class="block" id="enganche">
+    <div class="block-header">
+      <span class="block-number">4</span>
+      <span class="block-title">Registrar un enganche</span>
+      <span class="block-time">~8 min</span>
+    </div>
+
+    <div class="say">
+      <p>Ahora viene lo mas importante. Llegaron a un vehiculo, lo van a enganchar. <strong>Este es el momento en que abren la app.</strong></p>
+      <p>En la pantalla principal van a ver un boton grande que dice:</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Pantalla principal</div>
+      <p>Boton: <span class="screen-text">NUEVO ENGANCHE</span></p>
+    </div>
+
+    <div class="say">
+      <p>Lo tocan y los lleva a una pantalla que dice <strong>"Nuevo Enganche"</strong>. Ahi tienen que hacer dos cosas: <strong>poner la patente y sacar las fotos</strong>.</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Campo de patente</div>
+      <p>Dice: <span class="screen-text">Patente / Dominio</span><br>
+      Placeholder: "Ej: AA123BB o KLO098"<br>
+      Se pone en mayusculas sola.</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Escriben la patente</strong> tal cual la ven. El sistema acepta los dos formatos: el viejo (tres letras y tres numeros, tipo KLO098) y el nuevo (dos letras, tres numeros, dos letras, tipo AA123BB).</p>
+      <p>Si el vehiculo <strong>no tiene patente visible</strong> (esta tapada, no tiene, etc.), escriben <em>"sin"</em> y listo.</p>
+    </div>
+
+    <div class="tip tip--do">
+      <span class="tip-icon">&#10003;</span>
+      <div><strong>Consejo:</strong> La patente se pone en mayusculas automaticamente. No importa si la escriben en minuscula.</div>
+    </div>
+
+    <div class="tip tip--show">
+      <span class="tip-icon">&#128241;</span>
+      <div><strong>Demo:</strong> Escribir una patente en vivo. Mostrar que si ponen un formato raro (ej: "AB1") marca error: "Formato invalido". Mostrar que si ponen "sin" lo acepta.</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 5 — FOTOS -->
+  <!-- ============================== -->
+  <section class="block" id="fotos">
+    <div class="block-header">
+      <span class="block-number">5</span>
+      <span class="block-title">Las fotos (el paso mas importante)</span>
+      <span class="block-time">~10 min</span>
+    </div>
+
+    <div class="say">
+      <p>Despues de poner la patente, viene la parte de las fotos. El sistema les va a pedir <strong>4 fotos obligatorias</strong> del vehiculo, siempre en el mismo orden:</p>
+    </div>
+
+    <ol class="steps">
+      <li><strong>Foto delantera</strong> &mdash; de frente al vehiculo</li>
+      <li><strong>Foto lado copiloto</strong> &mdash; el lado derecho (el del acompanante)</li>
+      <li><strong>Foto trasera</strong> &mdash; de atras</li>
+      <li><strong>Foto lado piloto</strong> &mdash; el lado izquierdo (el del conductor)</li>
+    </ol>
+
+    <div class="say">
+      <p>Para empezar, tocan el boton que dice <strong>"Sacar fotos del vehiculo"</strong>. Se abre una guia que les dice que foto sacar. <strong>Sigan el orden que les pide.</strong> Toman la foto, el sistema la guarda, y pasa a la siguiente.</p>
+    </div>
+
+    <div class="tip tip--show">
+      <span class="tip-icon">&#128241;</span>
+      <div><strong>Demo en vivo:</strong> Sacar las 4 fotos de un vehiculo (puede ser uno estacionado cerca). Ir paso a paso, mostrar las instrucciones que aparecen en pantalla: "Toca el recuadro para sacar la foto delantera", etc.</div>
+    </div>
+
+    <div class="say">
+      <p><strong>Si una foto salio mal</strong>, no hay problema. Despues de sacar las 4, van a ver las miniaturas en la pantalla. Tocan la que quieren cambiar y la sacan de nuevo.</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Fotos extra:</strong> Si quieren documentar algo especial (un rayo en la puerta, una llanta pinchada, un vidrio roto), despues de las 4 obligatorias pueden tocar <strong>"Agregar foto extra"</strong>. Se pueden agregar hasta 3 fotos mas.</p>
+      <p>Tambien hay un campo de <strong>"Comentario"</strong> abajo para anotar algo, por ejemplo: "rayon en guardabarros" o "espejo roto".</p>
+    </div>
+
+    <div class="tip tip--warn">
+      <span class="tip-icon">&#9888;</span>
+      <div><strong>Muy importante:</strong> Sin las 4 fotos no se puede avanzar. El boton de confirmar queda gris hasta que esten las 4.</div>
+    </div>
+
+    <div class="say">
+      <p>Cuando estan conformes con las fotos, tocan <strong>"Confirmar enganche"</strong>. El sistema sube las fotos (puede tardar unos segundos, van a ver un circulito girando). Cuando termina, los lleva automaticamente a la siguiente pantalla.</p>
+    </div>
+
+    <div class="tip tip--do">
+      <span class="tip-icon">&#10003;</span>
+      <div><strong>Tranquilidad:</strong> Si se les apaga la pantalla o se cierra el navegador mientras sacan fotos, <strong>las fotos no se pierden</strong>. El sistema las guarda en el celular. Cuando vuelvan a abrir la app, van a ver un cartelito que dice "Se recuperaron las fotos del borrador local".</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 6 — TRASLADO -->
+  <!-- ============================== -->
+  <section class="block" id="traslado">
+    <div class="block-header">
+      <span class="block-number">6</span>
+      <span class="block-title">El traslado</span>
+      <span class="block-time">~3 min</span>
+    </div>
+
+    <div class="say">
+      <p>Despues de confirmar el enganche, los lleva a la pantalla de <strong>traslado</strong>. Aca no tienen que hacer nada especial. Es simplemente una pantalla que dice que el vehiculo esta <strong>"Bajo Custodia (En Traslado)"</strong>.</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Pantalla de traslado</div>
+      <p><span class="screen-text">Bajo Custodia (En Traslado)</span><br>
+      Muestra: patente, hora de inicio, fecha, grua, dupla.<br>
+      Un dibujito con tres puntos: Enganche (listo) - En transito (aca estan) - Corralon (falta).</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Ustedes manejan tranquilos.</strong> No hace falta tocar nada en el celular durante el viaje.</p>
+      <p>Cuando <strong>lleguen al corralon</strong>, van a ver abajo un cartel que pregunta: <strong>"Ha llegado al corralon de destino?"</strong> con un boton que dice:</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Al llegar al corralon</div>
+      <p>Boton: <span class="screen-text">Proceder al Desenganche</span></p>
+    </div>
+
+    <div class="say">
+      <p>Tocan ese boton <strong>cuando ya estacionaron la grua en el corralon</strong>, no antes. Ahi los lleva al desenganche.</p>
+    </div>
+
+    <div class="tip tip--warn">
+      <span class="tip-icon">&#9888;</span>
+      <div><strong>No toquen el boton mientras manejan.</strong> Primero estacionar, despues tocar. Dice abajo "Estacionar grua antes de iniciar el registro fotografico".</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 7 — DESENGANCHE -->
+  <!-- ============================== -->
+  <section class="block" id="desenganche">
+    <div class="block-header">
+      <span class="block-number">7</span>
+      <span class="block-title">El desenganche</span>
+      <span class="block-time">~8 min</span>
+    </div>
+
+    <div class="say">
+      <p>El desenganche tiene <strong>tres pasitos</strong>, que van a ver arriba en la pantalla como una barrita de progreso: <strong>Captura</strong> &mdash; <strong>Acta</strong> &mdash; <strong>Listo</strong>.</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Paso 1: Destino y fotos</strong></p>
+      <p>Primero eligen a que corralon o destino estan entregando. Hay una lista que dice <strong>"Corralon / Destino de entrega"</strong>. Buscan el suyo y lo seleccionan.</p>
+      <p>Despues sacan <strong>4 fotos del vehiculo ya desenganchado</strong>, igualito que antes: delantera, copiloto, trasera, piloto. El mismo proceso. Cuando terminen, tocan <strong>"Confirmar fotos"</strong>.</p>
+    </div>
+
+    <div class="tip tip--do">
+      <span class="tip-icon">&#10003;</span>
+      <div><strong>Es el mismo proceso de fotos que ya hicieron en el enganche.</strong> Si lo hicieron una vez, la segunda es mas rapido.</div>
+    </div>
+
+    <div class="say">
+      <p><strong>Paso 2: Confirmacion</strong></p>
+      <p>Les muestra un resumen de todo: el destino, las fotos que sacaron. Si quieren agregar alguna <strong>observacion</strong> (por ejemplo: "se entrego con las llaves" o "dano preexistente en la puerta"), pueden escribirla en el campo que dice <strong>"Observaciones Generales de la Entrega"</strong>.</p>
+      <p>Si todo esta bien, tocan <strong>"Confirmar Desenganche"</strong> (boton verde).</p>
+      <p>Si quieren cambiar una foto, tocan <strong>"Cambiar fotos"</strong> y vuelven al paso anterior.</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Paso 2 - Confirmacion</div>
+      <p>Muestra: destino elegido + fotos + campo de observacion<br>
+      Boton verde: <span class="screen-text">Confirmar Desenganche</span><br>
+      Boton gris: <span class="screen-text">Cambiar fotos</span></p>
+    </div>
+
+    <div class="tip tip--warn">
+      <span class="tip-icon">&#9888;</span>
+      <div><strong>Paciencia aca:</strong> Cuando tocan "Confirmar Desenganche", puede tardar unos segundos. Van a ver "Confirmando..." con un circulito. <strong>No toquen dos veces.</strong> Esperen a que termine.</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 8 — COMPLETADO -->
+  <!-- ============================== -->
+  <section class="block" id="completado">
+    <div class="block-header">
+      <span class="block-number">8</span>
+      <span class="block-title">Servicio completado</span>
+      <span class="block-time">~3 min</span>
+    </div>
+
+    <div class="say">
+      <p>Cuando el desenganche se confirma, aparece una pantalla con un <strong>circulo verde grande</strong> que dice:</p>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label">Pantalla final</div>
+      <p><span class="screen-text">SERVICIO COMPLETADO</span><br>
+      "Desenganche confirmado"<br>
+      "El vehiculo fue entregado correctamente."</p>
+    </div>
+
+    <div class="say">
+      <p><strong>Y eso es todo el proceso.</strong> Enganche, traslado, desenganche. Terminaron.</p>
+      <p>Desde aca pueden hacer dos cosas:</p>
+      <p>1. <strong>Compartir el acta en PDF:</strong> Tocan <strong>"Compartir acta PDF"</strong> (o "Descargar acta PDF" si el celular no tiene opcion de compartir). Les genera un PDF con todos los datos y las fotos, y se lo pueden mandar a quien necesiten por WhatsApp o donde sea.</p>
+      <p>2. <strong>Volver al inicio:</strong> Tocan <strong>"Volver al inicio"</strong> y quedan listos para un nuevo enganche.</p>
+    </div>
+
+    <div class="tip tip--do">
+      <span class="tip-icon">&#10003;</span>
+      <div><strong>El PDF se genera en el momento.</strong> Van a ver una barrita de progreso. Puede tardar unos segundos, sobre todo si hay muchas fotos. No cierren la app mientras genera.</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 9 — MIS ACTAS -->
+  <!-- ============================== -->
+  <section class="block" id="actas">
+    <div class="block-header">
+      <span class="block-number">9</span>
+      <span class="block-title">Mis actas (el historial)</span>
+      <span class="block-time">~3 min</span>
+    </div>
+
+    <div class="say">
+      <p>En la pantalla principal hay un boton que dice <strong>"Ver mis actas"</strong>. Ahi pueden ver <strong>todos los servicios que hicieron</strong>.</p>
+      <p>Cada acta muestra la patente, el estado (si dice <strong>"ENTREGADA"</strong> en verde es que ya se completo, si dice <strong>"EN CURSO"</strong> en amarillo es que todavia esta en proceso), la grua, la fecha y cuantas fotos tiene.</p>
+    </div>
+
+    <div class="say">
+      <p>Si tocan una acta, se abre el <strong>detalle</strong> con toda la informacion: las fotos del enganche, las del desenganche, el corralon, la dupla, todo. Desde ahi tambien pueden <strong>descargar o compartir el PDF</strong> otra vez si lo necesitan.</p>
+    </div>
+
+    <div class="say">
+      <p>Hay un <strong>buscador</strong> arriba para buscar por patente. Si necesitan encontrar un servicio de ayer o de la semana pasada, escriben la patente y lo encuentran.</p>
+    </div>
+
+    <div class="tip tip--show">
+      <span class="tip-icon">&#128241;</span>
+      <div><strong>Demo:</strong> Entrar a Mis Actas, mostrar la lista, buscar una patente, abrir el detalle de una acta y mostrar las fotos.</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 10 — PROBLEMAS -->
+  <!-- ============================== -->
+  <section class="block" id="problemas">
+    <div class="block-header">
+      <span class="block-number">10</span>
+      <span class="block-title">Si algo sale mal</span>
+      <span class="block-time">~5 min</span>
+    </div>
+
+    <div class="say">
+      <p>Cosas que pueden pasar y como resolverlas:</p>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Me equivoque de patente"</div>
+      <div class="qa-a">No se preocupen. Avisen al administrador o supervisor y ellos la corrigen desde su pantalla. Ustedes no necesitan hacer nada mas.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Se me trabo y no avanza" / "Dice Confirmando y no pasa nada"</div>
+      <div class="qa-a">Esperen 15-20 segundos. Si sigue sin avanzar, cierren la app y vuelvan a abrirla. El sistema recupera donde quedaron. <strong>Las fotos no se pierden.</strong></div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"No me deja hacer un nuevo enganche, dice que tengo un servicio activo"</div>
+      <div class="qa-a">Significa que tienen un servicio sin terminar. En la pantalla principal va a aparecer un cartel que dice <strong>"Servicio Activo Detectado"</strong>. Tienen dos opciones: <strong>"Reanudar Proceso"</strong> para terminarlo, o <strong>"Liberar Grua"</strong> si fue un error y quieren empezar de cero.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"No tengo senal / No me anda internet"</div>
+      <div class="qa-a">Las fotos se guardan en el celular. En cuanto recuperen la senal, abran la app y las fotos se suben solas. Si ven un cartelito rojo que dice "No se pudieron subir las fotos", toquen <strong>"Reintentar subida de fotos"</strong>.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Empece un enganche por error, quiero cancelarlo"</div>
+      <div class="qa-a">Vuelvan a la pantalla principal. Va a aparecer un cartel que dice <strong>"Servicio Activo Detectado"</strong>. Ahi tocan <strong>"Liberar Grua"</strong>, les pide confirmar y listo: se cancela el servicio y pueden empezar uno nuevo.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Se me apago el celular en el medio del servicio"</div>
+      <div class="qa-a">Cuando lo prendan de nuevo y abran la app, <strong>todo sigue donde lo dejaron</strong>. El servicio queda abierto esperandolos. Las fotos que ya sacaron estan guardadas.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Me cambiaron de grua en el medio del dia"</div>
+      <div class="qa-a">Si no tienen servicio activo, tocan el <strong>lapicito</strong> en "Turno de hoy" y lo reconfiguran. Si tienen servicio activo, primero terminenlo y despues cambien. Si no pueden, toquen <strong>"Mi turno no esta bien"</strong> para avisar al administrador.</div>
+    </div>
+
+    <div class="tip tip--empathy">
+      <span class="tip-icon">&#9829;</span>
+      <div><strong>Mensaje clave:</strong> "Si algo no funciona, no se frustren. Llamen al administrador. El sistema guarda todo, no se pierde nada. Lo peor que puede pasar es que tengan que esperar un poco."</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 11 — PREGUNTAS FRECUENTES -->
+  <!-- ============================== -->
+  <section class="block" id="preguntas">
+    <div class="block-header">
+      <span class="block-number">11</span>
+      <span class="block-title">Preguntas que seguro van a hacer</span>
+      <span class="block-time">~5 min</span>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Y si no me acuerdo de todos los pasos?"</div>
+      <div class="qa-a">El sistema los guia. No necesitan acordarse de nada: paso a paso les dice que hacer. Ademas, es siempre lo mismo: patente, 4 fotos, listo. Despues de hacerlo 2 o 3 veces ya lo hacen de memoria.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Esto me va a sacar mas tiempo?"</div>
+      <div class="qa-a">Al principio, los primeros dias, puede que tarden un poquito mas porque es nuevo. Pero el proceso completo lleva menos de 2 minutos una vez que lo agarran. Es mas rapido que mandar las fotos por WhatsApp y escribir los datos.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Quien ve lo que yo cargo?"</div>
+      <div class="qa-a">Los administradores y supervisores. Ellos pueden ver todos los servicios. Ustedes solo ven los suyos en "Mis Actas". Ningun otro operador puede ver lo de ustedes.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Y el WhatsApp? Seguimos mandando fotos?"</div>
+      <div class="qa-a"><strong>No.</strong> Las fotos van por aca ahora. No hace falta mandar nada por WhatsApp. Todo queda guardado automaticamente.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Y si saco una foto borrosa?"</div>
+      <div class="qa-a">Antes de confirmar, pueden ver las fotos en miniatura. Si alguna salio mal, la tocan y la sacan de nuevo. Una vez que confirman, ya no pueden cambiarla ustedes, pero el supervisor puede corregir cosas si hace falta.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Puedo usar el sistema si no tengo datos moviles?"</div>
+      <div class="qa-a">Necesitan conexion para iniciar el servicio y para confirmar el desenganche. Las fotos las pueden sacar sin senal, se guardan en el celular y se suben cuando tengan conexion. Pero lo ideal es tener datos.</div>
+    </div>
+
+    <div class="qa-card">
+      <div class="qa-q">"Y si rompo el celular?"</div>
+      <div class="qa-a">Lo que ya subieron esta a salvo en el servidor. Si cambian de celular, entran con su mismo usuario y contrasena y ven todo. Lo unico que se pierde son fotos que no se hayan subido todavia.</div>
+    </div>
+  </section>
+
+  <!-- ============================== -->
+  <!-- BLOQUE 12 — CIERRE -->
+  <!-- ============================== -->
+  <section class="block" id="cierre">
+    <div class="block-header">
+      <span class="block-number">12</span>
+      <span class="block-title">Cierre</span>
+      <span class="block-time">~3 min</span>
+    </div>
+
+    <div class="say">
+      <p><strong>Resumen de lo que vimos:</strong> El proceso tiene 3 momentos. Los cuento con los dedos:</p>
+      <p><strong>UNO:</strong> Llegan al vehiculo, abren la app, ponen la patente, sacan 4 fotos, confirman. Eso es el enganche.</p>
+      <p><strong>DOS:</strong> Manejan al corralon. No tocan nada en el celular.</p>
+      <p><strong>TRES:</strong> Llegan al corralon, eligen el destino, sacan 4 fotos mas, confirman. Eso es el desenganche. Listo, servicio terminado.</p>
+    </div>
+
+    <div class="say">
+      <p>Los proximos dias van a estar acompanados. Si algo no les sale, pregunten. No hay preguntas tontas. Prefiero que pregunten 10 veces antes de que se queden trabados solos en la calle.</p>
+    </div>
+
+    <div class="tip tip--empathy">
+      <span class="tip-icon">&#9829;</span>
+      <div><strong>Cierre emocional:</strong> "Esto lo estamos haciendo entre todos. Ustedes son la parte mas importante porque son los que estan en la calle. Sin ustedes esto no funciona. La idea es que les haga la vida mas facil, no mas dificil. Denle una chance."</div>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ============================== -->
+  <!-- CHECKLIST PARA EL CAPACITADOR -->
+  <!-- ============================== -->
+  <section class="block" id="checklist">
+    <div class="block-header">
+      <span class="block-title">Checklist pre-capacitacion</span>
+    </div>
+
+    <ul class="checklist">
+      <li>Celular propio cargado con la app abierta para demo en vivo</li>
+      <li>Un vehiculo cerca para hacer la demo de fotos (puede ser cualquiera estacionado)</li>
+      <li>Lista de usuarios y contrasenas de cada operador impresas en papel</li>
+      <li>Verificar que todos los operadores estan creados en el sistema</li>
+      <li>Verificar que las gruas, duplas y corralones estan cargados</li>
+      <li>Tener el numero del administrador a mano para la seccion de "si algo sale mal"</li>
+      <li>Un vehiculo o corralon de prueba para que cada operador practique (ideal)</li>
+      <li>Cargar el acceso directo en los celulares de los operadores</li>
+    </ul>
+  </section>
+
+</div>

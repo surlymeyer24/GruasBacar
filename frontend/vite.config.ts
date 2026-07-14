@@ -17,7 +17,7 @@ export default defineConfig(() => {
         manifest: {
           name: 'BACAR — Control de Grúas',
           short_name: 'GrúasBacar',
-          description: 'Plataforma de gestión de grúas, secuestro vehicular, auditoría fotográfica y control operativo de flota en tiempo real.',
+          description: 'Plataforma de gestión de grúas, servicio vehicular, auditoría fotográfica y control operativo de flota en tiempo real.',
           theme_color: '#161A1D',
           background_color: '#161A1D',
           display: 'standalone',
@@ -44,6 +44,10 @@ export default defineConfig(() => {
           ],
         },
         workbox: {
+          skipWaiting: true,
+          clientsClaim: true,
+          navigationPreload: false,
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
           runtimeCaching: [
             {
@@ -81,8 +85,8 @@ export default defineConfig(() => {
       include: ['react', 'react-dom', 'react-router-dom', 'motion/react', 'jspdf'],
     },
     server: {
-      host: '127.0.0.1',
-      port: 5173,
+      host: '0.0.0.0',
+      port: 5174,
       strictPort: true,
       // Vite 6 rechaza hosts desconocidos (túneles, preview embebido).
       allowedHosts: true,
@@ -91,9 +95,7 @@ export default defineConfig(() => {
         process.env.DISABLE_HMR === 'true'
           ? false
           : {
-              host: '127.0.0.1',
-              port: 5173,
-              clientPort: 5173,
+              port: 5174,
             },
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },

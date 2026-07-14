@@ -1,0 +1,264 @@
+<title>Certificado de Capacitacion — gruasBacar</title>
+<style>
+  :root {
+    --ink: #1C1917;
+    --ink-2: #57534E;
+    --ink-3: #A8A29E;
+    --border: #D6D3D1;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @page { size: landscape; margin: 0; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #F5F5F4;
+    color: var(--ink);
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .page { box-shadow: none; border: none; }
+    .no-print { display: none; }
+  }
+
+  .page {
+    width: 297mm;
+    height: 210mm;
+    background: white;
+    padding: 36px 52px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    border: 1px solid #E7E5E4;
+    position: relative;
+    overflow: hidden;
+  }
+
+  @media (max-width: 900px) {
+    .page { width: 100%; height: auto; padding: 28px 20px; }
+  }
+
+  .page::before {
+    content: '';
+    position: absolute;
+    top: 16px; left: 16px; right: 16px; bottom: 16px;
+    border: 2px solid var(--border);
+    pointer-events: none;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    height: calc(210mm - 72px);
+    justify-content: space-between;
+  }
+
+  @media (max-width: 900px) {
+    .content { height: auto; gap: 24px; }
+  }
+
+  .header {
+    text-align: center;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .company {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    margin-bottom: 14px;
+  }
+
+  .title {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+
+  .body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .certifica {
+    text-align: center;
+    font-size: 13px;
+    color: var(--ink-2);
+    margin-bottom: 16px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .nombre-line {
+    text-align: center;
+    margin-bottom: 6px;
+    padding: 0 40px;
+  }
+
+  .nombre-line .line {
+    display: block;
+    border-bottom: 1px solid var(--ink);
+    height: 32px;
+    margin: 0 auto;
+    max-width: 400px;
+  }
+
+  .nombre-label {
+    font-size: 11px;
+    color: var(--ink-3);
+    text-align: center;
+    margin-bottom: 20px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .intro {
+    font-size: 14px;
+    color: var(--ink-2);
+    text-align: center;
+    margin-bottom: 18px;
+    line-height: 1.6;
+    max-width: 520px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .topics {
+    max-width: 520px;
+    margin: 0 auto 20px;
+    padding: 0;
+    list-style: none;
+  }
+
+  .topics li {
+    padding: 7px 0;
+    border-bottom: 1px solid #F0EEEC;
+    font-size: 13px;
+    color: var(--ink);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    line-height: 1.5;
+  }
+
+  .topics li:last-child { border-bottom: none; }
+
+  .check {
+    color: var(--ink-3);
+    font-size: 15px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .fecha-section {
+    text-align: center;
+  }
+
+  .fecha-text {
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+
+  .footer {
+    display: flex;
+    justify-content: center;
+    padding-top: 20px;
+  }
+
+  .firma {
+    text-align: center;
+    min-width: 220px;
+  }
+
+  .firma .line {
+    border-bottom: 1px solid var(--ink);
+    height: 44px;
+    margin: 0 auto;
+    max-width: 220px;
+  }
+
+  .firma .label {
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-top: 5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .no-print {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--ink);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+
+  .no-print:hover { opacity: 0.9; }
+</style>
+
+<div class="page">
+  <div class="content">
+
+    <div class="header">
+      <div class="company">BACAR S.A.</div>
+      <h1 class="title">Certificado de Capacitacion</h1>
+      <p class="subtitle">Sistema de Gestion de Operaciones de Gruas</p>
+    </div>
+
+    <div class="body">
+      <p class="certifica">Se certifica que</p>
+
+      <div class="nombre-line"><span class="line"></span></div>
+      <p class="nombre-label">Nombre y apellido del operador</p>
+
+      <p class="intro">asistio a la capacitacion sobre el uso del sistema <strong>gruasBacar</strong> y fue instruido en los siguientes temas:</p>
+
+      <ul class="topics">
+        <li><span class="check">&#10003;</span> Configuracion del turno del dia (seleccion de grua, dupla y tipo de operacion)</li>
+        <li><span class="check">&#10003;</span> Registro de enganche con ingreso de patente del vehiculo y captura de fotos</li>
+        <li><span class="check">&#10003;</span> Registro de desenganche con seleccion de corralon y captura de fotos de entrega</li>
+        <li><span class="check">&#10003;</span> Generacion y envio del PDF del servicio realizado</li>
+        <li><span class="check">&#10003;</span> Consulta de servicios realizados desde la seccion Mis Actas</li>
+      </ul>
+
+      <div class="fecha-section">
+        <p class="fecha-text">Cordoba, Cordoba, Argentina — Viernes 10 de Julio de 2026</p>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="firma">
+        <div class="line"></div>
+        <p class="label">Firma del operador</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<button class="no-print" onclick="window.print()">Imprimir certificado</button>

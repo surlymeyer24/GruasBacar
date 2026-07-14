@@ -30,6 +30,7 @@ type GoogleApisModule = typeof import('googleapis');
 type DriveClient = ReturnType<GoogleApisModule['google']['drive']>;
 
 const folderCache = new Map<string, string>();
+const rootFolderNameCache = new Map<string, string>();
 let cachedServiceAccountEmail: string | null = null;
 let googleApisPromise: Promise<GoogleApisModule> | null = null;
 
@@ -239,13 +240,32 @@ async function getOrCreateFolder(drive: DriveClient, parentId: string, name: str
   }
 }
 
+async function getRootFolderName(drive: DriveClient, rootFolderId: string): Promise<string> {
+  const cached = rootFolderNameCache.get(rootFolderId);
+  if (cached !== undefined) return cached;
+  const folder = await getFolderMetadata(drive, rootFolderId);
+  const name = folder.name?.trim().toLowerCase() ?? '';
+  rootFolderNameCache.set(rootFolderId, name);
+  return name;
+}
+
+/** Evita Gruas/Gruas/... cuando GOOGLE_DRIVE_FOLDER_ID ya apunta a la carpeta "Gruas". */
+function stripDuplicateGruasSegment(rootFolderName: string, segments: string[]): string[] {
+  if (segments[0]?.toLowerCase() === 'gruas' && rootFolderName === 'gruas') {
+    return segments.slice(1);
+  }
+  return segments;
+}
+
 async function ensureFolderPath(
   drive: DriveClient,
   rootFolderId: string,
   segments: string[]
 ): Promise<string> {
+  const rootFolderName = await getRootFolderName(drive, rootFolderId);
+  const normalized = stripDuplicateGruasSegment(rootFolderName, segments);
   let parentId = rootFolderId;
-  for (const segment of segments) {
+  for (const segment of normalized) {
     parentId = await getOrCreateFolder(drive, parentId, segment);
   }
   return parentId;
@@ -258,7 +278,7 @@ export async function prepararCarpetasServicio(
   rootFolderId: string,
   legajo: string,
   patente: string,
-  numeroInfraccion: string,
+  numeroInfraccion: string | undefined,
   fechaServicio?: FechaServicioInput
 ): Promise<void> {
   const folderId = rootFolderId.trim();
@@ -282,8 +302,10 @@ async function resolveFolderIdForPath(
   rootFolderId: string,
   folderSegments: string[]
 ): Promise<string | null> {
+  const rootFolderName = await getRootFolderName(drive, rootFolderId);
+  const normalized = stripDuplicateGruasSegment(rootFolderName, folderSegments);
   let parentId = rootFolderId.trim();
-  for (const segment of folderSegments) {
+  for (const segment of normalized) {
     const cacheKey = `${parentId}/${segment}`;
     const cached = folderCache.get(cacheKey);
     if (cached) {
@@ -335,7 +357,7 @@ export async function obtenerFotoEnDrive(
   };
 }
 
-/** Sube JPEG a Drive bajo rootFolderId siguiendo relativePath (ej. Gruas/2026-06-17/CH001/AB123CD_INF228391/enganche/2026-06-17_CH001_INF228391_delantera.jpg). */
+/** Sube JPEG a Drive bajo rootFolderId siguiendo relativePath (ej. 2026-06-17/CH001/AB123CD_INF228391/enganche/delantera.jpg). */
 export async function subirFotoDriveFromBuffer(
   rootFolderId: string,
   relativePath: string,

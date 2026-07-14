@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Servicio, Grua, enganchadorDeDuplaServicio, geoEngancheDeServicio } from "@gruasbacar/shared";
-import { Users, User, FileText, Compass, Clock, ArrowRight, MapPin } from "lucide-react";
+import { Servicio, Grua, enganchadorDeDuplaServicio, geoEngancheDeServicio, displayPatente } from "@gruasbacar/shared";
+import { Users, FileText, Compass, Clock, ArrowRight, MapPin } from "lucide-react";
 import { fechaServicio, formatFechaCorta, formatHora } from "../../utils/formatters";
 import { gruaService } from "../../services/grua.service";
-import { resolverPatenteGrua } from "../../utils/gruaDisplay";
+import { resolverLabelGrua } from "../../utils/gruaDisplay";
 import { MapaCoordenadasPreview } from "../shared/MapaCoordenadasPreview";
 
 interface PantallaTrasladoProps {
@@ -25,7 +25,7 @@ export const PantallaTraslado: React.FC<PantallaTrasladoProps> = ({
     gruaService.getAllGruas().then(setGruasCatalog).catch(console.error);
   }, []);
 
-  const patenteGrua = resolverPatenteGrua(servicio.grua, gruasCatalog);
+  const patenteGrua = resolverLabelGrua(servicio.grua, gruasCatalog);
   const geoEnganche = geoEngancheDeServicio(servicio);
 
   return (
@@ -46,15 +46,9 @@ export const PantallaTraslado: React.FC<PantallaTrasladoProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Patente Infractor</span>
-              <span className="font-mono font-extrabold text-2xl text-white tracking-widest">{servicio.patente}</span>
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block font-sans">Acta de Infracción</span>
-              <span className="font-mono font-bold text-lg text-brand-cta tracking-wider">{servicio.numeroInfraccion}</span>
-            </div>
+          <div>
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Patente Infractor</span>
+            <span className="font-mono font-extrabold text-2xl text-white tracking-widest">{displayPatente(servicio.patente)}</span>
           </div>
 
           <div className="pt-4 border-t border-zinc-800/70 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
@@ -86,26 +80,15 @@ export const PantallaTraslado: React.FC<PantallaTrasladoProps> = ({
           Personal y Recursos Asignados
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1 text-xs text-gray-700">
+        <div className="grid grid-cols-1 gap-4 pt-1 text-xs text-gray-700">
           <div className="flex items-start gap-2.5">
             <div className="p-2 bg-brand-bg w-fit rounded-lg border border-gray-100">
               <Users className="w-4 h-4 text-zinc-400" />
             </div>
             <div>
               <span className="text-[10px] font-bold text-gray-450 uppercase block">Dupla de Chofer y Enganchador</span>
-              <span className="font-semibold text-gray-850">{servicio.dupla.chofer}</span>
-              <span className="block text-[10px] text-gray-400">Enganchador: {enganchadorDeDuplaServicio(servicio.dupla)}</span>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2.5">
-            <div className="p-2 bg-brand-bg w-fit rounded-lg border border-gray-100">
-              <User className="w-4 h-4 text-zinc-400" />
-            </div>
-            <div>
-              <span className="text-[10px] font-bold text-gray-450 uppercase block">Inspector Municipal Actuante</span>
-              <span className="font-semibold text-gray-855">{servicio.dupla.inspector}</span>
-              <span className="block text-[10px] text-gray-400">Oficial de Tránsito firmante</span>
+              <span className="font-semibold text-gray-850">{servicio.dupla?.chofer ?? "—"}</span>
+              <span className="block text-[10px] text-gray-400">Enganchador: {enganchadorDeDuplaServicio(servicio.dupla) || "—"}</span>
             </div>
           </div>
         </div>
@@ -124,10 +107,15 @@ export const PantallaTraslado: React.FC<PantallaTrasladoProps> = ({
         </p>
         {geoEnganche ? (
           <MapaCoordenadasPreview lat={geoEnganche.lat} lng={geoEnganche.lng} />
-        ) : (
+        ) : servicio.eventos ? (
           <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200/60 rounded-xl p-3">
             Aún no hay coordenadas del enganche. Completá las fotos del enganche para registrar la ubicación.
           </p>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="w-4 h-4 rounded-full border-2 border-gray-300 border-t-transparent animate-spin" />
+            Cargando ubicación…
+          </div>
         )}
 
         <div className="relative flex items-center justify-between text-xs px-2 pt-2">

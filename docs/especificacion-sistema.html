@@ -1,0 +1,1749 @@
+<title>gruasBacar — Especificacion del Sistema</title>
+<style>
+  @font-face {
+    font-family: 'SystemDisplay';
+    src: local('Segoe UI'), local('system-ui');
+  }
+
+  :root {
+    --ink: #1B2838;
+    --ink-secondary: #4A5568;
+    --ink-muted: #8896A4;
+    --surface: #F6F4EF;
+    --surface-card: #FFFFFF;
+    --surface-raised: #EDEAE3;
+    --accent: #C4960F;
+    --accent-soft: #C4960F18;
+    --accent-border: #C4960F40;
+    --border: #D8D4CC;
+    --border-light: #E8E5DD;
+    --success: #2D7D46;
+    --success-soft: #2D7D4612;
+    --alert: #B83A2E;
+    --alert-soft: #B83A2E10;
+    --info: #2563EB;
+    --info-soft: #2563EB10;
+    --tag-bg: #1B283810;
+    --shadow-sm: 0 1px 2px rgba(27,40,56,0.06);
+    --shadow-md: 0 2px 8px rgba(27,40,56,0.08);
+    --radius: 6px;
+    --font-display: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --font-mono: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #E2E0DB;
+      --ink-secondary: #A8B0BA;
+      --ink-muted: #6E7A88;
+      --surface: #0F1419;
+      --surface-card: #1A2332;
+      --surface-raised: #222E3C;
+      --accent: #E0B328;
+      --accent-soft: #E0B32818;
+      --accent-border: #E0B32840;
+      --border: #2A3544;
+      --border-light: #1E2A38;
+      --success: #4ADE80;
+      --success-soft: #4ADE8015;
+      --alert: #F87171;
+      --alert-soft: #F8717115;
+      --info: #60A5FA;
+      --info-soft: #60A5FA15;
+      --tag-bg: #E2E0DB12;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+      --shadow-md: 0 2px 8px rgba(0,0,0,0.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #E2E0DB;
+    --ink-secondary: #A8B0BA;
+    --ink-muted: #6E7A88;
+    --surface: #0F1419;
+    --surface-card: #1A2332;
+    --surface-raised: #222E3C;
+    --accent: #E0B328;
+    --accent-soft: #E0B32818;
+    --accent-border: #E0B32840;
+    --border: #2A3544;
+    --border-light: #1E2A38;
+    --success: #4ADE80;
+    --success-soft: #4ADE8015;
+    --alert: #F87171;
+    --alert-soft: #F8717115;
+    --info: #60A5FA;
+    --info-soft: #60A5FA15;
+    --tag-bg: #E2E0DB12;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  :root[data-theme="light"] {
+    --ink: #1B2838;
+    --ink-secondary: #4A5568;
+    --ink-muted: #8896A4;
+    --surface: #F6F4EF;
+    --surface-card: #FFFFFF;
+    --surface-raised: #EDEAE3;
+    --accent: #C4960F;
+    --accent-soft: #C4960F18;
+    --accent-border: #C4960F40;
+    --border: #D8D4CC;
+    --border-light: #E8E5DD;
+    --success: #2D7D46;
+    --success-soft: #2D7D4612;
+    --alert: #B83A2E;
+    --alert-soft: #B83A2E10;
+    --info: #2563EB;
+    --info-soft: #2563EB10;
+    --tag-bg: #1B283810;
+    --shadow-sm: 0 1px 2px rgba(27,40,56,0.06);
+    --shadow-md: 0 2px 8px rgba(27,40,56,0.08);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--surface);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: 100vh;
+  }
+
+  @media (max-width: 900px) {
+    .page { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+  }
+
+  /* ── Sidebar / TOC ── */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 28px 16px 28px 20px;
+    background: var(--surface-card);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .sidebar-logo {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+
+  .sidebar-subtitle {
+    font-size: 11px;
+    color: var(--ink-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .toc-group {
+    margin-bottom: 18px;
+  }
+
+  .toc-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+    padding-left: 8px;
+  }
+
+  .toc-link {
+    display: block;
+    padding: 5px 8px;
+    font-size: 13px;
+    color: var(--ink-secondary);
+    text-decoration: none;
+    border-radius: 4px;
+    transition: all 0.15s;
+    line-height: 1.4;
+  }
+
+  .toc-link:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .toc-link.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Main content ── */
+  .main {
+    padding: 40px 48px 80px;
+    max-width: 880px;
+  }
+
+  @media (max-width: 900px) {
+    .main { padding: 24px 20px 60px; }
+  }
+
+  /* ── Header ── */
+  .doc-header {
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .doc-header h1 {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 8px;
+    text-wrap: balance;
+  }
+
+  .doc-header .tagline {
+    font-size: 16px;
+    color: var(--ink-secondary);
+    max-width: 560px;
+  }
+
+  .doc-meta {
+    display: flex;
+    gap: 20px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .doc-meta-item {
+    font-size: 12px;
+    color: var(--ink-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .doc-meta-item strong {
+    color: var(--ink-secondary);
+    font-weight: 600;
+  }
+
+  /* ── Sections ── */
+  .section {
+    margin-bottom: 40px;
+    scroll-margin-top: 20px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .section-header:hover .section-number {
+    background: var(--accent);
+    color: var(--surface-card);
+  }
+
+  .section-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: all 0.2s;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .section-toggle {
+    font-size: 18px;
+    color: var(--ink-muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .section.collapsed .section-toggle { transform: rotate(-90deg); }
+  .section.collapsed .section-body { display: none; }
+
+  h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 24px 0 10px;
+    letter-spacing: -0.01em;
+  }
+
+  h4 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink-secondary);
+    margin: 18px 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  p {
+    margin-bottom: 12px;
+    color: var(--ink-secondary);
+  }
+
+  p strong { color: var(--ink); }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-body {
+    font-size: 14px;
+    color: var(--ink-secondary);
+    line-height: 1.6;
+  }
+
+  .card-body p:last-child { margin-bottom: 0; }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+  }
+
+  .tag--accent { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border); }
+  .tag--success { background: var(--success-soft); color: var(--success); }
+  .tag--alert { background: var(--alert-soft); color: var(--alert); }
+  .tag--info { background: var(--info-soft); color: var(--info); }
+  .tag--muted { background: var(--tag-bg); color: var(--ink-muted); }
+
+  /* ── Tables ── */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 12px 0 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--ink-secondary);
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  td code, p code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--tag-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+
+  /* ── Lists ── */
+  ul, ol {
+    margin: 8px 0 14px 20px;
+    color: var(--ink-secondary);
+    font-size: 14px;
+  }
+
+  li { margin-bottom: 5px; line-height: 1.55; }
+  li strong { color: var(--ink); }
+
+  /* ── Rule blocks ── */
+  .rule-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+  }
+
+  .rule {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface-card);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--ink-secondary);
+    line-height: 1.5;
+  }
+
+  .rule-num {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--accent-soft);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* ── Process flow ── */
+  .flow-step {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 4px;
+    position: relative;
+  }
+
+  .flow-step::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 32px;
+    bottom: -4px;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .flow-step:last-child::before { display: none; }
+
+  .flow-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .flow-content {
+    padding-bottom: 20px;
+    flex: 1;
+  }
+
+  .flow-content h4 {
+    margin: 4px 0 6px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .flow-content p {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+
+  /* ── Use case cards ── */
+  .uc-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 10px;
+  }
+
+  .uc-card h4 {
+    margin: 0 0 4px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .uc-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .uc-meta span {
+    font-size: 11px;
+    color: var(--ink-muted);
+  }
+
+  .uc-desc {
+    font-size: 13px;
+    color: var(--ink-secondary);
+    margin: 0;
+  }
+
+  /* ── State chip ── */
+  .state-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin: 14px 0;
+    flex-wrap: wrap;
+  }
+
+  .state-chip {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    font-family: var(--font-mono);
+  }
+
+  .state-arrow {
+    font-size: 18px;
+    color: var(--ink-muted);
+    padding: 0 6px;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    border: 0;
+  }
+
+  /* ── Highlight callout ── */
+  .callout {
+    padding: 14px 18px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    margin: 12px 0;
+    line-height: 1.55;
+  }
+  .callout--accent { background: var(--accent-soft); border-left: 3px solid var(--accent); color: var(--ink-secondary); }
+  .callout--info { background: var(--info-soft); border-left: 3px solid var(--info); color: var(--ink-secondary); }
+</style>
+
+<h2 class="sr-only">Documento de especificacion completa del sistema gruasBacar: alcance, reglas de negocio, requerimientos, casos de uso y procesos.</h2>
+
+<div class="page">
+  <!-- Sidebar TOC -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">gruasBacar</div>
+    <div class="sidebar-subtitle">Especificacion del Sistema</div>
+
+    <div class="toc-group">
+      <div class="toc-group-label">General</div>
+      <a class="toc-link" href="#alcance">Alcance del sistema</a>
+      <a class="toc-link" href="#objetivo">Objetivo general</a>
+      <a class="toc-link" href="#usuarios">Usuarios y roles</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Requerimientos</div>
+      <a class="toc-link" href="#rf">Funcionales</a>
+      <a class="toc-link" href="#rnf">No funcionales</a>
+      <a class="toc-link" href="#reglas">Reglas de negocio</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Modelado</div>
+      <a class="toc-link" href="#casos-uso">Casos de uso</a>
+      <a class="toc-link" href="#abms">ABMs</a>
+      <a class="toc-link" href="#procesos">Procesos core</a>
+      <a class="toc-link" href="#transaccionales">Procesos transaccionales</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Complementario</div>
+      <a class="toc-link" href="#escenarios">Escenarios</a>
+      <a class="toc-link" href="#maquina-estados">Maquina de estados</a>
+      <a class="toc-link" href="#modelo-datos">Modelo de datos</a>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+    <header class="doc-header">
+      <h1>Sistema de Gestion de Operaciones de Gruas</h1>
+      <p class="tagline">Plataforma web mobile-first para la digitalizacion integral del ciclo de vida de acarreos vehiculares — BACAR S.A.</p>
+      <div class="doc-meta">
+        <span class="doc-meta-item"><strong>Version:</strong> 1.0 Piloto</span>
+        <span class="doc-meta-item"><strong>Fecha:</strong> Julio 2026</span>
+        <span class="doc-meta-item"><strong>Stack:</strong> React + Firebase + Google Drive</span>
+      </div>
+    </header>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 1. ALCANCE -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="alcance">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">1</span>
+        <span class="section-title">Alcance del Sistema</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <div class="card">
+          <div class="card-body">
+            <p><strong>gruasBacar</strong> es una plataforma web mobile-first que digitaliza el ciclo completo de las operaciones de acarreo de vehiculos infractores o accidentados, desde el enganche en via publica hasta la entrega en corralon.</p>
+            <p>El sistema reemplaza el registro manual en WhatsApp por un flujo digital con <strong>fotos geolocalizadas</strong>, <strong>timestamps de servidor</strong> y <strong>trazabilidad auditoria</strong>, generando actas digitales de control interno</p>
+          </div>
+        </div>
+
+        <h3>Dentro del alcance</h3>
+        <ul>
+          <li>Registro digital del enganche con 4 fotos obligatorias y geolocalización</li>
+          <li>Seguimiento del traslado en tiempo real</li>
+          <li>Registro del desenganche en corralon con fotos de llegada</li>
+          <li>Generacion y exportacion de actas en PDF</li>
+          <li>Gestion de flota: gruas, corralones, duplas y usuarios</li>
+          <li>Asignacion de turnos diarios con TTL de 8 horas</li>
+          <li>Panel de administracion con KPIs y monitoreo en vivo</li>
+          <li>Panel de supervision con acceso de solo lectura</li>
+          <li>Historial completo con edicion versionada y anulacion</li>
+          <li>Reportes analiticos con filtros multiples</li>
+          <li>Control de vencimiento de carnets de conducir</li>
+          <li>Sistema de notificaciones en tiempo real (EN DESARROLLO)</li>
+          <li>Creacion manual de actas (backup operativo)</li>
+        </ul>
+
+        <h3>Fuera del alcance</h3>
+        <ul>
+          <li>Facturacion y cobros</li>
+          <li>Seguimiento GPS en tiempo real del vehiculo grua</li>
+          <li>Integracion con sistemas municipales externos</li>
+          <li>App nativa (se usa PWA mobile-first)</li>
+          <li>Gestion de reclamos del propietario del vehiculo</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 2. OBJETIVO -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="objetivo">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">2</span>
+        <span class="section-title">Objetivo General</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <div class="callout callout--accent">
+          <strong>Objetivo:</strong> Proveer a BACAR S.A. de una herramienta digital que garantice la <strong>trazabilidad completa</strong> y la <strong>eficiencia operativa</strong> de cada operacion de acarreo, reduciendo los margenes de error.
+        </div>
+
+        <h3>Objetivos especificos</h3>
+        <ol>
+          <li><strong>Trazabilidad:</strong> Cada operacion queda documentada con fotos geolocalizadas y timestamps de servidor inalterables, generando actas de control interno</li>
+          <li><strong>Eficiencia operativa:</strong> El operador sigue un flujo guiado paso a paso desde su celular, minimizando tiempos muertos y errores de carga.</li>
+          <li><strong>Visibilidad gerencial:</strong> Administradores y supervisores acceden a dashboards con KPIs, monitoreo en vivo y reportes analiticos para tomar decisiones informadas.</li>
+          <li><strong>Integridad de datos:</strong> Toda edicion o anulacion queda versionada con motivo, autor y diff de cambios, creando un trail de auditoria completo.</li>
+          <li><strong>Resiliencia operativa:</strong> Fotos cacheadas en IndexedDB, uploads resumibles y reintentos automaticos aseguran que no se pierda informacion por problemas de conectividad.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 3. USUARIOS Y ROLES -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="usuarios">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">3</span>
+        <span class="section-title">Usuarios y Roles</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <p>El sistema soporta <strong>multi-rol</strong>: un usuario puede tener varios roles simultaneos (ej: ADMIN + ENGANCHADOR).</p>
+
+        <div class="card" style="border-left: 3px solid var(--alert);">
+          <div class="card-title"><span class="tag tag--alert">SUPERADMIN</span></div>
+          <div class="card-body">
+            <p><strong>Descripcion:</strong> Acceso total al sistema. Unico rol capaz de asignar SUPERADMIN a otros usuarios. Hereda todos los permisos de ADMIN.</p>
+            <p><strong>Objetivo:</strong> Gestionar la configuracion critica del sistema y la escalacion de privilegios.</p>
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 3px solid var(--accent);">
+          <div class="card-title"><span class="tag tag--accent">ADMIN</span></div>
+          <div class="card-body">
+            <p><strong>Descripcion:</strong> Gestion completa de flota, usuarios, turnos, servicios, reportes y documentacion. Puede editar y anular cualquier servicio.</p>
+            <p><strong>Objetivo:</strong> Administrar la operacion diaria, configurar la flota y supervisar el rendimiento del equipo.</p>
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 3px solid var(--info);">
+          <div class="card-title"><span class="tag tag--info">SUPERVISOR</span></div>
+          <div class="card-body">
+            <p><strong>Descripcion:</strong> Monitoreo de solo lectura de todos los servicios. Puede crear actas manuales, editar y anular servicios. No gestiona usuarios ni flota.</p>
+            <p><strong>Objetivo:</strong> Vigilar la operacion en campo y actuar como backup para la creacion de actas cuando el flujo normal falla.</p>
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 3px solid var(--success);">
+          <div class="card-title"><span class="tag tag--success">ENGANCHADOR</span></div>
+          <div class="card-body">
+            <p><strong>Descripcion:</strong> Operador de campo que ejecuta el flujo enganche-traslado-desenganche. Solo ve sus propios servicios. Puede anular sus servicios en estados ENGANCHADO o EN_TRASLADO.</p>
+            <p><strong>Objetivo:</strong> Registrar cada operacion de acarreo en campo de forma rapida y completa desde el dispositivo movil.</p>
+            <p style="margin-bottom:0"><span class="tag tag--muted">CHOFER</span> es un alias que se trata como ENGANCHADOR.</p>
+          </div>
+        </div>
+
+        <h3>Matriz de permisos</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Recurso</th><th>SUPERADMIN</th><th>ADMIN</th><th>SUPERVISOR</th><th>ENGANCHADOR</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Gestion de usuarios</td><td>SI</td><td>SI</td><td>No</td><td>No</td></tr>
+              <tr><td>Gestion de flota</td><td>SI</td><td>SI</td><td>No</td><td>No</td></tr>
+              <tr><td>Asignacion de turnos</td><td>SI</td><td>SI</td><td>No</td><td>No</td></tr>
+              <tr><td>Ver todos los servicios</td><td>SI</td><td>SI</td><td>SI</td><td>No</td></tr>
+              <tr><td>Editar/anular cualquier servicio</td><td>SI</td><td>SI</td><td>SI</td><td>Solo propios*</td></tr>
+              <tr><td>Crear actas manuales</td><td>SI</td><td>SI</td><td>SI</td><td>No</td></tr>
+              <tr><td>Reportes y analytics</td><td>SI</td><td>SI</td><td>SI</td><td>No</td></tr>
+              <tr><td>Dashboard con KPIs</td><td>SI</td><td>SI</td><td>SI (propio)</td><td>No</td></tr>
+              <tr><td>Ejecutar flujo de campo</td><td>SI**</td><td>SI**</td><td>No</td><td>SI</td></tr>
+              <tr><td>Ver historial propio</td><td>SI</td><td>SI</td><td>SI</td><td>SI</td></tr>
+              <tr><td>Documentacion (carnets)</td><td>SI</td><td>SI</td><td>No</td><td>No</td></tr>
+              <tr><td>Asignar rol SUPERADMIN</td><td>SI</td><td>No</td><td>No</td><td>No</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:12px;color:var(--ink-muted)">* Solo en estados ENGANCHADO y EN_TRASLADO. ** Si tambien tiene rol ENGANCHADOR.</p>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 4. REQUERIMIENTOS FUNCIONALES -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="rf">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">4</span>
+        <span class="section-title">Requerimientos Funcionales</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+
+        <h3>RF-01 Autenticacion y autorizacion</h3>
+        <ul>
+          <li>Login por email/contraseña via Firebase Auth</li>
+          <li>Sesion persistente con redireccion automatica post-login segun rol y estado activo</li>
+          <li>Guards por ruta que validan rol del usuario</li>
+          <li>Cada Cloud Function valida autenticacion y rol server-side</li>
+        </ul>
+
+        <h3>RF-02 Configuracion de turno diario</h3>
+        <ul>
+          <li>Al iniciar sesion, si no hay turno vigente, se abre modal de configuracion</li>
+          <li>Seleccion de grua, integrantes de dupla y tipo de flota (TRANSITO/TRANSPORTE)</li>
+          <li>Validacion de compatibilidad de tipo entre grua y dupla</li>
+          <li>TTL de 8 horas desde el momento de activacion</li>
+          <li>Posibilidad de solicitar reconfiguracion (cooldown de 30 minutos)</li>
+        </ul>
+
+        <h3>RF-03 Flujo de enganche</h3>
+        <ul>
+          <li>Ingreso de patente con validacion de formato (AAA123, AA123BB, S/N)</li>
+          <li>Captura automatica de coordenadas GPS</li>
+          <li>Generacion automatica de numero de acta (6 digitos, contador atomico)</li>
+          <li>Creacion de ID determinista: <code>{infraccion}-{legajo}-{patente}</code></li>
+          <li>Bloqueo de servicio activo (un solo servicio por operador)</li>
+          <li>Toma de 4 fotos obligatorias: DELANTERA, LADO_DERECHO, LADO_IZQUIERDO, TRASERA</li>
+          <li>Fotos opcionales de OBSERVACION con comentario</li>
+          <li>Compresion client-side (800px max, JPEG 0.55)</li>
+          <li>Upload resumible a Storage, procesamiento a Drive via trigger</li>
+        </ul>
+
+        <h3>RF-04 Flujo de traslado</h3>
+        <ul>
+          <li>Transicion de estado ENGANCHADO a EN_TRASLADO</li>
+          <li>Validacion de existencia de evento ENGANCHE previo</li>
+          <li>Pantalla de estado con cronometro de tiempo transcurrido</li>
+        </ul>
+
+        <h3>RF-05 Flujo de desenganche</h3>
+        <ul>
+          <li>Seleccion de corralon destino</li>
+          <li>Registro de llegada a corralon con coordenadas GPS</li>
+          <li>Toma de 4 fotos de desenganche</li>
+          <li>Pantalla de confirmacion final con resumen</li>
+          <li>Observaciones opcionales</li>
+          <li>Transicion a DESENGANCHADO y liberacion del operador</li>
+          <li>Reintentos automaticos (3 intentos con backoff exponencial)</li>
+        </ul>
+
+        <h3>RF-06 Historial y consulta de servicios</h3>
+        <ul>
+          <li>Listado con filtros por estado, fecha, dupla, corralon, tipo de flota, duracion</li>
+          <li>Detalle de servicio con timeline de eventos</li>
+          <li>Visualizacion de fotos con preview desde Google Drive</li>
+          <li>Exportacion de acta individual en PDF (con o sin fotos)</li>
+          <li>Compartir via Web Share API</li>
+        </ul>
+
+        <h3>RF-07 Edicion y anulacion de servicios</h3>
+        <ul>
+          <li>Edicion de campos con registro de cambios (campo, valor anterior, valor nuevo)</li>
+          <li>Anulacion con motivo obligatorio</li>
+          <li>Versionado completo en subcoleccion <code>versiones</code></li>
+          <li>Reglas diferenciadas por rol y estado del servicio</li>
+        </ul>
+
+        <h3>RF-08 Creacion manual de actas</h3>
+        <ul>
+          <li>Formulario para crear actas DESENGANCHADO desde cero</li>
+          <li>Campos: patente, grua, dupla (chofer + enganchador con legajo), fotos de enganche</li>
+          <li>Opcionales: corralon, fotos de desenganche, ubicacion (texto o link de Google Maps)</li>
+          <li>Marcado con flag <code>origenManual: true</code></li>
+          <li>Accesible para ADMIN y SUPERVISOR</li>
+        </ul>
+
+        <h3>RF-09 Gestion de flota (ABMs)</h3>
+        <ul>
+          <li>CRUD de gruas (patente, descripcion, tipo, estado activo)</li>
+          <li>CRUD de corralones (nombre, direccion, coordenadas, estado activo)</li>
+          <li>CRUD de duplas (chofer, enganchador, legajos, tipo, estado activo)</li>
+          <li>Importacion masiva de duplas via CSV</li>
+          <li>CRUD de usuarios (nombre, email, legajo, roles)</li>
+        </ul>
+
+        <h3>RF-10 Turnos y asignaciones</h3>
+        <ul>
+          <li>Asignacion de turno a operador por admin (grua + dupla + tipo)</li>
+          <li>Autoconfiguracion de turno por operador al iniciar dia</li>
+          <li>Listado de duplas con filtros por tipo y estado</li>
+          <li>Solicitud de reconfiguracion por operador con cooldown</li>
+        </ul>
+
+        <h3>RF-11 Reportes y analytics</h3>
+        <ul>
+          <li>KPIs: total actas, finalizadas, en progreso, anuladas, duracion promedio</li>
+          <li>Graficos de distribucion: por estado, por hora, por corralon, por dupla, por grua, por tipo</li>
+          <li>Tabla de top 50 servicios con detalle</li>
+          <li>Filtros por rango de fecha, estado, tipo, dupla, corralon, duracion</li>
+        </ul>
+
+        <h3>RF-12 Notificaciones</h3>
+        <ul>
+          <li>Notificaciones en tiempo real via Firestore listener</li>
+          <li>Tipos: turno asignado/modificado, solicitud de reconfig, error de foto, carnet por vencer</li>
+          <li>Toast UI con auto-dismiss a 6 segundos</li>
+          <li>Marcar como leida individual o masivamente</li>
+          <li>Deduplicacion via clave unica</li>
+        </ul>
+
+        <h3>RF-13 Documentacion de carnets</h3>
+        <ul>
+          <li>CRUD de carnets de conducir (nombre, legajo, numero, vencimiento)</li>
+          <li>Estados calculados: VIGENTE, POR_VENCER_30D/15D/7D, VENCIDO</li>
+          <li>Verificacion automatica diaria a las 8:00 AM (Buenos Aires)</li>
+          <li>Notificacion a admins cuando un carnet esta por vencer</li>
+        </ul>
+
+        <h3>RF-14 Pipeline de fotos</h3>
+        <ul>
+          <li>Captura desde camara o galeria</li>
+          <li>Compresion client-side via canvas</li>
+          <li>Cache en IndexedDB (sobrevive recargas)</li>
+          <li>Upload resumible a Firebase Storage</li>
+          <li>Trigger que mueve a Google Drive y limpia Storage</li>
+          <li>Estructura de carpetas: <code>Gruas/YYYY-MM-DD/legajo/patente_infraccion/</code></li>
+          <li>Monitoreo de estado via subcoleccion <code>fotosStaging</code></li>
+          <li>Notificacion a admins en caso de error</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 5. REQUERIMIENTOS NO FUNCIONALES -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="rnf">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">5</span>
+        <span class="section-title">Requerimientos No Funcionales</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <div class="rule-grid">
+          <div class="rule">
+            <span class="rule-num">1</span>
+            <div><strong>Mobile-first.</strong> La interfaz esta disenada para uso primario en dispositivos moviles en campo. Responsive para desktop en paneles administrativos.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">2</span>
+            <div><strong>Resiliencia offline.</strong> Fotos se cachean en IndexedDB antes de subir. Uploads resumibles. Reintentos con backoff exponencial (3 intentos).</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">3</span>
+            <div><strong>Timestamps de servidor.</strong> Todos los timestamps criticos se generan via <code>FieldValue.serverTimestamp()</code>, nunca en el cliente</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">4</span>
+            <div><strong>Seguridad por capas.</strong> Firestore Security Rules + validacion en Cloud Functions + guards de ruta en frontend. Triple validacion de permisos.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">5</span>
+            <div><strong>Auditabilidad.</strong> Cada edicion o anulacion genera un registro de version inmutable con diff de campos, autor, fecha y motivo.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">6</span>
+            <div><strong>Rendimiento.</strong> Compresion de fotos a 800px max y JPEG 0.55 para reducir uso de datos moviles. Cache in-memory para catalogos admin.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">7</span>
+            <div><strong>Escalabilidad.</strong> Backend serverless (Cloud Functions v2, Node.js 20). Firestore auto-escala. Sin servidores que mantener.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">8</span>
+            <div><strong>Almacenamiento.</strong> Fotos en Google Drive (via Service Account), no en Firebase Storage (solo buffer temporal). Reduccion de costos de storage.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">9</span>
+            <div><strong>Validaciones de limites.</strong> Nombre max 100 chars, legajo max 50, observacion max 1000, ubicacion max 500, comentario de foto max 500.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">10</span>
+            <div><strong>Disponibilidad.</strong> Hosting en Firebase con CDN global. Functions en region <code>southamerica-east1</code>, trigger de fotos en <code>us-east1</code> (misma region del bucket).</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 6. REGLAS DE NEGOCIO -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="reglas">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">6</span>
+        <span class="section-title">Reglas de Negocio</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <div class="rule-grid">
+          <div class="rule">
+            <span class="rule-num">1</span>
+            <div><strong>Un servicio activo por operador.</strong> El campo <code>servicioActivoId</code> bloquea al operador hasta que finalice o anule el servicio en curso.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">2</span>
+            <div><strong>Numero de acta auto-generado.</strong> Contador atomico en <code>contadores/actas</code>, formato 6 digitos zero-padded. Irrepetible.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">3</span>
+            <div><strong>ID de documento determinista.</strong> <code>{infraccion}-{legajo}-{patente}</code> previene duplicados a nivel de base de datos.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">4</span>
+            <div><strong>Turno con TTL de 8 horas.</strong> La asignacion diaria expira 28.800.000 ms despues de <code>inicioEn</code>. Debe reconfigurarse al vencer.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">5</span>
+            <div><strong>Compatibilidad grua-dupla.</strong> El tipo de la grua debe coincidir con el tipo de la dupla (ambos TRANSITO o ambos TRANSPORTE).</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">6</span>
+            <div><strong>4 fotos obligatorias por evento.</strong> DELANTERA, LADO_DERECHO, LADO_IZQUIERDO, TRASERA. Minimo 3 validado server-side.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">7</span>
+            <div><strong>Patente con formato validado.</strong> Acepta AAA123 (formato viejo), AA123BB (formato nuevo) o S/N (sin patente visible).</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">8</span>
+            <div><strong>Legajo obligatorio para operadores.</strong> Unico por usuario. Requerido para crear servicios.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">9</span>
+            <div><strong>Transiciones secuenciales obligatorias.</strong> Enganche (fotos) -> Traslado -> Llegada corralon -> Desenganche. No se puede saltar pasos.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">10</span>
+            <div><strong>Anulacion diferenciada por rol.</strong> Operador: solo propios en ENGANCHADO/EN_TRASLADO. ADMIN/SUPERVISOR: cualquier servicio en cualquier estado no-anulado.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">11</span>
+            <div><strong>Edicion versionada.</strong> Cada edicion crea entrada en <code>versiones</code> con diff de campos, autor, rol, fecha y motivo.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">12</span>
+            <div><strong>Cooldown de reconfiguracion.</strong> 30 minutos entre solicitudes de <code>solicitarReconfiguracionTurno</code>.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">13</span>
+            <div><strong>Escalacion de SUPERADMIN.</strong> Solo un SUPERADMIN puede otorgar el rol SUPERADMIN a otro usuario.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">14</span>
+            <div><strong>Proteccion contra desactivacion.</strong> No se puede desactivar un usuario que tiene un servicio activo.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">15</span>
+            <div><strong>Timestamps inalterables.</strong> Creados server-side. El cliente no puede enviar ni modificar timestamps de eventos.</div>
+          </div>
+          <div class="rule">
+            <span class="rule-num">16</span>
+            <div><strong>Escritura solo via Cloud Functions.</strong> Los servicios y eventos no aceptan escritura directa de clientes. Toda mutacion pasa por funciones validadoras.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 7. CASOS DE USO -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="casos-uso">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">7</span>
+        <span class="section-title">Casos de Uso</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <h3>Operador en campo</h3>
+
+        <div class="uc-card">
+          <h4>CU-01: Configurar turno diario</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ENGANCHADOR</span>
+            <span><strong>Precondicion:</strong> Autenticado, sin turno vigente</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Seleccionar grua, dupla y tipo de flota para iniciar la jornada laboral. El sistema valida compatibilidad de tipos y asigna un TTL de 8 horas.</p>
+          <p class="uc-desc"><strong>Flujo:</strong> Login -> Modal de configuracion -> Seleccionar grua -> Seleccionar dupla -> Confirmar -> Turno activo.</p>
+          <p class="uc-desc"><strong>Postcondicion:</strong> Usuario tiene <code>asignacionDiaria</code> vigente.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-02: Registrar enganche completo</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ENGANCHADOR</span>
+            <span><strong>Precondicion:</strong> Turno vigente, sin servicio activo</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Documentar el enganche de un vehiculo con patente, fotos geolocalizadas y datos de la operacion.</p>
+          <p class="uc-desc"><strong>Flujo:</strong> Nuevo enganche -> Ingresar patente -> Capturar GPS -> CF genera acta -> Tomar 4 fotos -> Confirmar -> Servicio en ENGANCHADO.</p>
+          <p class="uc-desc"><strong>Postcondicion:</strong> Servicio creado con estado ENGANCHADO, fotos en Drive, operador bloqueado.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-03: Iniciar traslado</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ENGANCHADOR</span>
+            <span><strong>Precondicion:</strong> Servicio en ENGANCHADO con fotos registradas</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Marcar el inicio del traslado del vehiculo hacia el corralon.</p>
+          <p class="uc-desc"><strong>Flujo:</strong> Pantalla de traslado -> Confirmar inicio -> CF valida y transiciona a EN_TRASLADO -> Cronometro activo.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-04: Completar desenganche</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ENGANCHADOR</span>
+            <span><strong>Precondicion:</strong> Servicio en EN_TRASLADO</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Registrar la llegada al corralon, tomar fotos del desenganche y finalizar el servicio.</p>
+          <p class="uc-desc"><strong>Flujo:</strong> Seleccionar corralon -> Registrar llegada -> Tomar 4 fotos -> Revision final -> Confirmar -> DESENGANCHADO -> Operador liberado.</p>
+          <p class="uc-desc"><strong>Postcondicion:</strong> Servicio finalizado, operador disponible, acta exportable en PDF listo para compartir a quien corresponda.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-05: Anular servicio propio</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ENGANCHADOR</span>
+            <span><strong>Precondicion:</strong> Servicio propio en ENGANCHADO o EN_TRASLADO</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Cancelar un servicio iniciado por error o por cambio de situacion en campo.</p>
+          <p class="uc-desc"><strong>Flujo:</strong> Mis actas -> Seleccionar servicio -> Anular -> Ingresar motivo -> Confirmar -> ANULADO.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-06: Solicitar reconfiguracion de turno</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ENGANCHADOR</span>
+            <span><strong>Precondicion:</strong> Turno vigente, sin servicio activo, cooldown de 30 min cumplido</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Pedir al administrador un cambio de grua o dupla durante la jornada.</p>
+        </div>
+
+        <h3>Administracion</h3>
+
+        <div class="uc-card">
+          <h4>CU-07: Gestionar usuarios</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Crear, editar, activar/desactivar cuentas de operadores, supervisores y otros administradores. Incluye asignacion de roles multiples y legajos unicos.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-08: Gestionar flota</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Administrar el catalogo de gruas (con tipo TRANSITO/TRANSPORTE), corralones (con coordenadas) y duplas (pares chofer-enganchador).</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-09: Asignar turno a operador</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Pre-asignar grua, dupla y tipo de flota a un operador antes de que inicie su jornada. Genera notificacion al operador.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-10: Editar servicio existente</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Corregir datos de un servicio (patente, corralon, etc.) con motivo obligatorio. Cada edicion queda versionada.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-11: Anular servicio de cualquier estado</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Anular un servicio incluso despues de finalizado (DESENGANCHADO), con motivo y registro de auditoria.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-12: Crear acta manual</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Crear una acta completa (estado DESENGANCHADO) desde cero cuando el flujo de campo fallo. Marcada como <code>origenManual</code>.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-13: Monitorear operacion en vivo</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Ver dashboard con KPIs del dia, servicios en curso y rendimiento del equipo en tiempo real.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-14: Generar reportes</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Analizar metricas de operacion con filtros por fecha, estado, tipo, dupla, corralon y duracion. Visualizar distribuciones y exportar datos.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-15: Exportar acta PDF</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR / ENGANCHADOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Generar un PDF del acta de un servicio finalizado, con opcion de incluir o excluir fotos, y compartir via Web Share API.</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-16: Gestionar carnets de conducir</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Registrar y dar seguimiento a las licencias de conducir del equipo. El sistema notifica automaticamente cuando estan por vencer (30, 15, 7 dias).</p>
+        </div>
+
+        <div class="uc-card">
+          <h4>CU-17: Agregar comentario a foto</h4>
+          <div class="uc-meta">
+            <span><strong>Actor:</strong> ADMIN / SUPERVISOR</span>
+          </div>
+          <p class="uc-desc"><strong>Objetivo:</strong> Agregar observaciones a fotos especificas de un servicio para documentar detalles adicionales (max 500 caracteres).</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 8. ABMs -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="abms">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">8</span>
+        <span class="section-title">ABMs (Alta / Baja / Modificacion)</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Entidad</th><th>Alta</th><th>Baja</th><th>Modificacion</th><th>Responsable</th><th>Detalles</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Usuarios</strong></td>
+                <td>SI — <code>crearUsuario</code> + <code>registrarCuenta</code></td>
+                <td>Logica — <code>desactivarUsuario</code></td>
+                <td>SI — <code>actualizarUsuario</code></td>
+                <td>ADMIN</td>
+                <td>Baja logica (campo <code>activo</code>). No se puede desactivar con servicio activo. UID determinista.</td>
+              </tr>
+              <tr>
+                <td><strong>Gruas</strong></td>
+                <td>SI — Directa en Firestore</td>
+                <td>Logica — campo <code>activa</code></td>
+                <td>SI — Directa</td>
+                <td>ADMIN</td>
+                <td>ID formato <code>G-{patente}</code>. Tipo TRANSITO o TRANSPORTE.</td>
+              </tr>
+              <tr>
+                <td><strong>Corralones</strong></td>
+                <td>SI — Directa</td>
+                <td>Logica — campo <code>activo</code></td>
+                <td>SI — Directa</td>
+                <td>ADMIN</td>
+                <td>ID formato <code>C-{timestamp}</code>. Coordenadas opcionales.</td>
+              </tr>
+              <tr>
+                <td><strong>Duplas</strong></td>
+                <td>SI — Directa + importacion CSV</td>
+                <td>Logica — campo <code>activa</code></td>
+                <td>SI — Directa</td>
+                <td>ADMIN</td>
+                <td>Par chofer-enganchador con legajos. Tipo TRANSITO o TRANSPORTE.</td>
+              </tr>
+              <tr>
+                <td><strong>Carnets</strong></td>
+                <td>SI — <code>crearCarnet</code></td>
+                <td>Logica — <code>desactivarCarnet</code></td>
+                <td>SI — <code>actualizarCarnet</code></td>
+                <td>ADMIN</td>
+                <td>Verificacion diaria automatica de vencimientos. Notificaciones a 30/15/7 dias.</td>
+              </tr>
+              <tr>
+                <td><strong>Servicios</strong></td>
+                <td>SI — <code>iniciarEnganche</code> / <code>crearActaManual</code></td>
+                <td>Logica — <code>anularServicio</code></td>
+                <td>SI — <code>actualizarServicio</code></td>
+                <td>Operador (alta), ADMIN/SUPERVISOR (modif/baja)</td>
+                <td>Toda escritura via Cloud Functions. Versionado completo de cambios.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout--info">
+          <strong>Patron comun:</strong> Todas las entidades usan <strong>baja logica</strong> (campo <code>activo/activa</code>) en lugar de eliminacion fisica, preservando la integridad referencial y el historial.
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 9. PROCESOS CORE -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="procesos">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">9</span>
+        <span class="section-title">Procesos Core</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <h3>Proceso 1: Ciclo de vida de un servicio de acarreo</h3>
+        <p>El proceso principal del sistema. Cubre desde la deteccion del vehiculo hasta la entrega en corralon.</p>
+
+        <div class="flow-step">
+          <span class="flow-dot">1</span>
+          <div class="flow-content">
+            <h4>Configuracion de turno</h4>
+            <p>El operador selecciona grua, dupla y tipo de flota. El sistema valida compatibilidad y asigna TTL de 8 horas. Si ya tiene turno vigente, lo omite.</p>
+            <p><strong>CF:</strong> <code>guardarAsignacionDiaria</code></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">2</span>
+          <div class="flow-content">
+            <h4>Enganche</h4>
+            <p>Ingreso de patente, captura GPS, generacion de acta con numero unico, toma de 4 fotos obligatorias. Se bloquea al operador con <code>servicioActivoId</code>.</p>
+            <p><strong>CFs:</strong> <code>iniciarEnganche</code> -> <code>subirFotoEvento</code> -> <code>registrarEventoEnganche</code></p>
+            <p><strong>Estado resultante:</strong> <span class="tag tag--accent">ENGANCHADO</span></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">3</span>
+          <div class="flow-content">
+            <h4>Traslado</h4>
+            <p>El operador confirma el inicio del traslado. Se muestra cronometro con tiempo transcurrido. Valida que exista evento ENGANCHE previo.</p>
+            <p><strong>CF:</strong> <code>iniciarTraslado</code></p>
+            <p><strong>Estado resultante:</strong> <span class="tag tag--info">EN_TRASLADO</span></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">4</span>
+          <div class="flow-content">
+            <h4>Llegada a corralon</h4>
+            <p>Seleccion de corralon destino, registro de llegada con coordenadas GPS.</p>
+            <p><strong>CF:</strong> <code>registrarLlegadaCorralon</code></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">5</span>
+          <div class="flow-content">
+            <h4>Desenganche</h4>
+            <p>Toma de 4 fotos de desenganche, revision y confirmacion final con observaciones. Se libera al operador.</p>
+            <p><strong>CF:</strong> <code>confirmarDesenganche</code></p>
+            <p><strong>Estado resultante:</strong> <span class="tag tag--success">DESENGANCHADO</span></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">6</span>
+          <div class="flow-content">
+            <h4>Post-operacion</h4>
+            <p>Acta disponible para consulta, exportacion PDF y compartir. Operador liberado para iniciar nuevo servicio.</p>
+          </div>
+        </div>
+
+        <h3>Proceso 2: Pipeline de fotos</h3>
+        <div class="flow-step">
+          <span class="flow-dot">1</span>
+          <div class="flow-content">
+            <h4>Captura y compresion</h4>
+            <p>Foto tomada desde camara/galeria. Canvas resize a 800px max width, JPEG quality 0.55. Cache en IndexedDB.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">2</span>
+          <div class="flow-content">
+            <h4>Upload a Storage</h4>
+            <p>Upload resumible a Firebase Storage con tracking de progreso. Ruta: <code>fotos/{servicioId}/{eventType}/{filename}</code>.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">3</span>
+          <div class="flow-content">
+            <h4>Trigger de procesamiento</h4>
+            <p><code>procesarFotoStorage</code> (region us-east1): lee de Storage, sube a Google Drive, crea doc en <code>fotosStaging</code>, elimina de Storage.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <span class="flow-dot">4</span>
+          <div class="flow-content">
+            <h4>Almacenamiento permanente</h4>
+            <p>Foto en Drive: <code>Gruas/YYYY-MM-DD/legajo/patente_infraccion/carpeta/filename.jpg</code>. URL de Drive registrada en el evento.</p>
+          </div>
+        </div>
+
+        <h3>Proceso 3: Verificacion de carnets</h3>
+        <p>Proceso automatizado que se ejecuta diariamente a las 8:00 AM (Buenos Aires) via Cloud Function scheduled.</p>
+        <ul>
+          <li>Recorre todos los carnets activos</li>
+          <li>Calcula dias hasta vencimiento</li>
+          <li>Genera notificaciones a admins en umbrales de 30, 15 y 7 dias</li>
+          <li>Marca carnets vencidos</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 10. PROCESOS TRANSACCIONALES -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="transaccionales">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">10</span>
+        <span class="section-title">Procesos Transaccionales</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <p>Operaciones que requieren atomicidad o consistencia transaccional en Firestore:</p>
+
+        <div class="card">
+          <div class="card-title">Iniciar enganche</div>
+          <div class="card-body">
+            <p><strong>Operacion atomica:</strong> Incrementar contador de actas + crear documento de servicio + actualizar <code>servicioActivoId</code> del usuario. Si alguno falla, ninguno se ejecuta.</p>
+            <p><strong>Validaciones previas:</strong> Usuario sin servicio activo, turno vigente, patente con formato valido, legajo presente.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Confirmar desenganche</div>
+          <div class="card-body">
+            <p><strong>Operacion atomica:</strong> Crear evento DESENGANCHE + transicionar estado a DESENGANCHADO + limpiar <code>servicioActivoId</code> del usuario + registrar timestamp de finalizacion.</p>
+            <p><strong>Retry:</strong> 3 intentos con backoff exponencial ante fallos de red.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Anular servicio</div>
+          <div class="card-body">
+            <p><strong>Operacion atomica:</strong> Transicionar estado a ANULADO + crear entrada en <code>versiones</code> con tipo ANULACION + limpiar <code>servicioActivoId</code> si aplica.</p>
+            <p><strong>Validacion:</strong> Servicio no debe estar ya anulado. Permisos diferenciados por rol.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Actualizar servicio (edicion)</div>
+          <div class="card-body">
+            <p><strong>Operacion atomica:</strong> Aplicar cambios al documento + crear entrada en <code>versiones</code> con tipo EDICION, diff de campos, motivo y datos del editor.</p>
+            <p><strong>Incremento:</strong> Campo <code>versionCount</code> se incrementa atomicamente.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Generacion de numero de acta</div>
+          <div class="card-body">
+            <p><strong>Operacion atomica:</strong> Lectura e incremento del contador en <code>contadores/actas</code> dentro de la transaccion de creacion del servicio. Garantiza unicidad incluso bajo concurrencia.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Liberacion de servicio huerfano</div>
+          <div class="card-body">
+            <p><strong>CF:</strong> <code>liberarServicioActivoSiHuerfano</code>. Detecta y limpia el campo <code>servicioActivoId</code> cuando referencia un servicio que ya fue finalizado o anulado. Mecanismo de auto-reparacion.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 11. ESCENARIOS -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="escenarios">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">11</span>
+        <span class="section-title">Escenarios Contemplativos</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--alert" style="font-size:10px">FALLO</span> Perdida de conectividad durante upload de fotos</div>
+          <div class="card-body">
+            <p>Las fotos se almacenan en IndexedDB como draft. Los uploads son resumibles. Al recuperar conectividad, el operador puede reintentar sin perder las fotos ya capturadas.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--alert" style="font-size:10px">FALLO</span> Fallo en la Cloud Function de desenganche</div>
+          <div class="card-body">
+            <p>Implementado retry automatico: 3 intentos con backoff exponencial. Si los 3 fallan, el operador recibe un mensaje de error claro con instruccion de reintentar. El servicio permanece en EN_TRASLADO (no queda en estado inconsistente).</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--alert" style="font-size:10px">FALLO</span> Operador queda bloqueado con servicio huerfano</div>
+          <div class="card-body">
+            <p><code>liberarServicioActivoSiHuerfano</code> detecta cuando <code>servicioActivoId</code> referencia un servicio ya finalizado/anulado y limpia el bloqueo automaticamente.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--accent" style="font-size:10px">EDGE</span> Flujo de campo falla completamente</div>
+          <div class="card-body">
+            <p>ADMIN o SUPERVISOR puede crear un acta manual desde <code>/supervisor/nueva-acta</code> con todos los datos requeridos. Marcada con <code>origenManual: true</code> para distinguirla.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--accent" style="font-size:10px">EDGE</span> Turno expira durante un servicio activo</div>
+          <div class="card-body">
+            <p>El operador puede completar el servicio en curso. Al finalizar, debera reconfigurar turno para iniciar uno nuevo. El servicio no se interrumpe por expiracion de turno.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--accent" style="font-size:10px">EDGE</span> Vehiculo sin patente visible</div>
+          <div class="card-body">
+            <p>El operador ingresa "S/N" como patente. El sistema lo acepta como formato valido y genera el acta normalmente.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--accent" style="font-size:10px">EDGE</span> Se detecta error en acta ya finalizada</div>
+          <div class="card-body">
+            <p>ADMIN o SUPERVISOR puede editar los datos del servicio (patente, corralon, etc.) con motivo obligatorio. Queda versionado. Si el error es grave, puede anular el acta incluso en estado DESENGANCHADO.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--info" style="font-size:10px">CONCURRENCIA</span> Dos operadores intentan usar la misma grua</div>
+          <div class="card-body">
+            <p>El sistema no bloquea gruas a nivel de base de datos, pero la asignacion diaria (grua+dupla) es visible para el admin quien organiza las asignaciones para evitar colisiones.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--info" style="font-size:10px">SEGURIDAD</span> Intento de manipulacion de timestamps</div>
+          <div class="card-body">
+            <p>Los timestamps son generados exclusivamente server-side via <code>FieldValue.serverTimestamp()</code>. Las Firestore Security Rules no permiten escritura directa a servicios. Toda mutacion pasa por Cloud Functions.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="tag tag--info" style="font-size:10px">SEGURIDAD</span> Foto falla al procesarse a Drive</div>
+          <div class="card-body">
+            <p>El trigger <code>onFotoStagingError</code> detecta el error y genera una notificacion tipo <code>FOTO_SUBIDA_ERROR</code> a todos los administradores para intervencion manual.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 12. MAQUINA DE ESTADOS -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="maquina-estados">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">12</span>
+        <span class="section-title">Maquina de Estados del Servicio</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+        <div class="state-flow">
+          <span class="state-chip" style="background:var(--accent-soft);color:var(--accent);">ENGANCHADO</span>
+          <span class="state-arrow">&#8594;</span>
+          <span class="state-chip" style="background:var(--info-soft);color:var(--info);">EN_TRASLADO</span>
+          <span class="state-arrow">&#8594;</span>
+          <span class="state-chip" style="background:var(--success-soft);color:var(--success);">DESENGANCHADO</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Estado</th><th>Descripcion</th><th>Transiciones posibles</th><th>Quien puede transicionar</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="tag tag--accent">ENGANCHADO</span></td>
+                <td>Vehiculo enganchado, fotos registradas. Operador bloqueado.</td>
+                <td>EN_TRASLADO, ANULADO</td>
+                <td>Operador (traslado), Operador/Admin/Supervisor (anulacion)</td>
+              </tr>
+              <tr>
+                <td><span class="tag tag--info">EN_TRASLADO</span></td>
+                <td>Vehiculo en camino al corralon. Cronometro activo.</td>
+                <td>DESENGANCHADO, ANULADO</td>
+                <td>Operador (desenganche), Operador/Admin/Supervisor (anulacion)</td>
+              </tr>
+              <tr>
+                <td><span class="tag tag--success">DESENGANCHADO</span></td>
+                <td>Vehiculo entregado en corralon. Acta finalizada. Operador liberado.</td>
+                <td>ANULADO</td>
+                <td>Solo Admin/Supervisor</td>
+              </tr>
+              <tr>
+                <td><span class="tag tag--alert">ANULADO</span></td>
+                <td>Servicio cancelado con motivo registrado. Estado terminal.</td>
+                <td>Ninguna (final)</td>
+                <td>N/A</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout--accent">
+          <strong>Invariante:</strong> Las transiciones son estrictamente secuenciales y unidireccionales. No es posible retroceder de estado. La unica transicion lateral es ANULADO, accesible desde cualquier estado excepto ANULADO.
+        </div>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════════════════════ -->
+    <!-- 13. MODELO DE DATOS -->
+    <!-- ════════════════════════════════════════════ -->
+    <section class="section" id="modelo-datos">
+      <div class="section-header" onclick="toggleSection(this)">
+        <span class="section-number">13</span>
+        <span class="section-title">Modelo de Datos</span>
+        <span class="section-toggle">&#9662;</span>
+      </div>
+      <div class="section-body">
+
+        <div class="card">
+          <div class="card-title">Servicio <span class="tag tag--muted" style="margin-left:8px">coleccion: servicios</span></div>
+          <div class="card-body">
+            <p><strong>ID:</strong> <code>{infraccion}-{legajo}-{patente}</code> (determinista)</p>
+            <p><strong>Campos clave:</strong> <code>patente</code>, <code>numeroInfraccion</code> (6 digitos), <code>estado</code>, <code>grua</code> (G-{patente}), <code>tipoFlota</code>, <code>creadoPor</code> (uid), <code>legajoChofer</code>, <code>dupla</code> (objeto con chofer, enganchador, legajos, uids), <code>geoEnganche</code> (lat/lng), <code>corralon</code>, <code>origenManual</code>, <code>totalFotos</code>, <code>versionCount</code>, <code>creadoEn</code>, <code>finalizadoEn</code></p>
+            <p><strong>Subcolecciones:</strong> <code>eventos</code>, <code>fotosStaging</code>, <code>versiones</code></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Evento <span class="tag tag--muted" style="margin-left:8px">subcoleccion: servicios/{id}/eventos</span></div>
+          <div class="card-body">
+            <p><strong>Tipos:</strong> ENGANCHE, TRASLADO, LLEGADA_CORRALON, DESENGANCHE</p>
+            <p><strong>Campos:</strong> <code>tipo</code>, <code>timestamp</code> (server), <code>geo</code> (lat/lng), <code>fotos[]</code> (url, driveFileId, etiqueta, observacion, comentarios), <code>observacionGeneral</code>, <code>corralon</code>, <code>ubicacionReferencia</code></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Usuario <span class="tag tag--muted" style="margin-left:8px">coleccion: usuarios</span></div>
+          <div class="card-body">
+            <p><strong>ID:</strong> UID determinista via <code>buildUsuarioUid()</code></p>
+            <p><strong>Campos:</strong> <code>uid</code>, <code>nombre</code>, <code>email</code>, <code>roles[]</code>, <code>legajo</code>, <code>servicioActivoId</code>, <code>servicioActivoResumen</code>, <code>asignacionDiaria</code> (objeto embebido), <code>activo</code>, <code>creadoEn</code></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Grua <span class="tag tag--muted" style="margin-left:8px">coleccion: gruas</span></div>
+          <div class="card-body">
+            <p><strong>ID:</strong> <code>G-{patente}</code></p>
+            <p><strong>Campos:</strong> <code>id</code>, <code>patente</code>, <code>descripcion</code>, <code>activa</code>, <code>tipo</code> (TRANSITO | TRANSPORTE)</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Corralon <span class="tag tag--muted" style="margin-left:8px">coleccion: corralones</span></div>
+          <div class="card-body">
+            <p><strong>ID:</strong> <code>C-{timestamp}</code></p>
+            <p><strong>Campos:</strong> <code>id</code>, <code>nombre</code>, <code>direccion</code>, <code>activo</code>, <code>lat?</code>, <code>lng?</code></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Dupla <span class="tag tag--muted" style="margin-left:8px">coleccion: duplas</span></div>
+          <div class="card-body">
+            <p><strong>Campos:</strong> <code>chofer</code>, <code>enganchador</code>, <code>legajoChofer</code>, <code>legajoEnganchador</code>, <code>tipo</code> (TRANSITO | TRANSPORTE), <code>activa</code></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Carnet de Conducir <span class="tag tag--muted" style="margin-left:8px">coleccion: carnets</span></div>
+          <div class="card-body">
+            <p><strong>Campos:</strong> <code>id</code>, <code>nombre</code>, <code>legajo</code>, <code>numero</code>, <code>fechaVencimiento</code>, <code>activo</code></p>
+            <p><strong>Estados calculados:</strong> VIGENTE, POR_VENCER_30D, POR_VENCER_15D, POR_VENCER_7D, VENCIDO</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Version de Acta <span class="tag tag--muted" style="margin-left:8px">subcoleccion: servicios/{id}/versiones</span></div>
+          <div class="card-body">
+            <p><strong>Campos:</strong> <code>version</code> (incremental), <code>tipo</code> (EDICION | ANULACION | CREACION_MANUAL), <code>editadoEn</code>, <code>editadoPorUid/Nombre/Rol</code>, <code>motivo</code>, <code>cambios[]</code> (campo, etiqueta, valorAnterior, valorNuevo)</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Notificacion <span class="tag tag--muted" style="margin-left:8px">coleccion: notificaciones</span></div>
+          <div class="card-body">
+            <p><strong>Campos:</strong> <code>destinatarioUid</code>, <code>tipo</code>, <code>titulo</code>, <code>cuerpo</code>, <code>datos?</code>, <code>leida</code>, <code>creadaEn</code>, <code>origenUid?</code>, <code>claveDedup?</code></p>
+            <p><strong>Tipos:</strong> TURNO_ASIGNADO, TURNO_MODIFICADO, SOLICITUD_RECONFIG_TURNO, FOTO_SUBIDA_ERROR, CARNET_POR_VENCER_30D/15D/7D</p>
+          </div>
+        </div>
+
+        <h3>Indices compuestos (Firestore)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Coleccion</th><th>Campos</th><th>Orden</th></tr></thead>
+            <tbody>
+              <tr><td>servicios</td><td><code>creadoPor</code> + <code>creadoEn</code></td><td>ASC + DESC</td></tr>
+              <tr><td>servicios</td><td><code>estado</code> + <code>creadoEn</code></td><td>ASC + DESC</td></tr>
+              <tr><td>notificaciones</td><td><code>destinatarioUid</code> + <code>creadaEn</code></td><td>ASC + DESC</td></tr>
+              <tr><td>notificaciones</td><td><code>destinatarioUid</code> + <code>leida</code></td><td>ASC + ASC</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+function toggleSection(header) {
+  header.parentElement.classList.toggle('collapsed');
+}
+
+// Sidebar active state on scroll
+const links = document.querySelectorAll('.toc-link');
+const sections = document.querySelectorAll('.section');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      links.forEach(l => l.classList.remove('active'));
+      const id = entry.target.id;
+      const active = document.querySelector(`.toc-link[href="#${id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -60% 0px' });
+
+sections.forEach(s => observer.observe(s));
+
+// Smooth scroll for TOC
+links.forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const id = link.getAttribute('href').slice(1);
+    const target = document.getElementById(id);
+    if (target) {
+      const section = target;
+      if (section.classList.contains('collapsed')) {
+        section.classList.remove('collapsed');
+      }
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+</script>

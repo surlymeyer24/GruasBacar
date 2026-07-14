@@ -1,6 +1,6 @@
 export type EstadoServicio = 'ENGANCHADO' | 'EN_TRASLADO' | 'DESENGANCHADO' | 'ANULADO';
 export type TipoEvento = 'ENGANCHE' | 'TRASLADO' | 'LLEGADA_CORRALON' | 'DESENGANCHE';
-export type RolUsuario = 'ADMIN' | 'SUPERVISOR' | 'ENGANCHADOR' | 'CHOFER';
+export type RolUsuario = 'SUPERADMIN' | 'ADMIN' | 'SUPERVISOR' | 'VISOR' | 'ENGANCHADOR' | 'CHOFER';
 
 /** Tipo operativo de grúa y dupla (tránsito municipal vs transporte). */
 export type TipoFlota = 'TRANSITO' | 'TRANSPORTE';
@@ -31,8 +31,10 @@ export function matchesTipoFlotaFilter(tipo: string | undefined, filter: string)
 /** Normaliza roles legacy (p. ej. CHOFER, AYUDANTE) al modelo actual. */
 export function normalizeRol(rol: string | undefined): RolUsuario {
   const key = rol?.trim().toUpperCase();
+  if (key === 'SUPERADMIN') return 'SUPERADMIN';
   if (key === 'ADMIN') return 'ADMIN';
   if (key === 'SUPERVISOR') return 'SUPERVISOR';
+  if (key === 'VISOR') return 'VISOR';
   if (key === 'CHOFER') return 'CHOFER';
   if (key === 'ENGANCHADOR' || key === 'AYUDANTE') return 'ENGANCHADOR';
   return 'ENGANCHADOR';
@@ -41,10 +43,18 @@ export function normalizeRol(rol: string | undefined): RolUsuario {
 /** Etiqueta legible de rol para la UI (nunca muestra "Ayudante"). */
 export function labelRolUsuario(rol: string | undefined): string {
   const normalized = normalizeRol(rol);
+  if (normalized === 'SUPERADMIN') return 'Super Admin';
   if (normalized === 'ADMIN') return 'Administrador';
   if (normalized === 'SUPERVISOR') return 'Supervisor';
+  if (normalized === 'VISOR') return 'Visor';
   if (normalized === 'CHOFER') return 'Chofer';
   return 'Enganchador';
+}
+
+/** Extrae el primer nombre de un nombre completo (ej: "Juan Pérez García" -> "Juan"). */
+export function primerNombre(nombreCompleto: string | undefined | null): string {
+  if (!nombreCompleto) return '';
+  return nombreCompleto.trim().split(/\s+/)[0] ?? '';
 }
 
 /** Devuelve un array de roles asegurando que al menos exista ENGANCHADOR si está vacío. */
@@ -63,9 +73,19 @@ export function esOperador(roles: RolUsuario[]): boolean {
   return roles.includes('ENGANCHADOR') || roles.includes('CHOFER');
 }
 
+/** SUPERADMIN o ADMIN (SUPERADMIN hereda todos los permisos de ADMIN). */
+export function esAdmin(roles: RolUsuario[]): boolean {
+  return roles.includes('SUPERADMIN') || roles.includes('ADMIN');
+}
+
+/** Solo SUPERADMIN: gestión de admins, config del sistema, auditoría, eliminación permanente. */
+export function esSuperAdmin(roles: RolUsuario[]): boolean {
+  return roles.includes('SUPERADMIN');
+}
+
 /** Admin sin rol operativo de campo. */
 export function esSoloAdmin(roles: RolUsuario[]): boolean {
-  return roles.includes('ADMIN') && !esOperador(roles);
+  return esAdmin(roles) && !esOperador(roles);
 }
 
 /** Supervisor de flota (consulta de actas). */
@@ -75,29 +95,41 @@ export function esSupervisor(roles: RolUsuario[]): boolean {
 
 /** Solo supervisor: sin permisos de admin ni operador de campo. */
 export function esSoloSupervisor(roles: RolUsuario[]): boolean {
-  return esSupervisor(roles) && !esOperador(roles) && !roles.includes('ADMIN');
+  return esSupervisor(roles) && !esOperador(roles) && !esAdmin(roles);
+}
+
+/** Visor: rol de solo lectura (dashboard, historial, reportes — sin crear/editar/anular actas). */
+export function esVisor(roles: RolUsuario[]): boolean {
+  return roles.includes('VISOR');
+}
+
+/** Solo visor: sin permisos de admin, supervisor ni operador de campo. */
+export function esSoloVisor(roles: RolUsuario[]): boolean {
+  return esVisor(roles) && !esOperador(roles) && !esAdmin(roles) && !esSupervisor(roles);
 }
 
 /** Historial completo de la flota (lectura). */
 export function puedeVerHistorialCompleto(roles: RolUsuario[]): boolean {
-  return roles.includes('ADMIN') || esSupervisor(roles);
+  return esAdmin(roles) || esSupervisor(roles) || esVisor(roles);
 }
 
 /** Editar o anular actas (admin y supervisor). */
 export function puedeGestionarActas(roles: RolUsuario[]): boolean {
-  return roles.includes('ADMIN') || esSupervisor(roles);
+  return esAdmin(roles) || esSupervisor(roles);
 }
 
 /** Ruta de inicio según roles del usuario. */
 export function rutaInicioPorRoles(roles: RolUsuario[]): string {
   if (esOperador(roles)) return '/';
-  if (roles.includes('ADMIN')) return '/admin-dashboard';
+  if (esAdmin(roles)) return '/admin-dashboard';
   if (esSupervisor(roles)) return '/supervisor-dashboard';
+  if (esVisor(roles)) return '/supervisor-dashboard';
   return '/login';
 }
 
 const RUTAS_OPERADOR = new Set(['/', '/enganche', '/traslado', '/desenganche']);
 const RUTAS_SUPERVISOR = new Set(['/supervisor-dashboard', '/supervisor/nueva-acta', '/historial', '/reportes']);
+const RUTAS_VISOR = new Set(['/supervisor-dashboard', '/historial', '/reportes']);
 
 /** Rutas exclusivas del flujo operativo de campo. */
 export function esRutaOperador(pathname: string): boolean {
@@ -109,12 +141,17 @@ export function esRutaSupervisor(pathname: string): boolean {
   return RUTAS_SUPERVISOR.has(pathname);
 }
 
+/** Rutas permitidas para visor (solo lectura, sin crear actas). */
+export function esRutaVisor(pathname: string): boolean {
+  return RUTAS_VISOR.has(pathname);
+}
+
 /** Resumen denormalizado del servicio activo (evita lectura extra en login/home). */
 export interface ServicioActivoResumen {
   id: string;
   estado: EstadoServicio;
   patente: string;
-  numeroInfraccion: string;
+  numeroInfraccion?: string;
 }
 
 /** Indica si el resumen apunta a un servicio aún en curso. */
@@ -148,6 +185,7 @@ export function destinoPostLogin(
   let dest = fromTrimmed || home;
   if (dest === '/login') return home;
   if (!esOperador(roles) && esRutaOperador(dest)) return home;
+  if (esSoloVisor(roles) && !esRutaVisor(dest)) return home;
   if (esSoloSupervisor(roles) && !esRutaSupervisor(dest)) return home;
 
   const destinoOperadorImplicito =
@@ -159,10 +197,13 @@ export function destinoPostLogin(
   return dest;
 }
 
-/** Comprueba un rol; CHOFER y ENGANCHADOR se consideran equivalentes entre sí. */
+/** Comprueba un rol. SUPERADMIN tiene acceso total; CHOFER y ENGANCHADOR son equivalentes; VISOR hereda lectura de SUPERVISOR. */
 export function tieneRol(roles: RolUsuario[], rol: RolUsuario): boolean {
   if (roles.includes(rol)) return true;
+  if (esSuperAdmin(roles)) return true;
+  if (rol === 'ADMIN') return esAdmin(roles);
   if (rol === 'ENGANCHADOR' || rol === 'CHOFER') return esOperador(roles);
+  if (rol === 'SUPERVISOR') return esSupervisor(roles) || esVisor(roles);
   return false;
 }
 
@@ -201,10 +242,10 @@ export function sanitizeUsuarioUidPart(value: string): string {
   return cleaned.slice(0, 100) || 'x';
 }
 
-/** Rol principal para el sufijo del UID (excluye ADMIN). */
+/** Rol principal para el sufijo del UID (excluye ADMIN y SUPERADMIN). */
 export function rolPrincipalParaUid(roles: RolUsuario[]): RolUsuario {
   const normalized = normalizeRoles(roles);
-  const sinAdmin = normalized.filter((r) => r !== 'ADMIN');
+  const sinAdmin = normalized.filter((r) => r !== 'ADMIN' && r !== 'SUPERADMIN');
   return sinAdmin[0] ?? normalized[0] ?? 'ENGANCHADOR';
 }
 
@@ -223,6 +264,10 @@ export function buildUsuarioUid(params: {
   const normalized = normalizeRoles(roles);
   const nombreSafe = sanitizeUsuarioUidPart(nombre);
 
+  if (normalized.includes('SUPERADMIN')) {
+    return `superadmin${nombreSafe}`.slice(0, 128);
+  }
+
   if (normalized.includes('ADMIN')) {
     return `admin${nombreSafe}`.slice(0, 128);
   }
@@ -237,22 +282,55 @@ export function buildUsuarioUid(params: {
     return `supervisor${nombreSafe}`.slice(0, 128);
   }
 
+  if (esSoloVisor(normalized)) {
+    return `visor${nombreSafe}`.slice(0, 128);
+  }
+
   throw new Error('Legajo requerido para generar el UID del usuario.');
+}
+
+/** Parte de un ID de documento Firestore: sin `/` (reservado para rutas de colección). */
+function sanitizeIdentificadorPart(value: string): string {
+  return value.trim().replace(/\//g, '');
 }
 
 /** Clave de unicidad del servicio: `{infraccion}-{legajo}-{patente}`. */
 export function buildIdentificadorCompuesto(
-  numeroInfraccion: string,
+  numeroInfraccion: string | undefined,
   legajo: string,
   patente: string
 ): string {
-  return `${numeroInfraccion.trim()}-${legajo.trim()}-${patente.trim()}`;
+  const infraccion = sanitizeIdentificadorPart(numeroInfraccion ?? '');
+  const legajoSafe = sanitizeIdentificadorPart(legajo);
+  const patenteSafe = sanitizeIdentificadorPart(patente);
+  return infraccion
+    ? `${infraccion}-${legajoSafe}-${patenteSafe}`
+    : `${legajoSafe}-${patenteSafe}`;
 }
 
 /** ID determinístico de documento Firestore para grúas: `G-{patente}`. */
 export function buildGruaId(patente: string): string {
   const normalized = patente.trim().toUpperCase().replace(/\s/g, '');
   return `G-${normalized}`;
+}
+
+/** Valor canónico para vehículos sin patente visible/legible. */
+export const PATENTE_SIN_NUMERO = 'S/N';
+
+/** Normaliza el valor de patente ingresado (mayúsculas, sin espacios/guiones). "SN" y "SIN" se colapsan a "S/N". */
+export function normalizarPatenteInput(patente: string | undefined | null): string {
+  const clean = (patente ?? '').replace(/[\s-]/g, '').toUpperCase();
+  return clean === 'SN' || clean === 'SIN' ? PATENTE_SIN_NUMERO : clean;
+}
+
+export function esPatenteSinNumero(patente: string | undefined | null): boolean {
+  return normalizarPatenteInput(patente) === PATENTE_SIN_NUMERO;
+}
+
+/** Devuelve la patente para mostrar al usuario. S/N se muestra como "sin". */
+export function displayPatente(patente: string | undefined | null): string {
+  const normalized = normalizarPatenteInput(patente);
+  return normalized === PATENTE_SIN_NUMERO ? 'sin' : normalized;
 }
 
 /** Normaliza valor de grúa (patente o id) al formato `G-{patente}`. */
@@ -310,6 +388,8 @@ export interface Grua {
   tipo?: TipoFlota;
 }
 
+export type TipoDestino = 'CORRALON' | 'SECCIONAL';
+
 export interface Corralon {
   id: string;
   nombre: string;
@@ -317,6 +397,7 @@ export interface Corralon {
   activo: boolean;
   lat?: number;
   lng?: number;
+  tipo?: TipoDestino;
 }
 
 export interface Dupla {
@@ -329,6 +410,12 @@ export interface Dupla {
   tipo?: TipoFlota;
   /** Grúa habitual asignada a esta dupla (id de documento en colección gruas). */
   gruaId?: string;
+  /** Legajo del Usuario que ocupa el rol de chofer en esta dupla (vínculo estable, no depende del nombre). */
+  legajoChofer?: string;
+  /** Legajo del Usuario que ocupa el rol de enganchador en esta dupla. */
+  legajoEnganchador?: string;
+  /** Posición en el diagrama de rotación mensual (1 = primera; la última es la de transporte). */
+  orden?: number;
 }
 
 /** Nombre del enganchador en catálogo de duplas (compat. campo legacy `ayudante`). */
@@ -352,16 +439,95 @@ export function enganchadorDeDuplaServicio(
   return enganchadorDeDupla(dupla);
 }
 
-/** Asignación operativa confirmada al inicio del día (grúa, dupla e inspector). */
+/** Clave normalizada para comparar nombres de personas (trim + minúsculas). */
+export function nombreKey(nombre: string | undefined | null): string {
+  return nombre?.trim().toLowerCase() ?? '';
+}
+
+/** Clave normalizada sin espacios, para tolerar variantes (ej. inicial de apellido, orden distinto). */
+function nombreKeyCompacta(nombre: string | undefined | null): string {
+  return nombreKey(nombre).replace(/\s+/g, '');
+}
+
+/** Compara dos nombres de forma flexible: coincidencia exacta o que uno contenga al otro. */
+export function nombresCoinciden(a: string | undefined | null, b: string | undefined | null): boolean {
+  const ak = nombreKeyCompacta(a);
+  const bk = nombreKeyCompacta(b);
+  if (!ak || !bk) return false;
+  return ak === bk || ak.includes(bk) || bk.includes(ak);
+}
+
+/**
+ * Dupla del catálogo que corresponde al usuario registrado.
+ * Prioriza el legajo (vínculo estable); si la dupla no tiene legajo cargado (catálogo viejo),
+ * recurre a comparar nombres de forma flexible.
+ */
+export function duplaDeUsuario(
+  duplas: Dupla[],
+  usuario: { nombre?: string; legajo?: string } | null | undefined
+): Dupla | undefined {
+  const legajoUsuario = legajoKey(usuario?.legajo);
+  if (legajoUsuario) {
+    const porLegajo = duplas.find(
+      (d) => legajoKey(d.legajoChofer) === legajoUsuario || legajoKey(d.legajoEnganchador) === legajoUsuario
+    );
+    if (porLegajo) return porLegajo;
+  }
+
+  const nombreUsuario = usuario?.nombre;
+  if (!nombreKey(nombreUsuario)) return undefined;
+  return duplas.find(
+    (d) => nombresCoinciden(d.chofer, nombreUsuario) || nombresCoinciden(enganchadorDeDupla(d), nombreUsuario)
+  );
+}
+
+/**
+ * Indica si la dupla de una asignación diaria corresponde al usuario registrado.
+ * Prioriza el legajo; si la asignación no tiene legajo (turnos guardados antes de este cambio),
+ * recurre a comparar nombres de forma flexible.
+ */
+export function asignacionCoincideConUsuario(
+  asignacion: {
+    duplaChofer?: string;
+    duplaEnganchador?: string;
+    duplaAyudante?: string;
+    legajoChofer?: string;
+    legajoEnganchador?: string;
+  } | null | undefined,
+  usuario: { nombre?: string; legajo?: string } | null | undefined
+): boolean {
+  if (!asignacion) return false;
+
+  const legajoUsuario = legajoKey(usuario?.legajo);
+  if (legajoUsuario && (asignacion.legajoChofer || asignacion.legajoEnganchador)) {
+    return (
+      legajoKey(asignacion.legajoChofer) === legajoUsuario ||
+      legajoKey(asignacion.legajoEnganchador) === legajoUsuario
+    );
+  }
+
+  const nombreUsuario = usuario?.nombre;
+  if (!nombreKey(nombreUsuario)) return false;
+  return (
+    nombresCoinciden(asignacion.duplaChofer, nombreUsuario) ||
+    nombresCoinciden(duplaEnganchadorDeAsignacion(asignacion), nombreUsuario)
+  );
+}
+
+/** Asignación operativa confirmada al inicio del día (grúa y dupla). */
 export interface AsignacionDiaria {
   fecha: string; // YYYY-MM-DD (zona Argentina)
   gruaPatente: string;
+  gruaDescripcion?: string;
   duplaId: string;
   duplaChofer: string;
   duplaEnganchador: string;
   /** @deprecated Campo legacy en Firestore */
   duplaAyudante?: string;
-  inspector: string;
+  /** Legajo del chofer de la dupla asignada (tomado del catálogo al momento de guardar). */
+  legajoChofer?: string;
+  /** Legajo del enganchador de la dupla asignada. */
+  legajoEnganchador?: string;
   /** Tránsito o transporte según la grúa/dupla del turno. */
   tipoFlota?: TipoFlota;
   /** Inicio del turno (ISO 8601, servidor). Expira a las 8 h. */
@@ -373,8 +539,8 @@ export const DURACION_TURNO_MS = 8 * 60 * 60 * 1000;
 export function asignacionCompleta(asignacion: AsignacionDiaria): boolean {
   return !!(
     asignacion.gruaPatente?.trim() &&
-    asignacion.duplaId?.trim() &&
-    asignacion.inspector?.trim()
+    asignacion.duplaChofer?.trim() &&
+    asignacion.duplaEnganchador?.trim()
   );
 }
 
@@ -397,7 +563,8 @@ export interface Usuario {
   uid: string;
   nombre: string;
   email?: string;
-  rol?: RolUsuario; // Legacy: deprecated in favor of roles
+  /** @deprecated Usar `roles`. Será eliminado tras migración 08. */
+  rol?: RolUsuario;
   roles: RolUsuario[];
   /** Número de legajo del enganchador (obligatorio para rol ENGANCHADOR) */
   legajo?: string;
@@ -406,14 +573,21 @@ export interface Usuario {
   servicioActivoResumen?: ServicioActivoResumen | null;
   activo?: boolean;
   asignacionDiaria?: AsignacionDiaria;
+  fcmTokens?: string[];
 }
 
 export interface DuplasServicio {
   chofer: string;
   enganchador: string;
+  duplaId?: string;
+  legajoChofer?: string;
+  legajoEnganchador?: string;
+  uidChofer?: string;
+  uidEnganchador?: string;
   /** @deprecated Campo legacy en actas guardadas */
   ayudante?: string;
-  inspector: string;
+  /** @deprecated Campo legacy en actas guardadas */
+  inspector?: string;
 }
 
 export interface Evento {
@@ -424,7 +598,6 @@ export interface Evento {
   fotos?: Foto[];
   observacionGeneral?: string;
   corralon?: string;
-  encargadoDeposito?: string;
   /** Dirección en texto libre o URL de Maps cuando no hay geo resuelta. */
   ubicacionReferencia?: string;
 }
@@ -432,12 +605,13 @@ export interface Evento {
 export interface Servicio {
   id: string;
   patente: string;
-  numeroInfraccion: string;
+  numeroInfraccion?: string;
   identificadorCompuesto: string; // `{numeroInfraccion}-{legajo}-{patente}` — también ID del documento
   estado: EstadoServicio;
   grua: string;          // id de grúa `G-{patente}`
-  corralon?: string;     // id o nombre del corralón (se carga al llegar)
-  encargadoDeposito?: string; // nombre del encargado al registrar llegada
+  gruaDocId?: string;    // doc ID real en colección gruas (retrocompat)
+  corralon?: string;     // nombre del corralón (snapshot de display)
+  corralonId?: string;   // doc ID real en colección corralones (retrocompat)
   creadoPor: string;     // uid del enganchador
   legajoChofer?: string; // legajo al momento del enganche
   /** Tránsito o transporte al momento del enganche. */
@@ -446,7 +620,8 @@ export interface Servicio {
   /** GPS capturado al iniciar el enganche (origen del traslado). */
   geoEnganche?: GeoPoint;
   creadoEn?: any;     // Firestore Timestamp
-  fechaCreacion?: any; // Alias for labs compatibility
+  /** @deprecated Usar `creadoEn`. Será eliminado tras migración 08. */
+  fechaCreacion?: any;
   /** Momento en que se confirmó el desenganche (cierre del acta). */
   finalizadoEn?: unknown;
   motivoAnulacion?: string | null;
@@ -471,19 +646,23 @@ export function geoEngancheDeServicio(servicio: Servicio): GeoPoint | null {
 
 export interface GuardarAsignacionDiariaPayload {
   gruaPatente: string;
+  /** ID de dupla del catálogo. Vacío si la combinación chofer+enganchador es ad-hoc. */
   duplaId: string;
   duplaChofer: string;
   duplaEnganchador: string;
   /** @deprecated Payload legacy */
   duplaAyudante?: string;
-  inspector: string;
+  /** Legajo del chofer (enviado por frontend cuando la dupla es ad-hoc). */
+  legajoChofer?: string;
+  /** Legajo del enganchador (enviado por frontend cuando la dupla es ad-hoc). */
+  legajoEnganchador?: string;
   tipoFlota?: TipoFlota;
 }
 
 // Payloads para Firebase Functions
 export interface IniciarEnganchePayload {
   patente: string;
-  numeroInfraccion: string;
+  numeroInfraccion?: string;
   grua: string;
   dupla: DuplasServicio;
   geo: GeoPoint;
@@ -500,7 +679,6 @@ export interface RegistrarEventoEnganchePayload {
 export interface RegistrarLlegadaCorralónPayload {
   servicioId: string;
   corralon: string;
-  encargadoDeposito: string;
   geo: GeoPoint;
 }
 
@@ -519,12 +697,11 @@ export interface AnularServicioPayload {
 export interface ActualizarServicioPayload {
   servicioId: string;
   patente: string;
-  numeroInfraccion: string;
+  numeroInfraccion?: string;
   grua: string;
   corralon?: string | null;
   dupla: DuplasServicio;
   tipoFlota?: TipoFlota;
-  encargadoDeposito?: string | null;
   /** Motivo opcional de la corrección (auditoría). */
   motivo?: string | null;
 }
@@ -539,12 +716,11 @@ export interface AgregarComentarioFotoPayload {
 /** Alta manual de acta completa (supervisor / admin). */
 export interface CrearActaManualPayload {
   patente: string;
-  numeroInfraccion: string;
+  numeroInfraccion?: string;
   grua: string;
   dupla: DuplasServicio;
   legajoEnganchador: string;
   corralon?: string | null;
-  encargadoDeposito?: string | null;
   tipoFlota?: TipoFlota;
   /** Texto libre o URL de Google Maps (enganche). */
   ubicacionEnganche?: string;
@@ -555,4 +731,38 @@ export interface CrearActaManualPayload {
   fotosEngancheBase64: string[];
   fotosDesenganche?: Omit<Foto, 'url' | 'driveFileId'>[];
   fotosDesengancheBase64?: string[];
+}
+
+// ── Carnets de conducir ──────────────────────────────────────
+
+export interface CarnetDeConducir {
+  id: string;
+  numero: number;
+  nombre: string;
+  legajo: string;
+  fechaVencimiento: string;
+  activo: boolean;
+}
+
+export type CarnetEstadoVencimiento =
+  | 'VIGENTE'
+  | 'POR_VENCER_30D'
+  | 'POR_VENCER_15D'
+  | 'POR_VENCER_7D'
+  | 'VENCIDO';
+
+export function diasParaVencimiento(fechaVencimiento: string, ahora?: Date): number {
+  const hoy = ahora ?? new Date();
+  const venc = new Date(fechaVencimiento + 'T00:00:00');
+  const diffMs = venc.getTime() - new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()).getTime();
+  return Math.floor(diffMs / 86_400_000);
+}
+
+export function calcularEstadoCarnet(fechaVencimiento: string, ahora?: Date): CarnetEstadoVencimiento {
+  const dias = diasParaVencimiento(fechaVencimiento, ahora);
+  if (dias <= 0) return 'VENCIDO';
+  if (dias <= 7) return 'POR_VENCER_7D';
+  if (dias <= 15) return 'POR_VENCER_15D';
+  if (dias <= 30) return 'POR_VENCER_30D';
+  return 'VIGENTE';
 }

@@ -1,0 +1,14 @@
+---
+description: Contexto del rol supervisor (auditoría y monitoreo) en gruasBacar
+globs: frontend/src/pages/{SupervisorDashboardPage,NuevaActaManualPage,ReportesPage,HistorialPage}.tsx,frontend/src/components/reportes/**,frontend/src/hooks/useReportesData.ts,frontend/src/utils/reportesFilters.ts
+alwaysApply: false
+---
+
+# Rol supervisor
+
+- Circuito cerrado: `/supervisor-dashboard`, `/historial`, `/reportes`, `/supervisor/nueva-acta`
+- Permisos: `puedeVerHistorialCompleto`, `puedeGestionarActas` — sin ABM flota ni operación de campo
+- Backend gestión actas: `verificarGestionActas`, no `verificarAdmin`
+- Anulación incluye actas `DESENGANCHADO` (vs operador: solo estados tempranos)
+- Firestore: lectura amplia, escritura cero en servicios (solo Functions)
+- Subagente especializado: `.cursor/agents/supervisor.md`

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Settings, History, LayoutDashboard, Menu, FilePlus, BarChart3, Clock } from "lucide-react";
+import { Home, Settings, History, LayoutDashboard, Menu, FilePlus, BarChart3, LayoutGrid, FileText } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
-import { esOperador, esSoloSupervisor } from "@gruasbacar/shared";
+import { esAdmin, esSuperAdmin, esOperador, esSoloSupervisor, esSoloVisor } from "@gruasbacar/shared";
 
 const STORAGE_KEY = "gruasbacar_admin_sidebar_collapsed";
 
@@ -25,9 +25,11 @@ export const AdminSidebar: React.FC = () => {
         : "text-gray-600 hover:bg-brand-seashell/30 hover:text-gray-900 border border-transparent"
     }`;
 
-  const hasAdmin = userData?.roles?.includes("ADMIN");
+  const hasAdmin = userData ? esAdmin(userData.roles) : false;
   const hasOperador = userData ? esOperador(userData.roles) : false;
   const isSupervisorOnly = userData ? esSoloSupervisor(userData.roles) : false;
+  const isSuperAdmin = userData ? esSuperAdmin(userData.roles) : false;
+  const isVisorOnly = userData ? esSoloVisor(userData.roles) : false;
 
   return (
     <aside
@@ -62,7 +64,7 @@ export const AdminSidebar: React.FC = () => {
       </div>
 
       <nav className="flex flex-col gap-1 p-2 flex-grow overflow-y-auto">
-        {hasOperador && (
+        {(hasOperador || isSuperAdmin) && (
           <div className="mb-2">
             {!collapsed && <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Panel Operador</p>}
             <NavLink to="/" end className={linkClass} title={collapsed ? "Inicio" : undefined}>
@@ -79,13 +81,17 @@ export const AdminSidebar: React.FC = () => {
               <LayoutDashboard className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Dashboard</span>}
             </NavLink>
-            <NavLink to="/turnos" className={linkClass} title={collapsed ? "Turnos" : undefined}>
-              <Clock className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="truncate">Turnos</span>}
+            <NavLink to="/turnos" className={linkClass} title={collapsed ? "Diagramación" : undefined}>
+              <LayoutGrid className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Diagramación</span>}
             </NavLink>
             <NavLink to="/admin" className={linkClass} title={collapsed ? "Configuración" : undefined}>
               <Settings className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Configuración</span>}
+            </NavLink>
+            <NavLink to="/documentacion" className={linkClass} title={collapsed ? "Documentación" : undefined}>
+              <FileText className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Documentación</span>}
             </NavLink>
             <NavLink to="/reportes" className={linkClass} title={collapsed ? "Reportes" : undefined}>
               <BarChart3 className="w-4 h-4 shrink-0" />
@@ -94,7 +100,7 @@ export const AdminSidebar: React.FC = () => {
           </div>
         )}
 
-        {isSupervisorOnly && (
+        {(isSupervisorOnly || isSuperAdmin) && (
           <div className="mb-2">
             {!collapsed && (
               <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
@@ -128,7 +134,33 @@ export const AdminSidebar: React.FC = () => {
           </div>
         )}
 
-        {!isSupervisorOnly && (
+        {isVisorOnly && (
+          <div className="mb-2">
+            {!collapsed && (
+              <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Panel Visor
+              </p>
+            )}
+            <NavLink
+              to="/supervisor-dashboard"
+              className={linkClass}
+              title={collapsed ? "Dashboard" : undefined}
+            >
+              <LayoutDashboard className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Dashboard</span>}
+            </NavLink>
+            <NavLink to="/historial" className={linkClass} title={collapsed ? "Historial" : undefined}>
+              <History className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Historial</span>}
+            </NavLink>
+            <NavLink to="/reportes" className={linkClass} title={collapsed ? "Reportes" : undefined}>
+              <BarChart3 className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Reportes</span>}
+            </NavLink>
+          </div>
+        )}
+
+        {hasAdmin && !isSuperAdmin && (
           <div className="mb-2">
             {!collapsed && <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">General</p>}
             <NavLink to="/historial" className={linkClass} title={collapsed ? "Historial" : undefined}>

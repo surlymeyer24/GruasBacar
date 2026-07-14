@@ -16,7 +16,7 @@ import {
   ensureAdminServicios,
   getAdminServiciosSnapshot,
 } from "../services/adminServicios.cache";
-import { resolverPatenteGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
+import { resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
 import {
   DEFAULT_REPORTES_FILTERS,
@@ -59,7 +59,6 @@ export interface ReportesAggregations {
   porDupla: { name: string; total: number; finalizadas: number }[];
   porGrua: { name: string; actas: number }[];
   porTipo: { name: string; actas: number }[];
-  porInspector: { inspector: string; actas: number; promedioHoras: number | null }[];
   tablaResumen: {
     patente: string;
     acta: string;
@@ -199,7 +198,6 @@ export function useReportesData() {
     const porDuplaMap = new Map<string, { total: number; finalizadas: number }>();
     const porGruaMap = new Map<string, number>();
     const porTipoMap = new Map<string, number>();
-    const porInspectorMap = new Map<string, { count: number; totalMs: number; withMs: number }>();
 
     for (const s of activeFiltered) {
       porEstadoMap.set(s.estado, (porEstadoMap.get(s.estado) ?? 0) + 1);
@@ -223,21 +221,11 @@ export function useReportesData() {
       if (s.estado === "DESENGANCHADO") duplaEntry.finalizadas += 1;
       porDuplaMap.set(duplaLabel, duplaEntry);
 
-      const gruaLabel = resolverPatenteGrua(s.grua, gruasCatalog);
+      const gruaLabel = resolverLabelGrua(s.grua, gruasCatalog);
       porGruaMap.set(gruaLabel, (porGruaMap.get(gruaLabel) ?? 0) + 1);
 
       const tipoLabel = labelTipoFlota(tipoFlotaDeServicio(s, gruasCatalog));
       porTipoMap.set(tipoLabel, (porTipoMap.get(tipoLabel) ?? 0) + 1);
-
-      const inspector = s.dupla?.inspector?.trim() || "Sin inspector";
-      const inspEntry = porInspectorMap.get(inspector) ?? { count: 0, totalMs: 0, withMs: 0 };
-      inspEntry.count += 1;
-      const dur = resumenDuracionActa(s)?.duracionMs;
-      if (dur !== null && dur !== undefined) {
-        inspEntry.totalMs += dur;
-        inspEntry.withMs += 1;
-      }
-      porInspectorMap.set(inspector, inspEntry);
     }
 
     const porHora = Array.from({ length: 24 }, (_, h) => ({
@@ -270,16 +258,6 @@ export function useReportesData() {
       "actas"
     );
 
-    const porInspector = [...porInspectorMap.entries()]
-      .map(([inspector, v]) => ({
-        inspector,
-        actas: v.count,
-        promedioHoras:
-          v.withMs > 0 ? Math.round((v.totalMs / v.withMs / (1000 * 60 * 60)) * 10) / 10 : null,
-      }))
-      .sort((a, b) => b.actas - a.actas)
-      .slice(0, 10);
-
     const tablaResumen = activeFiltered.slice(0, 50).map((s) => {
       const duplaKey = duplaKeyFromServicio(s);
       return {
@@ -290,7 +268,7 @@ export function useReportesData() {
         corralon: s.corralon
           ? nombreCorralon(s.corralon, corralonesCatalog, CORRALONES)
           : "—",
-        grua: resolverPatenteGrua(s.grua, gruasCatalog),
+        grua: resolverLabelGrua(s.grua, gruasCatalog),
         duracion: resumenDuracionActa(s)?.etiqueta ?? "—",
         fecha: fechaServicio(s)?.toLocaleDateString("es-AR") ?? "—",
       };
@@ -307,7 +285,6 @@ export function useReportesData() {
       porDupla,
       porGrua,
       porTipo: [...porTipoMap.entries()].map(([name, actas]) => ({ name, actas })),
-      porInspector,
       tablaResumen,
     };
   }, [activeFiltered, gruasCatalog, corralonesCatalog]);

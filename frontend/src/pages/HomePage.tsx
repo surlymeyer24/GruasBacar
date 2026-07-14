@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
-import { 
-  Plus, 
-  History, 
-  Truck, 
+import {
+  Plus,
+  Truck,
   CalendarDays,
   Users,
-  Shield,
   Pencil,
   Tag,
+  History,
 } from "lucide-react";
 import { isMock, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { getMockServices } from "../data/mockData";
-import { Servicio, servicioActivoVigente, rutaFlujoOperadorPorEstado, ServicioActivoResumen } from "@gruasbacar/shared";
+import { Servicio, servicioActivoVigente, rutaFlujoOperadorPorEstado, ServicioActivoResumen, displayPatente } from "@gruasbacar/shared";
 import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
-import { asignacionDiariaVigente, configDiaFueOmitidaHoy, limpiarConfigDiaOmitidaHoy, marcarConfigDiaOmitidaHoy } from "../utils/asignacionDiaria";
+import { asignacionDiariaVigente } from "../utils/asignacionDiaria";
 import { ConfiguracionDiaModal } from "../components/operador/ConfiguracionDiaModal";
-import { esOperador, labelTipoFlota, duplaEnganchadorDeAsignacion } from "@gruasbacar/shared";
+import { esOperador, labelTipoFlota, duplaEnganchadorDeAsignacion, primerNombre, asignacionCoincideConUsuario } from "@gruasbacar/shared";
+
 
 function servicioDesdeResumen(resumen: ServicioActivoResumen | null | undefined): Servicio | null {
   if (!servicioActivoVigente(resumen)) return null;
@@ -40,17 +40,17 @@ export const HomePage: React.FC = () => {
   const [activeService, setActiveService] = useState<Servicio | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [showConfigDia, setShowConfigDia] = useState(false);
-
-  const isAdmin = userData?.roles?.includes("ADMIN");
+  const isAdmin = userData?.roles?.includes("SUPERADMIN") || userData?.roles?.includes("ADMIN");
   const isEnganchador = userData ? esOperador(userData.roles) : false;
   const turnoHoy = asignacionDiariaVigente(userData?.asignacionDiaria);
+  const turnoCoincideConUsuario = turnoHoy ? asignacionCoincideConUsuario(turnoHoy, userData) : false;
   const authReady = !sessionLoading && !profileLoading;
 
   useEffect(() => {
-    if (authReady && isEnganchador && !turnoHoy && !configDiaFueOmitidaHoy()) {
+    if (authReady && isEnganchador && (!turnoHoy || !turnoCoincideConUsuario)) {
       setShowConfigDia(true);
     }
-  }, [authReady, isEnganchador, turnoHoy]);
+  }, [authReady, isEnganchador, turnoHoy, turnoCoincideConUsuario]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -117,11 +117,9 @@ export const HomePage: React.FC = () => {
         allowDismiss
         initialAsignacion={userData?.asignacionDiaria}
         onClose={() => {
-          marcarConfigDiaOmitidaHoy();
           setShowConfigDia(false);
         }}
         onSaved={() => {
-          limpiarConfigDiaOmitidaHoy();
           setShowConfigDia(false);
         }}
       />
@@ -135,13 +133,13 @@ export const HomePage: React.FC = () => {
                 SISTEMA OPERACIONAL GRUAS BACAR
               </p>
               <h1 className="text-2xl font-bold tracking-tight mt-1">
-                ¡Bienvenido/a, {userData?.nombre}!
+                ¡Bienvenido/a, {primerNombre(userData?.nombre)}!
               </h1>
               <p className="text-sm text-brand-seashell mt-1 max-w-xl">
                 {isAdmin && isEnganchador
                   ? "Panel de control general: podés gestionar la flota y también registrar nuevos enganches."
                   : isAdmin 
-                  ? "Panel de administración y auditoría de la flota de remolques y actas de secuestros estatales."
+                  ? "Panel de administración y auditoría de la flota de remolques y actas de servicios estatales."
                   : "Listo para registrar nuevos enganches y traslados de vehículos infractores en la vía pública."}
               </p>
             </div>
@@ -207,26 +205,14 @@ export const HomePage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 p-2.5 bg-brand-bg rounded-xl border border-brand-seashell/60">
+                    <div className="col-span-2 flex items-center gap-2.5 p-2.5 bg-brand-bg rounded-xl border border-brand-seashell/60">
                       <div className="shrink-0 p-1.5 bg-white rounded-lg border border-brand-seashell/50">
                         <Truck className="w-3.5 h-3.5 text-brand-pale" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-[9px] font-bold text-brand-pale uppercase tracking-widest">Grúa</p>
                         <p className="font-mono text-xs font-extrabold text-brand-purply tracking-wider truncate mt-0.5">
-                          {turnoHoy.gruaPatente}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 p-2.5 bg-brand-bg rounded-xl border border-brand-seashell/60">
-                      <div className="shrink-0 p-1.5 bg-white rounded-lg border border-brand-seashell/50">
-                        <Shield className="w-3.5 h-3.5 text-brand-pale" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[9px] font-bold text-brand-pale uppercase tracking-widest">Inspector</p>
-                        <p className="text-xs font-semibold text-brand-purply truncate mt-0.5">
-                          {turnoHoy.inspector}
+                          {turnoHoy.gruaDescripcion ? `${turnoHoy.gruaDescripcion} — ` : ""}{turnoHoy.gruaPatente}
                         </p>
                       </div>
                     </div>
@@ -270,13 +256,7 @@ export const HomePage: React.FC = () => {
                   <div className="space-y-1">
                     <span className="text-[10px] font-bold text-brand-pale uppercase tracking-widest block">Vehículo</span>
                     <span className="font-mono text-sm font-extrabold text-brand-purply px-2 py-0.5 bg-brand-bg rounded border border-brand-seashell">
-                      {activeService.patente}
-                    </span>
-                  </div>
-                  <div className="space-y-1 text-right">
-                    <span className="text-[10px] font-bold text-brand-pale uppercase tracking-widest block">Acta / Infracción</span>
-                    <span className="font-mono text-xs font-semibold text-brand-purply block">
-                      #{activeService.numeroInfraccion}
+                      {displayPatente(activeService.patente)}
                     </span>
                   </div>
                   <div className="space-y-1 text-right">
@@ -304,7 +284,7 @@ export const HomePage: React.FC = () => {
                   </button>
                   <button
                     onClick={async () => {
-                      if (window.confirm("¿Seguro que desea liberar la grúa para este servicio activo? Podrá registrar un nuevo enganche.")) {
+                      if (window.confirm("¿Seguro que desea liberar la grúa? El servicio activo será anulado con motivo \"Liberado por el operador\".")) {
                         try {
                           await updateServicioActivo(null);
                           setActiveService(null);
@@ -328,7 +308,7 @@ export const HomePage: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <h2 className="text-2xl font-black text-brand-purply tracking-tight">
-                  Hola, {userData?.nombre}
+                  Hola, {primerNombre(userData?.nombre)}
                 </h2>
                 <p className="text-xs text-brand-pale max-w-sm mx-auto font-sans">
                   Para iniciar el registro de un nuevo servicio de remolque en la vía pública, presione el botón de abajo.
@@ -343,21 +323,18 @@ export const HomePage: React.FC = () => {
                 <Plus className="w-5 h-5 stroke-[3]" />
                 NUEVO ENGANCHE
               </button>
+              <button
+                onClick={() => navigate("/mis-actas")}
+                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-brand-bg hover:bg-brand-seashell/40 text-brand-purply font-bold rounded-xl border border-brand-seashell transition-all text-xs cursor-pointer active:scale-95"
+              >
+                <History className="w-4 h-4" />
+                Ver mis actas
+              </button>
               {!turnoHoy && (
                 <p className="text-[10px] text-brand-pale font-medium">
                   Si aún no configuraste el turno de hoy, te lo pediremos al iniciar el enganche.
                 </p>
               )}
-              
-              <div className="pt-6 border-t border-brand-seashell flex justify-center">
-                <Link 
-                  to="/historial" 
-                  className="flex items-center gap-2 text-xs font-bold text-brand-cta hover:text-brand-cta-hover transition-colors uppercase tracking-wider"
-                >
-                  <History className="w-4 h-4" />
-                  Ver Tu Historial De Servicios
-                </Link>
-              </div>
             </div>
           </div>
         )}
