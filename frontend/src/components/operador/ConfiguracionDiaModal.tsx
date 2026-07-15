@@ -105,6 +105,23 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     [gruas, tipoFlota]
   );
 
+  const userIdentity = useMemo<{ nombre?: string; legajo?: string }>(() => {
+    const nombre = userData?.nombre;
+    const legajo = userData?.legajo;
+    if (nombre && legajo) return { nombre, legajo };
+
+    const matchInCf = cfOperadores.find((o) => {
+      if (legajo && legajoKey(o.legajo) === legajoKey(legajo)) return true;
+      if (nombre && nombre !== "Usuario Sin Nombre" && nombresCoinciden(o.nombre, nombre)) return true;
+      return false;
+    });
+    if (matchInCf) return { nombre: matchInCf.nombre, legajo: matchInCf.legajo };
+
+    return { nombre, legajo };
+  }, [userData, cfOperadores]);
+
+  const miDupla = useMemo(() => duplaDeUsuario(duplas, userIdentity), [duplas, userIdentity]);
+
   const choferes = useMemo(() => {
     const fromDuplas = extractOperadores(duplas, "chofer");
     const fromCf = cfOperadores
@@ -118,8 +135,20 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
       seen.add(key);
       result.push(op);
     }
+    if (userIdentity?.nombre && userIdentity.nombre !== "Usuario Sin Nombre") {
+      const roles = normalizeRoles(userData?.roles, userData?.rol);
+      if (roles.includes("CHOFER")) {
+        const me: Operador = { nombre: userIdentity.nombre, legajo: userIdentity.legajo ?? "" };
+        if (!seen.has(uniqueKey(me))) result.push(me);
+      }
+    }
+    if (miDupla) {
+      const duplaKey = uniqueKey({ nombre: miDupla.chofer, legajo: miDupla.legajoChofer ?? "" });
+      const idx = result.findIndex((o) => uniqueKey(o) === duplaKey);
+      if (idx > 0) result.unshift(...result.splice(idx, 1));
+    }
     return result;
-  }, [duplas, cfOperadores]);
+  }, [duplas, cfOperadores, userData, userIdentity, miDupla]);
 
   const enganchadores = useMemo(() => {
     const fromDuplas = extractOperadores(duplas, "enganchador");
@@ -134,8 +163,21 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
       seen.add(key);
       result.push(op);
     }
+    if (userIdentity?.nombre && userIdentity.nombre !== "Usuario Sin Nombre") {
+      const roles = normalizeRoles(userData?.roles, userData?.rol);
+      if (roles.includes("ENGANCHADOR")) {
+        const me: Operador = { nombre: userIdentity.nombre, legajo: userIdentity.legajo ?? "" };
+        if (!seen.has(uniqueKey(me))) result.push(me);
+      }
+    }
+    if (miDupla) {
+      const eng = enganchadorDeDupla(miDupla);
+      const duplaKey = uniqueKey({ nombre: eng, legajo: miDupla.legajoEnganchador ?? "" });
+      const idx = result.findIndex((o) => uniqueKey(o) === duplaKey);
+      if (idx > 0) result.unshift(...result.splice(idx, 1));
+    }
     return result;
-  }, [duplas, cfOperadores]);
+  }, [duplas, cfOperadores, userData, userIdentity, miDupla]);
 
   const selectedChofer = choferes.find((c) => uniqueKey(c) === choferKey);
   const selectedEnganchador = enganchadores.find((e) => uniqueKey(e) === enganchadorKey);
@@ -183,8 +225,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     if (!preselected.current) {
       preselected.current = true;
 
-      const miDupla = duplaDeUsuario(duplas, userData);
-
       if (miDupla) {
         const choferOp: Operador = { nombre: miDupla.chofer, legajo: miDupla.legajoChofer ?? "" };
         const engOp: Operador = { nombre: enganchadorDeDupla(miDupla), legajo: miDupla.legajoEnganchador ?? "" };
@@ -192,8 +232,8 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         setEnganchadorKey(uniqueKey(engOp));
       } else {
         const roles = normalizeRoles(userData?.roles, userData?.rol);
-        const userLegajo = legajoKey(userData?.legajo);
-        const userName = userData?.nombre;
+        const userLegajo = legajoKey(userIdentity?.legajo);
+        const userName = userIdentity?.nombre;
 
         const matchByLegajoOrName = (ops: Operador[]) =>
           ops.find((o) =>
@@ -205,10 +245,13 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
           const match = matchByLegajoOrName(choferes);
           setChoferKey(match ? uniqueKey(match) : "");
           setEnganchadorKey("");
-        } else {
+        } else if (roles.includes("ENGANCHADOR")) {
           const match = matchByLegajoOrName(enganchadores);
           setEnganchadorKey(match ? uniqueKey(match) : "");
           setChoferKey("");
+        } else {
+          setChoferKey("");
+          setEnganchadorKey("");
         }
       }
     }
@@ -217,7 +260,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
       if (gruasFiltradas.some((g) => g.patente === prev)) return prev;
       return gruasFiltradas[0]?.patente ?? "";
     });
-  }, [isOpen, loadingCatalog, tipoFlota, gruas, duplas, gruasFiltradas, choferes, enganchadores, userData]);
+  }, [isOpen, loadingCatalog, tipoFlota, gruas, duplas, gruasFiltradas, choferes, enganchadores, userData, userIdentity, miDupla]);
 
   const gruaOptions = useMemo(
     () =>
