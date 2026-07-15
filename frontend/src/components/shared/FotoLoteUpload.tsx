@@ -61,7 +61,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   draftCacheKey,
   limpiarCacheAlConfirmar = true,
   permitirGaleria = false,
-  maxExtras = 1,
+  maxExtras = 5,
   onBack,
   backLabel = "Volver",
   onConfirm,

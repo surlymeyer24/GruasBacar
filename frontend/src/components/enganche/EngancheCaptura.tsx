@@ -411,7 +411,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         onConfirm={handleConfirmFotos}
         onFotosListas={handleFotosListas}
         permitirGaleria
-        maxExtras={3}
+        maxExtras={5}
       />
     </div>
   );

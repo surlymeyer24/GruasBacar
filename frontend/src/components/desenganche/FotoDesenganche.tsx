@@ -30,7 +30,7 @@ export const FotoDesenganche: React.FC<FotoDesengancheProps> = ({
       draftCacheKey={claveBorradorDraft(servicioId, "desenganche")}
       limpiarCacheAlConfirmar={false}
       permitirGaleria
-      maxExtras={3}
+      maxExtras={5}
       onBack={onBack}
       backLabel={backLabel}
       onConfirm={async (result) => {

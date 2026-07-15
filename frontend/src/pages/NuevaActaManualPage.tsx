@@ -316,7 +316,7 @@ export const NuevaActaManualPage: React.FC = () => {
             confirmLabel="Confirmar fotos de enganche"
             permitirGaleria
             limpiarCacheAlConfirmar={false}
-            maxExtras={3}
+            maxExtras={5}
             onConfirm={async (result) => {
               setFotosEnganche(result);
             }}
@@ -371,7 +371,7 @@ export const NuevaActaManualPage: React.FC = () => {
               confirmLabel="Confirmar fotos de desenganche"
               permitirGaleria
               limpiarCacheAlConfirmar={false}
-              maxExtras={3}
+              maxExtras={5}
               onConfirm={async (result) => {
                 setFotosDesenganche(result);
               }}

@@ -218,7 +218,7 @@ export const FotoGuiada: React.FC<FotoGuiadaProps> = ({
       backLabel={backLabel}
       onConfirm={handleConfirmFotos}
       permitirGaleria
-      maxExtras={3}
+      maxExtras={5}
     />
   );
 };
