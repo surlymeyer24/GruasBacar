@@ -29,6 +29,7 @@ import {
   RolUsuario,
   AsignacionDiaria,
   DuplasServicio,
+  TipoSnapshot,
 } from '@gruasbacar/shared';
 import {
   validarPatente,
@@ -63,7 +64,7 @@ function registrarVersionActa(
   servicioRef: admin.firestore.DocumentReference,
   versionCountActual: number,
   editor: EditorContext,
-  tipo: 'EDICION' | 'ANULACION' | 'CREACION_MANUAL',
+  tipo: 'EDICION' | 'ANULACION' | 'CREACION_MANUAL' | 'REVERSION',
   cambios: ReturnType<typeof diffEdicionServicio>,
   motivo?: string | null
 ): number {
@@ -88,6 +89,21 @@ function registrarVersionActa(
   });
 
   return nextVersion;
+}
+
+function registrarSnapshot(
+  tx: admin.firestore.Transaction,
+  servicioRef: admin.firestore.DocumentReference,
+  datos: FirebaseFirestore.DocumentData,
+  operacion: TipoSnapshot,
+  editorUid: string
+): void {
+  tx.set(servicioRef.collection('snapshots').doc(), {
+    datos,
+    operacion,
+    creadoPor: editorUid,
+    creadoEn: FieldValue.serverTimestamp(),
+  });
 }
 
 function buildServicioActivoResumen(
@@ -676,6 +692,7 @@ export async function confirmarDesenganche(
 
   const usuarioRef = db().collection('usuarios').doc(uid);
   await db().runTransaction(async (tx) => {
+    registrarSnapshot(tx, servicioRef, servicio, 'DESENGANCHE', uid);
     tx.update(servicioRef, {
       estado: 'DESENGANCHADO' as EstadoServicio,
       finalizadoEn: FieldValue.serverTimestamp(),
@@ -728,6 +745,7 @@ export async function anularServicio(
   const cambios = cambiosAnulacion(servicio.estado as EstadoServicio, motivo);
 
   await db().runTransaction(async (tx) => {
+    registrarSnapshot(tx, servicioRef, servicio, 'ANULACION', editor.uid);
     tx.update(servicioRef, {
       estado: 'ANULADO' as EstadoServicio,
       motivoAnulacion: motivo ?? null,
@@ -783,6 +801,7 @@ export async function actualizarServicio(data: ActualizarServicioPayload, editor
   const versionCount = (actual.versionCount as number | undefined) ?? 0;
 
   await db().runTransaction(async (tx) => {
+    registrarSnapshot(tx, servicioRef, actual, 'EDICION', editor.uid);
     tx.update(servicioRef, updates);
     registrarVersionActa(
       tx,
@@ -1116,6 +1135,7 @@ export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ li
       const cambios = cambiosAnulacion(estado, motivo);
 
       await db().runTransaction(async (tx) => {
+        registrarSnapshot(tx, servicioRef, servicio, 'ANULACION', uid);
         tx.update(servicioRef, {
           estado: 'ANULADO' as EstadoServicio,
           motivoAnulacion: motivo,
@@ -1132,4 +1152,104 @@ export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ li
 
   await usuarioRef.update(LIMPIAR_SERVICIO_ACTIVO_USUARIO);
   return { liberado: true };
+}
+
+export async function revertirServicio(
+  data: { servicioId: string; snapshotId?: string; motivo?: string },
+  editor: EditorContext
+): Promise<void> {
+  const servicioId = validarString(data.servicioId, 'servicioId');
+  const motivo = validarStringOpcional(data.motivo, 'motivo', 500);
+
+  const servicioRef = db().collection('servicios').doc(servicioId);
+  const servicioSnap = await servicioRef.get();
+  if (!servicioSnap.exists) throw new HttpsError('not-found', 'Servicio no encontrado.');
+
+  let snapshotDoc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot;
+  if (data.snapshotId) {
+    snapshotDoc = await servicioRef.collection('snapshots').doc(data.snapshotId).get();
+    if (!snapshotDoc.exists) throw new HttpsError('not-found', 'Snapshot no encontrado.');
+  } else {
+    const snapshotsQuery = await servicioRef
+      .collection('snapshots')
+      .orderBy('creadoEn', 'desc')
+      .limit(1)
+      .get();
+    if (snapshotsQuery.empty) throw new HttpsError('not-found', 'No hay snapshots disponibles para este servicio.');
+    snapshotDoc = snapshotsQuery.docs[0];
+  }
+
+  const snapshotData = snapshotDoc.data()!;
+  const datosAnteriores = snapshotData.datos as Record<string, unknown>;
+  if (!datosAnteriores) throw new HttpsError('internal', 'Snapshot sin datos.');
+
+  const servicioActual = servicioSnap.data()!;
+  const versionCount = (servicioActual.versionCount as number | undefined) ?? 0;
+
+  const estadoAnterior = datosAnteriores.estado as EstadoServicio;
+  const estadoActual = servicioActual.estado as EstadoServicio;
+
+  const camposARestaurar: Record<string, unknown> = {};
+  const CAMPOS_RESTAURABLES = [
+    'estado', 'patente', 'numeroInfraccion', 'grua', 'gruaDocId',
+    'tipoFlota', 'dupla', 'corralon', 'corralonId',
+    'motivoAnulacion', 'anuladoPor', 'anuladoEn', 'finalizadoEn',
+  ];
+  for (const campo of CAMPOS_RESTAURABLES) {
+    if (campo in datosAnteriores) {
+      camposARestaurar[campo] = datosAnteriores[campo];
+    } else {
+      camposARestaurar[campo] = null;
+    }
+  }
+
+  const cambios = [
+    {
+      campo: 'estado',
+      etiqueta: 'Estado',
+      valorAnterior: estadoActual,
+      valorNuevo: estadoAnterior,
+    },
+  ];
+
+  await db().runTransaction(async (tx) => {
+    registrarSnapshot(tx, servicioRef, servicioActual, snapshotData.operacion, editor.uid);
+    tx.update(servicioRef, {
+      ...camposARestaurar,
+      revertidoPor: editor.uid,
+      revertidoEn: FieldValue.serverTimestamp(),
+    });
+    registrarVersionActa(tx, servicioRef, versionCount, editor, 'REVERSION', cambios, motivo);
+  });
+}
+
+const RETENCION_SNAPSHOTS_DIAS = 90;
+
+export async function purgarSnapshots(): Promise<{ eliminados: number }> {
+  const limite = admin.firestore.Timestamp.fromDate(
+    new Date(Date.now() - RETENCION_SNAPSHOTS_DIAS * 24 * 60 * 60 * 1000)
+  );
+
+  let totalEliminados = 0;
+  let hayMas = true;
+
+  while (hayMas) {
+    const vencidos = await db()
+      .collectionGroup('snapshots')
+      .where('creadoEn', '<', limite)
+      .limit(500)
+      .get();
+
+    if (vencidos.empty) {
+      hayMas = false;
+      break;
+    }
+
+    const batch = db().batch();
+    vencidos.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    totalEliminados += vencidos.size;
+  }
+
+  return { eliminados: totalEliminados };
 }

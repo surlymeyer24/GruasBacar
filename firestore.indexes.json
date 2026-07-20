@@ -31,6 +31,13 @@
         { "fieldPath": "destinatarioUid", "order": "ASCENDING" },
         { "fieldPath": "leida", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "snapshots",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "creadoEn", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

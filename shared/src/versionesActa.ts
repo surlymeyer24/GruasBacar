@@ -12,7 +12,9 @@ import {
   normalizeTipoFlota,
 } from './types';
 
-export type TipoVersionActa = 'EDICION' | 'ANULACION' | 'CREACION_MANUAL';
+export type TipoVersionActa = 'EDICION' | 'ANULACION' | 'CREACION_MANUAL' | 'REVERSION';
+
+export type TipoSnapshot = 'ANULACION' | 'EDICION' | 'DESENGANCHE';
 
 export interface CambioCampoActa {
   campo: string;
@@ -150,5 +152,6 @@ export function rolEditorVersion(roles: RolUsuario[]): VersionActa['editadoPorRo
 export function labelTipoVersion(tipo: TipoVersionActa): string {
   if (tipo === 'ANULACION') return 'Anulación';
   if (tipo === 'CREACION_MANUAL') return 'Alta manual';
+  if (tipo === 'REVERSION') return 'Reversión';
   return 'Edición';
 }

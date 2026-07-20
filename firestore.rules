@@ -81,6 +81,11 @@ service cloud.firestore {
           (isEnganchador() && get(/databases/$(database)/documents/servicios/$(servicioId)).data.creadoPor == request.auth.uid);
         allow write: if false; // solo via Cloud Functions
       }
+
+      match /snapshots/{snapshotId} {
+        allow read: if isAdmin();
+        allow write: if false; // solo via Cloud Functions
+      }
     }
 
     match /gruas/{gruaId} {

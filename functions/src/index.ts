@@ -143,6 +143,12 @@ export const actualizarServicio = onCall(callable, withHttpsErrorHandling('actua
   return { ok: true };
 }));
 
+export const revertirServicio = onCall(callable, withHttpsErrorHandling('revertirServicio', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  await servicioService.revertirServicio(request.data, ctx);
+  return { ok: true };
+}));
+
 export const agregarComentarioFoto = onCall(callable, withHttpsErrorHandling('agregarComentarioFoto', async (request) => {
   const ctx = await verificarGestionActas(request.auth);
   const comentario = await servicioService.agregarComentarioFoto(
@@ -330,6 +336,13 @@ export const verificarCarnetsVencimiento = onSchedule(
   { schedule: 'every day 08:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
   async () => {
     await carnetService.verificarVencimientosCarnets();
+  }
+);
+
+export const purgarSnapshots = onSchedule(
+  { schedule: 'every day 03:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await servicioService.purgarSnapshots();
   }
 );
 
