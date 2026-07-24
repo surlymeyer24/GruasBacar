@@ -315,8 +315,8 @@ const CarnetsTab: React.FC<{
         </div>
       )}
 
-      <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white overflow-hidden">
-        <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50">
+      <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
+        <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50 rounded-t-2xl">
           <AdminListFilters
             search={search}
             onSearchChange={setSearch}
@@ -713,8 +713,8 @@ const ITVTab: React.FC = () => {
         </div>
       )}
 
-      <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white overflow-hidden">
-        <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50">
+      <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
+        <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50 rounded-t-2xl">
           <AdminListFilters
             search={search}
             onSearchChange={setSearch}

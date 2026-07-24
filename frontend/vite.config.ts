@@ -1,3 +1,4 @@
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -11,6 +12,7 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
+      basicSsl(),
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
@@ -21,7 +23,9 @@ export default defineConfig(() => {
           theme_color: '#161A1D',
           background_color: '#161A1D',
           display: 'standalone',
-          orientation: 'portrait',
+          // "any" = la PWA sigue la orientación del celular (y el candado del sistema).
+          // "portrait" bloqueaba el giro y empeoraba el desfase sensor↔canvas en cámara.
+          orientation: 'any',
           start_url: '/',
           scope: '/',
           icons: [
@@ -83,6 +87,25 @@ export default defineConfig(() => {
     },
     optimizeDeps: {
       include: ['react', 'react-dom', 'react-router-dom', 'motion/react', 'jspdf'],
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('firebase') || id.includes('@firebase')) {
+                return 'firebase';
+              }
+              if (id.includes('lucide-react')) {
+                return 'lucide';
+              }
+              if (id.includes('motion') || id.includes('framer-motion')) {
+                return 'motion';
+              }
+            }
+          },
+        },
+      },
     },
     server: {
       host: '0.0.0.0',

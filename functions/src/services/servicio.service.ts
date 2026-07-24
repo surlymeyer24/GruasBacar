@@ -93,7 +93,9 @@ function registrarVersionActa(
 
 function buildServicioActivoResumen(
   servicioId: string,
-  data: Pick<ServicioActivoResumen, 'estado' | 'patente' | 'numeroInfraccion'> & { descripcionVehiculo?: string }
+  data: Pick<ServicioActivoResumen, 'estado' | 'patente' | 'numeroInfraccion' | 'esTest'> & {
+    descripcionVehiculo?: string;
+  }
 ): ServicioActivoResumen {
   const resumen: ServicioActivoResumen = {
     id: servicioId,
@@ -102,6 +104,7 @@ function buildServicioActivoResumen(
     numeroInfraccion: data.numeroInfraccion,
   };
   if (data.descripcionVehiculo) resumen.descripcionVehiculo = data.descripcionVehiculo;
+  if (data.esTest) resumen.esTest = true;
   return resumen;
 }
 
@@ -177,7 +180,10 @@ export async function iniciarEnganche(
   const usuarioData = usuarioSnap.data()!;
 
   if (usuarioData.servicioActivoId) {
-    throw new HttpsError('failed-precondition', 'Ya tenés un servicio activo. Terminalo antes de iniciar otro.');
+    throw new HttpsError(
+      'failed-precondition',
+      'Ya tenés un servicio activo. Terminalo antes de iniciar otro. Si lo creaste en el site de prueba, cerralo ahí primero.'
+    );
   }
 
   const legajoRaw = usuarioData.legajo as string | undefined;
@@ -207,6 +213,7 @@ export async function iniciarEnganche(
   const descripcionVehiculo = esPatenteSinNumero(patente)
     ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
     : undefined;
+  const esTest = data.esTest === true;
 
   await db().runTransaction(async (tx) => {
     const asignacion = usuarioData.asignacionDiaria as AsignacionDiaria | undefined;
@@ -231,6 +238,7 @@ export async function iniciarEnganche(
       geoEnganche,
       creadoEn: FieldValue.serverTimestamp(),
       ...(descripcionVehiculo ? { descripcionVehiculo } : {}),
+      ...(esTest ? { esTest: true } : {}),
     });
     tx.update(usuarioRef, {
       servicioActivoId: servicioRef.id,
@@ -239,6 +247,7 @@ export async function iniciarEnganche(
         patente,
         numeroInfraccion,
         descripcionVehiculo,
+        ...(esTest ? { esTest: true } : {}),
       }),
     });
   });
@@ -246,19 +255,19 @@ export async function iniciarEnganche(
   const servicioId = servicioRef.id;
 
   if (driveFolderId?.trim()) {
-    void import('./drive.service')
-      .then((drive) =>
-        drive.prepararCarpetasServicio(
-          driveFolderId,
-          legajoChofer,
-          patente,
-          numeroInfraccion,
-          new Date()
-        )
-      )
-      .catch((err) => {
-        console.warn('[iniciarEnganche] Carpetas Drive no preparadas (se crearán al subir fotos):', err);
-      });
+    try {
+      const drive = await import('./drive.service');
+      const { fechaFolderId, carpetaId } = await drive.prepararCarpetasServicio(
+        driveFolderId,
+        legajoChofer,
+        patente,
+        numeroInfraccion,
+        new Date()
+      );
+      await servicioRef.update({ driveCarpetaId: carpetaId, driveFechaFolderId: fechaFolderId });
+    } catch (err) {
+      console.warn('[iniciarEnganche] Carpetas Drive no preparadas (se crearán al subir fotos):', err);
+    }
   }
 
   return { servicioId };
@@ -437,7 +446,7 @@ export async function registrarEventoEnganche(
     const geo = data.geo;
     const observacionGeneral = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
 
-    validarLoteFotos(fotos, fotosBase64, 3);
+    validarLoteFotos(fotos, fotosBase64, 5);
 
     const servicioRef = db().collection('servicios').doc(servicioId);
     const servicioSnap = await servicioRef.get();
@@ -627,7 +636,7 @@ export async function confirmarDesenganche(
   const { fotos, fotosBase64 } = normalizarPayloadFotos(data);
   const observacionGeneral = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
 
-  validarLoteFotos(fotos, fotosBase64, 3);
+  validarLoteFotos(fotos, fotosBase64, 5);
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
@@ -925,10 +934,10 @@ export async function crearActaManual(
   const fotosDesenganche = Array.isArray(data.fotosDesenganche) ? data.fotosDesenganche : [];
   const fotosDesengancheBase64 = Array.isArray(data.fotosDesengancheBase64) ? data.fotosDesengancheBase64 : [];
 
-  validarLoteFotos(fotosEnganche, fotosEngancheBase64, 3);
+  validarLoteFotos(fotosEnganche, fotosEngancheBase64, 5);
   const tieneDesenganche = fotosDesengancheBase64.length > 0;
   if (tieneDesenganche) {
-    validarLoteFotos(fotosDesenganche, fotosDesengancheBase64, 3);
+    validarLoteFotos(fotosDesenganche, fotosDesengancheBase64, 5);
   }
 
   const legajoChofer = validarString(data.legajoEnganchador, 'legajoEnganchador', 50);
@@ -1011,6 +1020,7 @@ export async function crearActaManual(
       geoEnganche,
       ...(descripcionVehiculo ? { descripcionVehiculo } : {}),
       origenManual: true,
+      ...(data.esTest === true ? { esTest: true } : {}),
       creadoEn: ts,
       finalizadoEn: ts,
       versionCount: 0,

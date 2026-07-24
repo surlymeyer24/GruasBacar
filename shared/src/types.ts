@@ -153,6 +153,8 @@ export interface ServicioActivoResumen {
   patente: string;
   descripcionVehiculo?: string;
   numeroInfraccion?: string;
+  /** Acta creada desde el site de prueba (`test-gruasbacar`). */
+  esTest?: boolean;
 }
 
 /** Indica si el resumen apunta a un servicio aún en curso. */
@@ -538,6 +540,26 @@ export interface AsignacionDiaria {
   inicioEn?: string;
 }
 
+/** Registro histórico de una asignación de turno (colección `turnos/`). */
+export interface RegistroTurno {
+  operadorUid: string;
+  operadorNombre: string;
+  operadorLegajo?: string;
+  fecha: string; // YYYY-MM-DD
+  gruaPatente: string;
+  gruaDescripcion?: string;
+  duplaId: string;
+  duplaChofer: string;
+  duplaEnganchador: string;
+  legajoChofer?: string;
+  legajoEnganchador?: string;
+  tipoFlota: TipoFlota;
+  origenAsignacion: 'operador' | 'admin';
+  asignadoPorUid?: string;
+  asignadoPorNombre?: string;
+  creadoEn: string; // ISO 8601
+}
+
 export const DURACION_TURNO_MS = 8 * 60 * 60 * 1000;
 
 export function asignacionCompleta(asignacion: AsignacionDiaria): boolean {
@@ -634,6 +656,8 @@ export interface Servicio {
   anuladoEn?: unknown;
   /** Acta cargada manualmente por admin/supervisor (respaldo operativo). */
   origenManual?: boolean;
+  /** Acta creada desde el entorno de prueba. Ausente/false = producción. */
+  esTest?: boolean;
   /** Cantidad de revisiones registradas (ediciones, anulaciones, etc.). */
   versionCount?: number;
   /** Total de fotos en eventos (denormalizado para listados). */
@@ -672,6 +696,8 @@ export interface IniciarEnganchePayload {
   grua: string;
   dupla: DuplasServicio;
   geo: GeoPoint;
+  /** Marca el acta como de prueba (site `test-gruasbacar`). */
+  esTest?: boolean;
 }
 
 export interface RegistrarEventoEnganchePayload {
@@ -739,6 +765,8 @@ export interface CrearActaManualPayload {
   fotosEngancheBase64: string[];
   fotosDesenganche?: Omit<Foto, 'url' | 'driveFileId'>[];
   fotosDesengancheBase64?: string[];
+  /** Marca el acta como de prueba (site `test-gruasbacar`). */
+  esTest?: boolean;
 }
 
 // ── ITV (Inspección Técnica Vehicular) ──────────────────────

@@ -6,6 +6,7 @@ import {
   esAdmin,
   normalizeRoles,
 } from '@gruasbacar/shared';
+import { enviarEmail, obtenerEmailsAdminsActivos } from './email.service';
 
 const db = () => admin.firestore();
 
@@ -19,6 +20,20 @@ const TIPOS_CON_PUSH = new Set<TipoNotificacion>([
   'ITV_POR_VENCER_1D',
 ]);
 
+// Tipos que además envían email a los admins.
+const TIPOS_CON_EMAIL = new Set<TipoNotificacion>([
+  'CARNET_POR_VENCER_30D',
+  'CARNET_POR_VENCER_15D',
+  'CARNET_POR_VENCER_7D',
+  'ITV_POR_VENCER_7D',
+  'ITV_POR_VENCER_1D',
+]);
+
+export interface EmailContent {
+  subject: string;
+  html: string;
+}
+
 export interface CrearNotificacionInput {
   destinatarioUid: string;
   tipo: TipoNotificacion;
@@ -27,6 +42,7 @@ export interface CrearNotificacionInput {
   datos?: Record<string, string>;
   origenUid?: string;
   claveDedup?: string;
+  email?: EmailContent;
 }
 
 export async function obtenerUidsAdminsActivos(): Promise<string[]> {
@@ -93,6 +109,21 @@ export async function notificarAdmins(
       crearNotificacion({ ...input, destinatarioUid: uid })
     )
   );
+
+  if (input.email && TIPOS_CON_EMAIL.has(input.tipo)) {
+    const admins = await obtenerEmailsAdminsActivos();
+    const emails = admins.map((a) => a.email);
+    if (emails.length > 0) {
+      enviarEmail({
+        to: emails,
+        subject: input.email.subject,
+        html: input.email.html,
+        claveDedup: input.claveDedup ? `email:${input.claveDedup}` : undefined,
+      }).catch((err) => {
+        console.error('[EMAIL] Error encolando email de vencimiento:', err);
+      });
+    }
+  }
 }
 
 export async function marcarNotificacionLeida(

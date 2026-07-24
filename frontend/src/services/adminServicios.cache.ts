@@ -3,6 +3,7 @@ import { Evento, Servicio } from "@gruasbacar/shared";
 import { db, isMock } from "../firebase";
 import { getMockServices } from "../data/mockData";
 import { fechaServicio } from "../utils/formatters";
+import { filtrarActasPorEntorno } from "../utils/actasEntorno";
 
 export type AdminServiciosScope = "full" | `personal:${string}`;
 
@@ -51,13 +52,15 @@ async function fetchServiciosList(scope: AdminServiciosScope): Promise<Servicio[
       (a, b) =>
         (fechaServicio(b)?.getTime() ?? 0) - (fechaServicio(a)?.getTime() ?? 0)
     );
-    return list;
+    return filtrarActasPorEntorno(list);
   }
 
   const allServices = getMockServices();
-  if (scope === "full") return allServices;
-  const uid = scope.slice("personal:".length);
-  return allServices.filter((s) => s.creadoPor === uid);
+  const scoped =
+    scope === "full"
+      ? allServices
+      : allServices.filter((s) => s.creadoPor === scope.slice("personal:".length));
+  return filtrarActasPorEntorno(scoped);
 }
 
 function photoCountFromServicio(s: Servicio): number | undefined {

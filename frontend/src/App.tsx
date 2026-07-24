@@ -1,32 +1,38 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { HashRouter, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { AuthProvider } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationProvider";
 import { ServicioActivoProvider } from "./context/ServicioActivoProvider";
+import LoadingSpinner from "./components/shared/LoadingSpinner";
 
-// Components
+// Components (eager: gates / routing shell)
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import RoleGuard from "./components/auth/RoleGuard";
 import HomeRoute from "./components/auth/HomeRoute";
 import DefaultRedirect from "./components/auth/DefaultRedirect";
+import GestionActasGuard from "./components/auth/GestionActasGuard";
+import EntornoTestBanner from "./components/shared/EntornoTestBanner";
 
-// Pages
+// Login queda eager (ruta pública)
 import LoginPage from "./pages/LoginPage";
 
-import AdminDashboardPage from "./pages/AdminDashboardPage";
-import SupervisorDashboardPage from "./pages/SupervisorDashboardPage";
-import NuevaActaManualPage from "./pages/NuevaActaManualPage";
-import GestionActasGuard from "./components/auth/GestionActasGuard";
-import EnganchePage from "./pages/EnganchePage";
-import TrasladoPage from "./pages/TrasladoPage";
-import DesenganchePage from "./pages/DesenganchePage";
-import HistorialPage from "./pages/HistorialPage";
-import MisActasPage from "./pages/MisActasPage";
-import ReportesPage from "./pages/ReportesPage";
-import AdminPage from "./pages/AdminPage";
-import TurnosPage from "./pages/TurnosPage";
-import DocumentacionPage from "./pages/DocumentacionPage";
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboardPage"));
+const SupervisorDashboardPage = lazy(() => import("./pages/SupervisorDashboardPage"));
+const NuevaActaManualPage = lazy(() => import("./pages/NuevaActaManualPage"));
+const EnganchePage = lazy(() => import("./pages/EnganchePage"));
+const TrasladoPage = lazy(() => import("./pages/TrasladoPage"));
+const DesenganchePage = lazy(() => import("./pages/DesenganchePage"));
+const HistorialPage = lazy(() => import("./pages/HistorialPage"));
+const MisActasPage = lazy(() => import("./pages/MisActasPage"));
+const ReportesPage = lazy(() => import("./pages/ReportesPage"));
+const AdminPage = lazy(() => import("./pages/AdminPage"));
+const TurnosPage = lazy(() => import("./pages/TurnosPage"));
+const DocumentacionPage = lazy(() => import("./pages/DocumentacionPage"));
+
+function RouteFallback() {
+  return <LoadingSpinner fullScreen message="Cargando..." />;
+}
 
 export default function App() {
   return (
@@ -34,7 +40,9 @@ export default function App() {
     <AuthProvider>
       <NotificationProvider>
       <ServicioActivoProvider>
+      <EntornoTestBanner />
       <HashRouter>
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
           {/* Public Routes */}
 
@@ -181,6 +189,7 @@ export default function App() {
           {/* Fallback unknown paths */}
           <Route path="*" element={<DefaultRedirect />} />
         </Routes>
+        </Suspense>
       </HashRouter>
       </ServicioActivoProvider>
       </NotificationProvider>

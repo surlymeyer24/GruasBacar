@@ -41,6 +41,10 @@ interface FotoGuiaModalProps {
   slots: (SlotFotoGuia | null)[];
   onSlotChange: (index: number, slot: SlotFotoGuia | null) => void;
   startAtStep?: number;
+  /** Persistencia síncrona JUSTO antes de abrir la cámara nativa (sobrevive al kill del tab). */
+  onBeforeNativeCapture?: (stepIndex: number) => void;
+  /** Notifica el paso activo para restaurar si la pestaña se recarga. */
+  onStepChange?: (stepIndex: number) => void;
 }
 
 export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
@@ -50,6 +54,8 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
   onSlotChange,
   startAtStep = 0,
   permitirGaleria = false,
+  onBeforeNativeCapture,
+  onStepChange,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galeriaInputRef = useRef<HTMLInputElement>(null);
@@ -69,11 +75,17 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
     setErrorText(null);
   }, [isOpen, startAtStep]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    onStepChange?.(stepIndex);
+  }, [isOpen, stepIndex, onStepChange]);
+
   if (!isOpen) return null;
 
   const abrirCamara = () => {
     if (processing) return;
     setErrorText(null);
+    onBeforeNativeCapture?.(stepIndex);
     fileInputRef.current?.click();
   };
 

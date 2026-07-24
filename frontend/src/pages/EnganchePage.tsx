@@ -9,6 +9,8 @@ import { AsignacionDiaria, esOperador, rutaInicioPorRoles } from "@gruasbacar/sh
 import { asignacionDiariaVigente, limpiarConfigDiaOmitidaHoy } from "../utils/asignacionDiaria";
 import { ConfiguracionDiaModal } from "../components/operador/ConfiguracionDiaModal";
 import { ShieldCheck } from "lucide-react";
+import { isMock, db, esEntornoTest } from "../firebase";
+import { collection, query, where, getDocs, limit } from "firebase/firestore";
 
 export const EnganchePage: React.FC = () => {
   const { userData, updateServicioActivo, profileLoading } = useAuth();
@@ -17,7 +19,29 @@ export const EnganchePage: React.FC = () => {
   const [showConfigDia, setShowConfigDia] = useState(false);
   const [turnoLocal, setTurnoLocal] = useState<AsignacionDiaria | null>(null);
 
-  const turnoHoy = asignacionDiariaVigente(userData?.asignacionDiaria) ?? turnoLocal;
+  const turnoRaw = asignacionDiariaVigente(userData?.asignacionDiaria) ?? turnoLocal;
+  const [gruaDescResuelta, setGruaDescResuelta] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!turnoRaw?.gruaPatente || turnoRaw.gruaDescripcion || isMock || !db) {
+      setGruaDescResuelta(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const q = query(collection(db, "gruas"), where("patente", "==", turnoRaw.gruaPatente), limit(1));
+      const snap = await getDocs(q);
+      if (!cancelled && !snap.empty) {
+        const desc = (snap.docs[0].data().descripcion as string | undefined)?.trim();
+        if (desc) setGruaDescResuelta(desc);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [turnoRaw?.gruaPatente, turnoRaw?.gruaDescripcion]);
+
+  const turnoHoy = turnoRaw && gruaDescResuelta && !turnoRaw.gruaDescripcion
+    ? { ...turnoRaw, gruaDescripcion: gruaDescResuelta }
+    : turnoRaw;
   const requiereConfigTurno = !turnoHoy && !userData?.servicioActivoId;
 
   const { servicio: activeServicio, loading: hookLoading } = useServicioActivo();
@@ -42,8 +66,10 @@ export const EnganchePage: React.FC = () => {
       } else if (activeServicio.estado === "DESENGANCHADO" || activeServicio.estado === "ANULADO") {
         updateServicioActivo(null);
       }
+    } else if (!hookLoading && userData?.servicioActivoId) {
+      updateServicioActivo(null);
     }
-  }, [activeServicio]);
+  }, [activeServicio, hookLoading]);
 
   const handleConfigDiaSaved = (asignacion: AsignacionDiaria) => {
     limpiarConfigDiaOmitidaHoy();
@@ -63,6 +89,7 @@ export const EnganchePage: React.FC = () => {
         id: servicioId,
         estado: "ENGANCHADO",
         patente,
+        ...(esEntornoTest ? { esTest: true } : {}),
       },
     });
   };

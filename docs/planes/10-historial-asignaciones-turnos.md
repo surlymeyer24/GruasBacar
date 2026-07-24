@@ -1,6 +1,6 @@
 # 10 — Colección turnos para historial de asignaciones diarias
 
-**Estado: PENDIENTE**
+**Estado: IMPLEMENTADO**
 **Prioridad: Mejora**
 **Esfuerzo estimado: 1 día**
 

@@ -311,10 +311,9 @@ export const NuevaActaManualPage: React.FC = () => {
           </div>
           <FotoLoteUpload
             titulo="Fotos del enganche"
-            descripcion="Podés sacar fotos o subirlas desde la galería del dispositivo."
+            descripcion="Sacá las fotos del vehículo en tiempo real."
             comentarioId="comentario-manual-enganche"
             confirmLabel="Confirmar fotos de enganche"
-            permitirGaleria
             limpiarCacheAlConfirmar={false}
             maxExtras={5}
             onConfirm={async (result) => {
@@ -369,7 +368,6 @@ export const NuevaActaManualPage: React.FC = () => {
               descripcion="Opcional pero recomendado si el vehículo ya fue entregado."
               comentarioId="comentario-manual-desenganche"
               confirmLabel="Confirmar fotos de desenganche"
-              permitirGaleria
               limpiarCacheAlConfirmar={false}
               maxExtras={5}
               onConfirm={async (result) => {

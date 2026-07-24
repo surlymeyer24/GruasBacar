@@ -14,7 +14,7 @@ Estado actual:
 - **07** IdentificadorCompuesto inmutable — IMPLEMENTADO
 - **08** Migración rol→roles, fechaCreacion→creadoEn — IMPLEMENTADO
 - **09** ABMs flota a Cloud Functions — PENDIENTE (mejora)
-- **10** Colección turnos (historial asignaciones) — PENDIENTE (mejora)
+- **10** Colección turnos (historial asignaciones) — IMPLEMENTADO
 - **11** Señalización cambios usuario — PENDIENTE (mejora)
 - **12** Eliminar catálogo de duplas — PENDIENTE (mejora, post-piloto)
 

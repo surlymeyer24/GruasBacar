@@ -16,11 +16,14 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 /** Solo true con VITE_IS_MOCK=true (desarrollo offline). Por defecto usa Firebase real. */
 export const isMock = import.meta.env.VITE_IS_MOCK === 'true';
+/** Site de prueba (`test-gruasbacar`): las actas nuevas se marcan `esTest` y no aparecen en prod. */
+export const esEntornoTest = import.meta.env.VITE_ES_TEST === 'true';
 
 if (import.meta.env.DEV) {
   console.info(
     `[firebase] Auth/perfil: ${isMock ? 'simulación (localStorage)' : 'Firebase real'} | ` +
-      `proyecto: ${import.meta.env.VITE_FIREBASE_PROJECT_ID || '(sin configurar)'}`
+      `proyecto: ${import.meta.env.VITE_FIREBASE_PROJECT_ID || '(sin configurar)'}` +
+      (esEntornoTest ? ' | ENTORNO TEST' : '')
   );
 }
 

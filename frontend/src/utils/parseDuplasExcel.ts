@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import { normalizeGruaId, normalizeTipoFlota, TipoFlota } from "@gruasbacar/shared";
 
 export interface ParsedDuplaRow {
@@ -145,6 +144,7 @@ function parseMultiColumnDuplas(rows: unknown[][]): ParsedDuplaRow[] {
 }
 
 export async function parseDuplasExcelFile(file: File): Promise<ParsedDuplaRow[]> {
+  const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: "array" });
   const sheetName = workbook.SheetNames[0];

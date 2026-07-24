@@ -3,14 +3,16 @@ import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import AdminTurnosPanel from "../components/admin/AdminTurnosPanel";
 import AdminDuplasPanel from "../components/admin/AdminDuplasPanel";
+import AdminTurnosHistorialPanel from "../components/admin/AdminTurnosHistorialPanel";
 import { useAdminCatalog } from "../hooks/useAdminCatalog";
-import { LayoutGrid, Clock, UserPlus } from "lucide-react";
+import { LayoutGrid, Clock, UserPlus, History } from "lucide-react";
 
-type DiagramacionTab = "DUPLAS" | "TURNOS";
+type DiagramacionTab = "DUPLAS" | "TURNOS" | "HISTORIAL";
 
 const TABS: { id: DiagramacionTab; label: string; icon: React.ReactNode }[] = [
   { id: "DUPLAS", label: "Duplas", icon: <UserPlus className="w-4 h-4" /> },
   { id: "TURNOS", label: "Turnos del día", icon: <Clock className="w-4 h-4" /> },
+  { id: "HISTORIAL", label: "Historial", icon: <History className="w-4 h-4" /> },
 ];
 
 export const TurnosPage: React.FC = () => {
@@ -34,9 +36,9 @@ export const TurnosPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="border border-brand-seashell rounded-2xl shadow-sm overflow-hidden bg-white">
+        <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
           <div className="bg-gray-100/80 px-2 pt-2 border-b border-brand-seashell/50">
-            <nav className="grid grid-cols-2 gap-0.5" role="tablist" aria-label="Secciones de diagramación">
+            <nav className="grid grid-cols-3 gap-0.5" role="tablist" aria-label="Secciones de diagramación">
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
                 return (
@@ -76,6 +78,10 @@ export const TurnosPage: React.FC = () => {
               duplas={data.duplas}
               onUsuariosChange={(next) => sync({ ...data, usuarios: next })}
             />
+          </div>
+
+          <div className={activeTab === "HISTORIAL" ? "" : "hidden"}>
+            <AdminTurnosHistorialPanel gruas={data.gruas} />
           </div>
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
   AsignacionDiaria,
   AsignarTurnoOperadorPayload,
   SolicitarReconfiguracionTurnoPayload,
+  RegistroTurno,
   esOperador,
   esSuperAdmin,
   normalizeRoles,
@@ -362,6 +363,26 @@ export async function guardarAsignacionDiaria(
   };
 
   await db().collection('usuarios').doc(uid).update({ asignacionDiaria });
+
+  const registroTurno: RegistroTurno = {
+    operadorUid: uid,
+    operadorNombre: (userData.nombre as string) ?? '',
+    ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
+    fecha: asignacionDiaria.fecha,
+    gruaPatente,
+    duplaId: asignacionDiaria.duplaId,
+    duplaChofer,
+    duplaEnganchador,
+    ...(legajoChofer ? { legajoChofer } : {}),
+    ...(legajoEnganchador ? { legajoEnganchador } : {}),
+    tipoFlota: gruaTipo,
+    origenAsignacion: 'operador',
+    creadoEn: new Date().toISOString(),
+  };
+  db().collection('turnos').add(registroTurno).catch((err) =>
+    logger.error('Error registrando turno en historial', err),
+  );
+
   return asignacionDiaria;
 }
 
@@ -466,6 +487,28 @@ export async function asignarTurnoOperador(
     },
   });
 
+  const registroTurno: RegistroTurno = {
+    operadorUid,
+    operadorNombre: (userData.nombre as string) ?? '',
+    ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
+    fecha: asignacionDiaria.fecha,
+    gruaPatente,
+    ...(gruaDescripcion ? { gruaDescripcion } : {}),
+    duplaId: duplaId || '',
+    duplaChofer: asignacionDiaria.duplaChofer,
+    duplaEnganchador: asignacionDiaria.duplaEnganchador,
+    ...(asignacionDiaria.legajoChofer ? { legajoChofer: asignacionDiaria.legajoChofer } : {}),
+    ...(asignacionDiaria.legajoEnganchador ? { legajoEnganchador: asignacionDiaria.legajoEnganchador } : {}),
+    tipoFlota: normalizeTipoFlota(asignacionDiaria.tipoFlota),
+    origenAsignacion: 'admin',
+    asignadoPorUid: adminCtx.uid,
+    asignadoPorNombre: adminCtx.nombre,
+    creadoEn: new Date().toISOString(),
+  };
+  db().collection('turnos').add(registroTurno).catch((err) =>
+    logger.error('Error registrando turno en historial', err),
+  );
+
   return asignacionDiaria;
 }
 
@@ -499,7 +542,7 @@ export async function solicitarReconfiguracionTurno(
   const legajoTxt = operador.legajo ? ` (leg. ${operador.legajo})` : '';
   const cuerpoBase = tieneVigente
     ? `${operador.nombre}${legajoTxt} necesita que reconfigures su turno. ` +
-      `Dupla actual: ${asignacion.duplaChofer} / ${asignacion.duplaEnganchador}, grúa ${asignacion.gruaPatente}.`
+      `Dupla actual: ${asignacion.duplaChofer} / ${asignacion.duplaEnganchador}, grúa ${asignacion.gruaDescripcion ? `${asignacion.gruaDescripcion} — ` : ''}${asignacion.gruaPatente}.`
     : `${operador.nombre}${legajoTxt} no tiene turno configurado y necesita asistencia.`;
   const cuerpo = mensaje ? `${cuerpoBase} Mensaje: "${mensaje}"` : cuerpoBase;
 

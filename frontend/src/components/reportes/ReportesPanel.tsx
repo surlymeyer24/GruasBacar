@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import {
   BarChart3,
   Calendar,
@@ -15,8 +15,9 @@ import { CustomSelect } from "../shared/CustomSelect";
 import { DateRangePicker } from "../shared/DateRangePicker";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { useReportesData } from "../../hooks/useReportesData";
-import { ReportesCharts } from "./ReportesCharts";
 import type { ReportesFilterState } from "../../utils/reportesFilters";
+
+const ReportesCharts = lazy(() => import("./ReportesCharts"));
 
 function exportCsv(
   rows: {
@@ -227,7 +228,9 @@ export const ReportesPanel: React.FC = () => {
         </div>
       </div>
 
-      <ReportesCharts kpis={kpis} aggregations={aggregations} generated={generated} />
+      <Suspense fallback={<LoadingSpinner message="Cargando gráficos..." />}>
+        <ReportesCharts kpis={kpis} aggregations={aggregations} generated={generated} />
+      </Suspense>
     </div>
   );
 };

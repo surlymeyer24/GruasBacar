@@ -339,20 +339,63 @@ export const HistorialPage: React.FC = () => {
     }
   };
 
-  const tabCounts = useMemo(
-    () => ({
-      general: services.length,
-      anulados: services.filter((s) => s.estado === "ANULADO").length,
-      activas: services.filter((s) => s.estado !== "ANULADO").length,
-    }),
-    [services]
+  const applyFilters = (list: Servicio[]) =>
+    list.filter((s) => {
+      const matchesSearch =
+        s.patente.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.numeroInfraccion ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.grua.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesStatus = statusFilter === "ALL" || s.estado === statusFilter;
+
+      const matchesTipo = matchesTipoFlotaFilter(
+        tipoFlotaDeServicio(s, gruasCatalog),
+        tipoFilter
+      );
+
+      const duplaKey = duplaKeyFromServicio(s);
+      const matchesDupla =
+        duplaFilter === "ALL" || (duplaKey !== null && duplaKey === duplaFilter);
+
+      const matchesCorralon =
+        corralonFilter === "ALL" ||
+        corralonKeysForServicio(s.corralon, corralonesCatalog).includes(corralonFilter);
+
+      const dia = fechaDiaServicio(s);
+      const matchesDateFrom = !dateFrom || (dia !== null && dia >= dateFrom);
+      const matchesDateTo = !dateTo || (dia !== null && dia <= dateTo);
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesTipo &&
+        matchesDupla &&
+        matchesCorralon &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
+    });
+
+  const filteredAll = useMemo(
+    () => applyFilters(services),
+    [services, searchQuery, statusFilter, tipoFilter, duplaFilter, corralonFilter, dateFrom, dateTo, gruasCatalog, corralonesCatalog]
   );
 
-  const servicesForTab = useMemo(() => {
-    if (historyTab === "anulados") return services.filter((s) => s.estado === "ANULADO");
-    if (historyTab === "activas") return services.filter((s) => s.estado !== "ANULADO");
-    return services;
-  }, [services, historyTab]);
+  const tabCounts = useMemo(
+    () => ({
+      general: filteredAll.length,
+      anulados: filteredAll.filter((s) => s.estado === "ANULADO").length,
+      activas: filteredAll.filter((s) => s.estado !== "ANULADO").length,
+    }),
+    [filteredAll]
+  );
+
+  const filteredServices = useMemo(() => {
+    if (historyTab === "anulados") return filteredAll.filter((s) => s.estado === "ANULADO");
+    if (historyTab === "activas") return filteredAll.filter((s) => s.estado !== "ANULADO");
+    return filteredAll;
+  }, [filteredAll, historyTab]);
 
   const handleHistoryTabChange = (tab: HistorialTab) => {
     setHistoryTab(tab);
@@ -360,42 +403,6 @@ export const HistorialPage: React.FC = () => {
       setStatusFilter("ALL");
     }
   };
-
-  // Filter list based on inputs
-  const filteredServices = servicesForTab.filter((s) => {
-    const matchesSearch = 
-      s.patente.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.numeroInfraccion ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.grua.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = statusFilter === "ALL" || s.estado === statusFilter;
-
-    const matchesTipo =
-      matchesTipoFlotaFilter(tipoFlotaDeServicio(s, gruasCatalog), tipoFilter);
-
-    const duplaKey = duplaKeyFromServicio(s);
-    const matchesDupla =
-      duplaFilter === "ALL" || (duplaKey !== null && duplaKey === duplaFilter);
-
-    const matchesCorralon =
-      corralonFilter === "ALL" ||
-      corralonKeysForServicio(s.corralon, corralonesCatalog).includes(corralonFilter);
-
-    const dia = fechaDiaServicio(s);
-    const matchesDateFrom = !dateFrom || (dia !== null && dia >= dateFrom);
-    const matchesDateTo = !dateTo || (dia !== null && dia <= dateTo);
-
-    return (
-      matchesSearch &&
-      matchesStatus &&
-      matchesTipo &&
-      matchesDupla &&
-      matchesCorralon &&
-      matchesDateFrom &&
-      matchesDateTo
-    );
-  });
 
   const hasTipoFilter = tipoFilter !== "ALL";
   const hasDuplaFilter = duplaFilter !== "ALL";
@@ -975,6 +982,11 @@ export const HistorialPage: React.FC = () => {
                         {displayPatente(service.patente, service.descripcionVehiculo)}
                       </span>
                       {getStatusBadge(service.estado)}
+                      {service.esTest && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-amber-50 text-amber-800 border-amber-200/60">
+                          TEST
+                        </span>
+                      )}
                     </div>
 
                     <div
@@ -1125,6 +1137,11 @@ export const HistorialPage: React.FC = () => {
                     {selectedService.origenManual && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-violet-50 text-violet-700 border-violet-200/50">
                         CARGA MANUAL
+                      </span>
+                    )}
+                    {selectedService.esTest && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg border bg-amber-50 text-amber-800 border-amber-200/60">
+                        TEST
                       </span>
                     )}
                     {(selectedService.versionCount ?? versionesActa.length) > 0 && (

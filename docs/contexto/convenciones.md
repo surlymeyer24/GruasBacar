@@ -145,3 +145,4 @@ import { useAuth } from "../hooks/useAuth";
   VITE_FIREBASE_PROJECT_ID=...
   VITE_USE_EMULATORS=true
   ```
+- **`VITE_ES_TEST=true`:** build del site de prueba (`test-gruasbacar`). Las actas nuevas se guardan con `esTest: true` y el site de producción las oculta en historial/KPIs/reportes. Deploy: `npm run ship:test`.

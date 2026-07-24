@@ -13,7 +13,7 @@ import {
   History,
 } from "lucide-react";
 import { isMock, db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore";
 import { getMockServices } from "../data/mockData";
 import { Servicio, servicioActivoVigente, rutaFlujoOperadorPorEstado, ServicioActivoResumen, displayPatente } from "@gruasbacar/shared";
 import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
@@ -45,6 +45,24 @@ export const HomePage: React.FC = () => {
   const turnoHoy = asignacionDiariaVigente(userData?.asignacionDiaria);
   const turnoCoincideConUsuario = turnoHoy ? asignacionCoincideConUsuario(turnoHoy, userData) : false;
   const authReady = !sessionLoading && !profileLoading;
+  const [gruaDescResuelta, setGruaDescResuelta] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!turnoHoy?.gruaPatente || turnoHoy.gruaDescripcion || isMock || !db) {
+      setGruaDescResuelta(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const q = query(collection(db, "gruas"), where("patente", "==", turnoHoy.gruaPatente), limit(1));
+      const snap = await getDocs(q);
+      if (!cancelled && !snap.empty) {
+        const desc = (snap.docs[0].data().descripcion as string | undefined)?.trim();
+        if (desc) setGruaDescResuelta(desc);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [turnoHoy?.gruaPatente, turnoHoy?.gruaDescripcion]);
 
   useEffect(() => {
     if (authReady && isEnganchador && (!turnoHoy || !turnoCoincideConUsuario)) {
@@ -106,7 +124,7 @@ export const HomePage: React.FC = () => {
     };
   }, [userData, authReady, updateServicioActivo]);
 
-  if (sessionLoading || profileLoading) {
+  if (sessionLoading || (profileLoading && !userData)) {
     return <LoadingSpinner fullScreen message="Sincronizando estado operacional..." />;
   }
 
@@ -212,9 +230,9 @@ export const HomePage: React.FC = () => {
                       <div className="min-w-0">
                         <p className="text-[9px] font-bold text-brand-pale uppercase tracking-widest">Grúa</p>
                         <p className="text-xs font-extrabold text-brand-purply truncate mt-0.5">
-                          {turnoHoy.gruaDescripcion || turnoHoy.gruaPatente}
+                          {turnoHoy.gruaDescripcion || gruaDescResuelta || turnoHoy.gruaPatente}
                         </p>
-                        {turnoHoy.gruaDescripcion && turnoHoy.gruaPatente && (
+                        {(turnoHoy.gruaDescripcion || gruaDescResuelta) && turnoHoy.gruaPatente && (
                           <p className="font-mono text-[10px] text-brand-pale tracking-wider truncate">{turnoHoy.gruaPatente}</p>
                         )}
                       </div>

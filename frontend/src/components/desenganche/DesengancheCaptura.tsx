@@ -173,7 +173,6 @@ export const DesengancheCaptura: React.FC<DesengancheCapturaProps> = ({
         prefetchUpload={prefetchUpload}
         draftCacheKey={claveBorradorDraft(servicioId, "desenganche")}
         limpiarCacheAlConfirmar={false}
-        permitirGaleria
         confirmLabel="Confirmar fotos"
         maxExtras={5}
         onBack={onBack}

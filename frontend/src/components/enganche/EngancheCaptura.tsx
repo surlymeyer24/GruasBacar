@@ -69,6 +69,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [fotosYaRegistradas, setFotosYaRegistradas] = useState(false);
   const [activeServicioId, setActiveServicioId] = useState<string | null>(servicioActivoId ?? null);
+  const activeServicioIdRef = useRef<string | null>(activeServicioId);
   const [creandoServicio, setCreandoServicio] = useState(false);
   const submittingRef = useRef(false);
   const creandoServicioRef = useRef(false);
@@ -92,7 +93,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
   );
 
   const crearServicioAnticipado = async () => {
-    if (creandoServicioRef.current || activeServicioId || submittingRef.current) return;
+    if (creandoServicioRef.current || activeServicioIdRef.current || submittingRef.current) return;
     const patErr = validatePatenteText(patente);
     if (patErr) return;
 
@@ -123,10 +124,15 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         userId,
         userDisplayName
       );
+      activeServicioIdRef.current = res.servicioId;
       setActiveServicioId(res.servicioId);
       onServiceCreated(res.servicioId, normalizedPatente);
-    } catch {
-      // Si falla, se reintenta al confirmar
+    } catch (err) {
+      if (!esErrorDeRed(err)) {
+        setErrorText(
+          getFirebaseErrorMessage(err, "No se pudo iniciar el enganche. Intentá de nuevo.")
+        );
+      }
     } finally {
       creandoServicioRef.current = false;
       setCreandoServicio(false);
@@ -217,10 +223,9 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
     }
 
     submittingRef.current = true;
-    setFlowState("SUBMITTING");
     setErrorText(null);
 
-    let sId = activeServicioId;
+    let sId = activeServicioIdRef.current;
     let fotosRegistradas = false;
 
     try {
@@ -252,14 +257,18 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
           userDisplayName
         );
         sId = res.servicioId;
+        activeServicioIdRef.current = sId;
         setActiveServicioId(sId);
         onServiceCreated(sId, normalizedPatente);
       }
 
+      const geoEnganche = result.geoExif ?? activeGeo;
+      console.info("[EngancheCaptura] geo →", { geoExif: result.geoExif, activeGeo, geoEnganche });
+
       await fotoService.registrarEventoEnganche(
         sId,
         result.fotosMeta,
-        activeGeo,
+        geoEnganche,
         result.fotosBase64,
         result.comentario,
         result.fotosSubidas
@@ -267,6 +276,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
 
       fotosRegistradas = true;
       setFotosYaRegistradas(true);
+      setFlowState("SUBMITTING");
       await confirmarTrasladoConRetry(sId);
       try { sessionStorage.removeItem(PATENTE_KEY); sessionStorage.removeItem(DESC_VEH_KEY); } catch { /* ok */ }
       onCompletedRef.current();
@@ -277,7 +287,6 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
           getFirebaseErrorMessage(err, "Error al iniciar el traslado. Intentá de nuevo.")
         );
       } else {
-        setFlowState("CAPTURING");
         setErrorText(
           getFirebaseErrorMessage(err, "No se pudo confirmar el enganche. Intentá de nuevo.")
         );
@@ -410,7 +419,6 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         backLabel={backLabel}
         onConfirm={handleConfirmFotos}
         onFotosListas={handleFotosListas}
-        permitirGaleria
         maxExtras={5}
       />
     </div>

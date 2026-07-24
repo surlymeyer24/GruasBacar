@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
-import { isMock, app, functions, db } from "../firebase";
+import { isMock, app, functions, db, esEntornoTest } from "../firebase";
 import { addMockService, getMockServices, updateMockService } from "../data/mockData";
 import { fotoService } from "./foto.service";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
@@ -47,6 +47,7 @@ export const servicioService = {
           grua: string;
           dupla: { chofer: string; enganchador: string };
           geo: { lat: number; lng: number };
+          esTest?: boolean;
         },
         { servicioId: string }
       >(functions, "iniciarEnganche");
@@ -61,6 +62,7 @@ export const servicioService = {
             enganchador: data.duplaEnganchador?.trim() || "—",
           },
           geo,
+          ...(esEntornoTest ? { esTest: true } : {}),
         });
         return res.data;
       } catch (err) {
@@ -442,13 +444,18 @@ export async function anularServicio(data: AnularServicioPayload): Promise<void>
 }
 
 export async function crearActaManual(data: CrearActaManualPayload): Promise<{ servicioId: string }> {
+  const payload: CrearActaManualPayload = {
+    ...data,
+    ...(esEntornoTest ? { esTest: true } : {}),
+  };
+
   if (!isMock) {
     const fn = httpsCallable<CrearActaManualPayload, { servicioId: string }>(
       functions,
       "crearActaManual"
     );
     try {
-      const res = await fn(data);
+      const res = await fn(payload);
       return res.data;
     } catch (err) {
       throw new Error(
@@ -457,11 +464,11 @@ export async function crearActaManual(data: CrearActaManualPayload): Promise<{ s
     }
   }
 
-  const patente = data.patente.toUpperCase().trim();
-  const numeroInfraccion = data.numeroInfraccion?.toUpperCase().trim() || undefined;
-  const legajoChofer = data.legajoEnganchador.trim();
+  const patente = payload.patente.toUpperCase().trim();
+  const numeroInfraccion = payload.numeroInfraccion?.toUpperCase().trim() || undefined;
+  const legajoChofer = payload.legajoEnganchador.trim();
   if (!legajoChofer) throw new Error("El legajo del enganchador es obligatorio.");
-  const gruaId = normalizeGruaId(data.grua);
+  const gruaId = normalizeGruaId(payload.grua);
   const identificadorCompuesto = buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente);
   addMockService({
     id: identificadorCompuesto,
@@ -470,11 +477,12 @@ export async function crearActaManual(data: CrearActaManualPayload): Promise<{ s
     identificadorCompuesto,
     estado: "DESENGANCHADO",
     grua: gruaId,
-    corralon: data.corralon ?? undefined,
+    corralon: payload.corralon ?? undefined,
     creadoPor: "mock-supervisor",
     legajoChofer,
-    dupla: data.dupla,
+    dupla: payload.dupla,
     origenManual: true,
+    ...(payload.esTest ? { esTest: true } : {}),
     creadoEn: new Date().toISOString(),
     finalizadoEn: new Date().toISOString(),
     eventos: [],

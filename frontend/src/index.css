@@ -75,4 +75,12 @@
     font-size: 0.75rem;
     line-height: 1.125rem;
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }

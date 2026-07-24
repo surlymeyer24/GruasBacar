@@ -7,7 +7,7 @@ import { rutaInicioPorRoles } from "@gruasbacar/shared";
 export const DefaultRedirect: React.FC = () => {
   const { userData, sessionLoading, profileLoading } = useAuth();
 
-  if (sessionLoading || profileLoading) {
+  if (sessionLoading || (profileLoading && !userData)) {
     return <LoadingSpinner fullScreen message="Redirigiendo..." />;
   }
 

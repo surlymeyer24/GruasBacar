@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { notificarAdmins } from './notification.service';
+import { construirEmailVencimiento } from './email.service';
 import { TipoNotificacion, diasParaVencimiento } from '@gruasbacar/shared';
 
 const db = admin.firestore;
@@ -122,16 +123,37 @@ export async function verificarVencimientosITV(): Promise<void> {
 
     for (const umbral of UMBRALES) {
       if (dias === umbral.dias) {
+        let gruaLabel = data.gruaPatente as string;
+        if (data.gruaId) {
+          const gruaSnap = await db().collection('gruas').doc(data.gruaId as string).get();
+          const desc = (gruaSnap.data()?.descripcion as string | undefined)?.trim();
+          if (desc) gruaLabel = `${desc} — ${gruaLabel}`;
+        }
+        const fechaVenc = data.fechaVencimiento as string;
+        const detalle = data.renovado
+          ? 'Ya fue renovada.'
+          : data.fechaTurnoRenovacion
+            ? `Turno de renovación: ${data.fechaTurnoRenovacion}.`
+            : 'Sin turno de renovación agendado.';
+
         await notificarAdmins({
           tipo: umbral.tipo,
-          titulo: `ITV por vencer — ${data.gruaPatente}`,
-          cuerpo: `La ITV de la grúa ${data.gruaPatente} vence en ${dias} días (${data.fechaVencimiento}).${data.renovado ? ' Ya fue renovada.' : data.fechaTurnoRenovacion ? ` Turno de renovación: ${data.fechaTurnoRenovacion}.` : ' Sin turno de renovación agendado.'}`,
+          titulo: `ITV por vencer — ${gruaLabel}`,
+          cuerpo: `La ITV de la grúa ${gruaLabel} vence en ${dias} días (${fechaVenc}). ${detalle}`,
           claveDedup: `itv_venc:${doc.id}:${umbral.dias}d`,
           datos: {
             itvId: doc.id,
             gruaPatente: data.gruaPatente as string,
             diasRestantes: String(dias),
           },
+          email: construirEmailVencimiento({
+            tipoDoc: 'ITV',
+            identificador: doc.id,
+            descripcion: gruaLabel,
+            fechaVencimiento: fechaVenc,
+            diasRestantes: dias,
+            detalle,
+          }),
         });
         break;
       }
