@@ -5,12 +5,17 @@ import {
   base64ToBlob,
   cargarBorradorFotos,
   claveBorradorFotos,
+  clearCameraSession,
   guardarBorradorFotos,
+  guardarBorradorFotosSync,
+  loadCameraSession,
+  saveCameraSession,
   limpiarBorradorFotos,
 } from "../../services/fotoCache.service";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { EtiquetaFoto, Foto } from "@gruasbacar/shared";
-import { Camera, Check, ImagePlus, PenLine, Plus, X } from "lucide-react";
+import { Camera, Check, ImagePlus, PenLine, X } from "lucide-react";
+import { extractGpsFromFile, GeoCoords } from "../../utils/extractGps";
 import { FotoGuiaModal, PASOS_FOTO, SlotFotoGuia } from "./FotoGuiaModal";
 import { FlowBackButton } from "./FlowBackButton";
 
@@ -24,6 +29,8 @@ export interface FotosLoteResult {
   previewFotos: Foto[];
   comentario?: string;
   fotosSubidas?: Foto[];
+  /** GPS del EXIF de la foto (si la cámara nativa lo trae). */
+  geoExif?: GeoCoords;
 }
 
 interface PrefetchUploadConfig {
@@ -49,6 +56,7 @@ interface FotoLoteUploadProps {
   backLabel?: string;
   onConfirm: (result: FotosLoteResult) => Promise<void>;
   onFotosListas?: (listas: boolean) => void;
+  onPrimeraFoto?: () => void;
 }
 
 export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
@@ -61,11 +69,12 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   draftCacheKey,
   limpiarCacheAlConfirmar = true,
   permitirGaleria = false,
-  maxExtras = 1,
+  maxExtras = 5,
   onBack,
   backLabel = "Volver",
   onConfirm,
   onFotosListas,
+  onPrimeraFoto,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galeriaInputRef = useRef<HTMLInputElement>(null);
@@ -96,10 +105,11 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalStartStep, setModalStartStep] = useState(0);
+  const [modalStartStep, setModalStartStep] = useState<number | undefined>(0);
   const [fotosSubidas, setFotosSubidas] = useState<Foto[] | null>(null);
   const [prefetchError, setPrefetchError] = useState<string | null>(null);
   const [cacheRestored, setCacheRestored] = useState(false);
+  const geoExifRef = useRef<GeoCoords | null>(null);
 
   const slotToCached = useCallback((slot: SlotFotoGuia) => ({
     etiqueta: slot.etiqueta,
@@ -156,6 +166,20 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
       }
 
       cacheHydratedRef.current = true;
+
+      // Si el OS mató la pestaña en la cámara nativa, reabrir el modal en el paso
+      if (!cancelled) {
+        const session = loadCameraSession(cacheKey);
+        if (session?.modalOpen) {
+          setModalStartStep(
+            Math.min(
+              Math.max(0, session.guidedIndex),
+              FOTOS_REQUERIDAS - 1
+            )
+          );
+          setModalOpen(true);
+        }
+      }
     })();
 
     return () => {
@@ -178,6 +202,13 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     }, 400);
   }, [cacheKey, buildBorradorData]);
 
+  /** Flush síncrono a localStorage (antes de cámara nativa / pagehide). */
+  const persistBorradorSync = useCallback(() => {
+    if (!cacheKey || !cacheHydratedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    guardarBorradorFotosSync(cacheKey, buildBorradorData());
+  }, [cacheKey, buildBorradorData]);
+
   useEffect(() => {
     persistBorrador();
     return () => {
@@ -185,18 +216,64 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     };
   }, [persistBorrador]);
 
-  // Guardado inmediato si la página pierde visibilidad (cierre, cambio de tab, etc.)
+  // Guardado inmediato si la página pierde visibilidad (cámara nativa / kill)
   useEffect(() => {
     if (!cacheKey) return;
     const flush = () => {
       if (document.visibilityState === "hidden" && cacheHydratedRef.current) {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        void guardarBorradorFotos(cacheKey, buildBorradorData());
+        persistBorradorSync();
       }
     };
+    const onPageHide = () => persistBorradorSync();
     document.addEventListener("visibilitychange", flush);
-    return () => document.removeEventListener("visibilitychange", flush);
-  }, [cacheKey, buildBorradorData]);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [cacheKey, persistBorradorSync]);
+
+  const handleBeforeNativeCapture = useCallback(
+    (stepIndex: number) => {
+      if (!cacheKey) return;
+      persistBorradorSync();
+      saveCameraSession({
+        cacheKey,
+        guidedIndex: stepIndex,
+        extraMode: false,
+        modalOpen: true,
+      });
+    },
+    [cacheKey, persistBorradorSync]
+  );
+
+  const handleStepChange = useCallback(
+    (stepIndex: number) => {
+      if (!cacheKey || !modalOpen) return;
+      saveCameraSession({
+        cacheKey,
+        guidedIndex: stepIndex,
+        extraMode: false,
+        modalOpen: true,
+      });
+    },
+    [cacheKey, modalOpen]
+  );
+
+  const handleModalClose = useCallback(() => {
+    setModalOpen(false);
+    if (cacheKey) clearCameraSession(cacheKey);
+  }, [cacheKey]);
+
+  // GPS desde EXIF de la primera foto (cámara nativa)
+  useEffect(() => {
+    if (geoExifRef.current) return;
+    const first = slots.find(Boolean) ?? fotosExtra[0];
+    if (!first) return;
+    void extractGpsFromFile(first.blob).then((gps) => {
+      if (gps) geoExifRef.current = gps;
+    });
+  }, [slots, fotosExtra]);
 
   // Migrate draft cache → service cache when servicioId arrives
   useEffect(() => {
@@ -219,12 +296,24 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   onFotosListasRef.current = onFotosListas;
   const prevTodasListasRef = useRef(false);
 
+  const onPrimeraFotoRef = useRef(onPrimeraFoto);
+  onPrimeraFotoRef.current = onPrimeraFoto;
+  const primeraFotoFiredRef = useRef(false);
+
   useEffect(() => {
     if (todasListas !== prevTodasListasRef.current) {
       prevTodasListasRef.current = todasListas;
       onFotosListasRef.current?.(todasListas);
     }
   }, [todasListas]);
+
+  const tieneFotos = fotosCargadas > 0 || fotosExtra.length > 0;
+  useEffect(() => {
+    if (tieneFotos && !primeraFotoFiredRef.current) {
+      primeraFotoFiredRef.current = true;
+      onPrimeraFotoRef.current?.();
+    }
+  }, [tieneFotos]);
 
   const slotsSignature = slots.map((s) => s?.base64 ?? "").join("|");
   const prefetchServicioId = prefetchUpload?.servicioId;
@@ -291,7 +380,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     prefetchPromiseRef.current = promise;
   }, [prefetchServicioId, prefetchCarpeta, todasListas, slotsSignature]);
 
-  const abrirGuia = (startAt = 0) => {
+  const abrirGuia = (startAt?: number) => {
     setModalStartStep(startAt);
     setModalOpen(true);
   };
@@ -307,6 +396,10 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     });
   };
 
+  const quitarFoto = (index: number) => {
+    handleSlotChange(index, null);
+  };
+
   const quitarFotoExtra = (index: number) => {
     setFotosExtra((prev) => {
       const next = [...prev];
@@ -314,11 +407,6 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
       next.splice(index, 1);
       return next;
     });
-  };
-
-  const abrirSelectorExtra = () => {
-    pendingTargetRef.current = "extra";
-    fileInputRef.current?.click();
   };
 
   const abrirGaleriaExtra = () => {
@@ -475,10 +563,14 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         previewFotos,
         comentario: comentario.trim() || undefined,
         fotosSubidas: fotosSubidasConfirm,
+        geoExif: geoExifRef.current ?? undefined,
       });
 
       if (limpiarCacheAlConfirmar) {
-        if (cacheKey) await limpiarBorradorFotos(cacheKey);
+        if (cacheKey) {
+          await limpiarBorradorFotos(cacheKey);
+          clearCameraSession(cacheKey);
+        }
         if (draftCacheKey && draftCacheKey !== cacheKey) await limpiarBorradorFotos(draftCacheKey);
       }
       setCacheRestored(false);
@@ -528,11 +620,16 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
 
       <FotoGuiaModal
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={handleModalClose}
         slots={slots}
         onSlotChange={handleSlotChange}
+        fotosExtra={fotosExtra}
+        onExtraAdd={(extra) => setFotosExtra((prev) => [...prev, extra])}
+        maxExtras={MAX_EXTRAS}
         startAtStep={modalStartStep}
         permitirGaleria={permitirGaleria}
+        onBeforeNativeCapture={handleBeforeNativeCapture}
+        onStepChange={handleStepChange}
       />
 
       <div className="w-full min-w-0 bg-white p-4 border border-brand-seashell rounded-2xl shadow-sm space-y-2">
@@ -613,7 +710,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
       <div className="flex gap-2 w-full">
         <button
           type="button"
-          onClick={() => abrirGuia(todasListas ? 0 : fotosCargadas > 0 ? slots.findIndex((s) => !s) : 0)}
+          onClick={() => abrirGuia(todasListas ? undefined : fotosCargadas > 0 ? slots.findIndex((s) => !s) : 0)}
           disabled={isUploading}
           className={`${permitirGaleria ? "flex-1" : "w-full"} py-4 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-60 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm`}
         >
@@ -621,7 +718,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
           {fotosCargadas === 0
             ? "Sacar fotos"
             : todasListas
-              ? "Revisar fotos"
+              ? "Sacar más fotos"
               : "Continuar"}
         </button>
         {permitirGaleria && (
@@ -651,13 +748,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
           {PASOS_FOTO.map((paso, index) => {
             const slot = slots[index];
             return (
-              <button
-                key={paso.etiqueta}
-                type="button"
-                onClick={() => abrirGuia(index)}
-                disabled={isUploading}
-                className="space-y-1.5 min-w-0 text-left cursor-pointer group"
-              >
+              <div key={paso.etiqueta} className="space-y-1.5 min-w-0 group">
                 <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1">
                   {slot ? (
                     <Check className="w-3 h-3 text-emerald-500 shrink-0" />
@@ -667,15 +758,43 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
                   {labelCorto(paso.titulo)}
                 </p>
                 <div className="relative aspect-[4/3] rounded-xl border border-gray-200 bg-brand-bg overflow-hidden group-hover:ring-2 group-hover:ring-brand-orange/30 transition-shadow">
-                  {slot ? (
-                    <img src={slot.previewUrl} alt={paso.titulo} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-300">
-                      <Camera className="w-8 h-8" />
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => abrirGuia(index)}
+                    disabled={isUploading}
+                    className="absolute inset-0 w-full h-full cursor-pointer disabled:cursor-not-allowed"
+                    aria-label={
+                      slot ? `Rehacer ${labelCorto(paso.titulo)}` : `Sacar ${labelCorto(paso.titulo)}`
+                    }
+                  >
+                    {slot ? (
+                      <img
+                        src={slot.previewUrl}
+                        alt={paso.titulo}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300">
+                        <Camera className="w-8 h-8" />
+                      </div>
+                    )}
+                  </button>
+                  {slot && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        quitarFoto(index);
+                      }}
+                      disabled={isUploading}
+                      className="absolute top-2 right-2 z-10 p-1 rounded-full bg-black/50 text-white cursor-pointer hover:bg-black/70 disabled:opacity-50"
+                      aria-label={`Borrar ${labelCorto(paso.titulo)}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -708,7 +827,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={abrirSelectorExtra}
+                onClick={() => abrirGuia()}
                 disabled={isUploading}
                 className="flex-1 py-3 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors"
               >

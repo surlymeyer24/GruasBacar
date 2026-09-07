@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { AuthContext } from "./auth-context";
 import { 
   signInWithEmailAndPassword, 
@@ -12,6 +12,7 @@ import {
 import type { User } from "firebase/auth";
 import { auth, db, isMock, functions } from "../firebase";
 import { Usuario, RolUsuario, normalizeRoles, AsignacionDiaria, GuardarAsignacionDiariaPayload, Servicio, ServicioActivoResumen, servicioActivoVigente } from "@gruasbacar/shared";
+import { servicioActivoVisibleEnEntorno } from "../utils/actasEntorno";
 import { registrarCuenta as registrarCuentaFn, RegistrarCuentaPayload } from "../services/auth.service";
 import { guardarAsignacionDiaria as guardarAsignacionDiariaFn } from "../services/usuario.service";
 import { httpsCallable } from "firebase/functions";
@@ -87,20 +88,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const mapUserProfile = (
     profile: Partial<Usuario> & { uid: string },
     authUser?: Pick<User, "displayName"> | null
-  ): Usuario => ({
-    uid: profile.uid,
-    nombre: profile.nombre?.trim() || authUser?.displayName?.trim() || "Usuario Sin Nombre",
-    roles: normalizeRoles(profile.roles, profile.rol),
-    servicioActivoId: profile.servicioActivoId ?? null,
-    servicioActivoResumen: profile.servicioActivoResumen ?? null,
-    email: profile.email,
-    legajo: profile.legajo,
-    activo: profile.activo,
-    asignacionDiaria: profile.asignacionDiaria,
-  });
+  ): Usuario => {
+    const resumen = profile.servicioActivoResumen ?? null;
+    // Sin resumen aún, conservar el id para que syncServicioActivoFromDoc resuelva el entorno.
+    const activoOcultoPorEntorno =
+      !!resumen && !servicioActivoVisibleEnEntorno(resumen);
+    return {
+      uid: profile.uid,
+      nombre: profile.nombre?.trim() || authUser?.displayName?.trim() || "Usuario Sin Nombre",
+      roles: normalizeRoles(profile.roles, profile.rol),
+      servicioActivoId: activoOcultoPorEntorno ? null : (profile.servicioActivoId ?? null),
+      servicioActivoResumen: activoOcultoPorEntorno ? null : resumen,
+      email: profile.email,
+      legajo: profile.legajo,
+      activo: profile.activo,
+      asignacionDiaria: profile.asignacionDiaria,
+    };
+  };
 
   const syncServicioActivoFromDoc = async (profile: Usuario): Promise<Usuario> => {
-    if (!profile.servicioActivoId || servicioActivoVigente(profile.servicioActivoResumen)) {
+    if (!profile.servicioActivoId) {
+      return profile;
+    }
+
+    // Si el resumen ya es vigente y del entorno actual, no hace falta refetch.
+    if (
+      servicioActivoVigente(profile.servicioActivoResumen) &&
+      servicioActivoVisibleEnEntorno(profile.servicioActivoResumen)
+    ) {
       return profile;
     }
 
@@ -115,14 +130,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (servicio.estado === "DESENGANCHADO" || servicio.estado === "ANULADO") {
         return { ...profile, servicioActivoId: null, servicioActivoResumen: null };
       }
+      const resumen: ServicioActivoResumen = {
+        id: profile.servicioActivoId,
+        estado: servicio.estado,
+        patente: servicio.patente,
+        numeroInfraccion: servicio.numeroInfraccion,
+        ...(servicio.esTest ? { esTest: true } : {}),
+      };
+      if (!servicioActivoVisibleEnEntorno(resumen)) {
+        return { ...profile, servicioActivoId: null, servicioActivoResumen: null };
+      }
       return {
         ...profile,
-        servicioActivoResumen: {
-          id: profile.servicioActivoId,
-          estado: servicio.estado,
-          patente: servicio.patente,
-          numeroInfraccion: servicio.numeroInfraccion,
-        },
+        servicioActivoResumen: resumen,
       };
     } catch (err) {
       console.warn("No se pudo validar servicio activo en segundo plano:", err);
@@ -194,15 +214,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           asignacionDiaria: data.asignacionDiaria,
         }, firebaseUser);
 
-        const synced = await syncServicioActivoFromDoc(profile);
-        if (import.meta.env.DEV) {
-          console.info("[auth] Perfil Firestore:", { uid, roles: synced.roles, email: synced.email });
-        }
         setPendienteActivacion(false);
-        setUserData(synced);
+        setUserData(profile);
+        setProfileLoading(false);
+
+        if (import.meta.env.DEV) {
+          console.info("[auth] Perfil Firestore:", { uid, roles: profile.roles, email: profile.email });
+        }
 
         registrarFcmToken().catch((err) => {
           console.warn("[FCM] Token registration failed:", err);
+        });
+
+        // Validar servicio activo en background (no bloquea primer paint)
+        void syncServicioActivoFromDoc(profile).then((synced) => {
+          setUserData((prev) => {
+            if (!prev || prev.uid !== uid) return prev;
+            return synced;
+          });
         });
       } else {
         console.warn(
@@ -435,23 +464,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const contextValue = useMemo(
+    () => ({
+      user,
+      userData,
+      pendienteActivacion,
+      sessionLoading,
+      profileLoading,
+      loading,
+      login,
+      register,
+      logout,
+      updateServicioActivo,
+      refreshUserData,
+      guardarAsignacionDiaria,
+    }),
+    [user, userData, pendienteActivacion, sessionLoading, profileLoading, loading]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        userData,
-        pendienteActivacion,
-        sessionLoading,
-        profileLoading,
-        loading,
-        login,
-        register,
-        logout,
-        updateServicioActivo,
-        refreshUserData,
-        guardarAsignacionDiaria,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

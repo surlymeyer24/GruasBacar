@@ -23,6 +23,45 @@ export const TIPO_FLOTA_FILTER_OPTIONS: { value: string; label: string }[] = [
   ...TIPO_FLOTA_OPTIONS,
 ];
 
+/** Motivo administrativo de grúa fuera de servicio (rotura, taller, trámite, etc.). */
+export type MotivoFueraDeServicio = 'ROTURA' | 'TALLER' | 'TRAMITE' | 'OTRO';
+
+export const MOTIVO_FUERA_DE_SERVICIO_OPTIONS: { value: MotivoFueraDeServicio; label: string }[] = [
+  { value: 'ROTURA', label: 'Rotura / avería' },
+  { value: 'TALLER', label: 'Taller / service' },
+  { value: 'TRAMITE', label: 'Trámite (ITV, seguro…)' },
+  { value: 'OTRO', label: 'Otro' },
+];
+
+export function labelMotivoFueraDeServicio(categoria: MotivoFueraDeServicio | string | undefined): string {
+  const found = MOTIVO_FUERA_DE_SERVICIO_OPTIONS.find((o) => o.value === categoria);
+  return found?.label ?? 'Fuera de servicio';
+}
+
+export function esMotivoFueraDeServicio(val: string | undefined): val is MotivoFueraDeServicio {
+  return val === 'ROTURA' || val === 'TALLER' || val === 'TRAMITE' || val === 'OTRO';
+}
+
+export interface FueraDeServicioGrua {
+  categoria: MotivoFueraDeServicio;
+  motivo?: string;
+  desde: string;
+  desactivadaPorUid: string;
+  desactivadaPorNombre: string;
+  turnoRef?: string;
+}
+
+/** Cierre administrativo de un cambio cross-tipo (solo admin). */
+export interface GestionCambioCrossTipo {
+  /** Grúa que dejó de estar disponible (mismo tipo que dejó el operador). */
+  gruaFueraDeServicioPatente?: string;
+  categoriaFueraDeServicio?: MotivoFueraDeServicio;
+  motivoCambio?: string;
+  deshabilitarGrua?: boolean;
+  /** Tipo de operación que dejó el operador (validación de grúa OOS). */
+  tipoFlotaOrigen?: TipoFlota;
+}
+
 export function matchesTipoFlotaFilter(tipo: string | undefined, filter: string): boolean {
   if (filter === 'ALL') return true;
   return normalizeTipoFlota(tipo) === filter;
@@ -151,7 +190,10 @@ export interface ServicioActivoResumen {
   id: string;
   estado: EstadoServicio;
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
+  /** Acta creada desde el site de prueba (`test-gruasbacar`). */
+  esTest?: boolean;
 }
 
 /** Indica si el resumen apunta a un servicio aún en curso. */
@@ -328,9 +370,12 @@ export function esPatenteSinNumero(patente: string | undefined | null): boolean 
 }
 
 /** Devuelve la patente para mostrar al usuario. S/N se muestra como "sin". */
-export function displayPatente(patente: string | undefined | null): string {
+export function displayPatente(patente: string | undefined | null, descripcionVehiculo?: string | null): string {
   const normalized = normalizarPatenteInput(patente);
-  return normalized === PATENTE_SIN_NUMERO ? 'sin' : normalized;
+  if (normalized === PATENTE_SIN_NUMERO) {
+    return descripcionVehiculo?.trim() ? `sin — ${descripcionVehiculo.trim()}` : 'sin';
+  }
+  return normalized;
 }
 
 /** Normaliza valor de grúa (patente o id) al formato `G-{patente}`. */
@@ -386,6 +431,8 @@ export interface Grua {
   activa: boolean;
   /** Default legacy: TRANSITO */
   tipo?: TipoFlota;
+  /** Snapshot mientras activa === false por cierre admin cross-tipo. */
+  fueraDeServicio?: FueraDeServicioGrua;
 }
 
 export type TipoDestino = 'CORRALON' | 'SECCIONAL';
@@ -534,6 +581,32 @@ export interface AsignacionDiaria {
   inicioEn?: string;
 }
 
+/** Registro histórico de una asignación de turno (colección `turnos/`). */
+export interface RegistroTurno {
+  operadorUid: string;
+  operadorNombre: string;
+  operadorLegajo?: string;
+  fecha: string; // YYYY-MM-DD
+  gruaPatente: string;
+  gruaDescripcion?: string;
+  duplaId: string;
+  duplaChofer: string;
+  duplaEnganchador: string;
+  legajoChofer?: string;
+  legajoEnganchador?: string;
+  tipoFlota: TipoFlota;
+  origenAsignacion: 'operador' | 'admin';
+  asignadoPorUid?: string;
+  asignadoPorNombre?: string;
+  creadoEn: string; // ISO 8601
+  gruaAnterior?: string;
+  cambioTipo?: 'MISMO_TIPO' | 'CROSS_TIPO';
+  motivoCambio?: string;
+  gruaFueraDeServicioPatente?: string;
+  categoriaFueraDeServicio?: MotivoFueraDeServicio;
+  gruaDeshabilitada?: boolean;
+}
+
 export const DURACION_TURNO_MS = 8 * 60 * 60 * 1000;
 
 export function asignacionCompleta(asignacion: AsignacionDiaria): boolean {
@@ -605,6 +678,7 @@ export interface Evento {
 export interface Servicio {
   id: string;
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   identificadorCompuesto: string; // `{numeroInfraccion}-{legajo}-{patente}` — también ID del documento
   estado: EstadoServicio;
@@ -627,8 +701,11 @@ export interface Servicio {
   motivoAnulacion?: string | null;
   anuladoPor?: string;
   anuladoEn?: unknown;
+  anulacionAutomatica?: boolean;
   /** Acta cargada manualmente por admin/supervisor (respaldo operativo). */
   origenManual?: boolean;
+  /** Acta creada desde el entorno de prueba. Ausente/false = producción. */
+  esTest?: boolean;
   /** Cantidad de revisiones registradas (ediciones, anulaciones, etc.). */
   versionCount?: number;
   /** Total de fotos en eventos (denormalizado para listados). */
@@ -657,15 +734,22 @@ export interface GuardarAsignacionDiariaPayload {
   /** Legajo del enganchador (enviado por frontend cuando la dupla es ad-hoc). */
   legajoEnganchador?: string;
   tipoFlota?: TipoFlota;
+  /** Tipo de operación habitual del operador (UI bloqueada). Para detectar cross-tipo sin turno previo. */
+  tipoOperacionReferencia?: TipoFlota;
+  /** Grúa habitual/referencia del tipo de operación (para el detalle admin). */
+  gruaReferenciaPatente?: string;
 }
 
 // Payloads para Firebase Functions
 export interface IniciarEnganchePayload {
-  patente: string;
+  patente?: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   grua: string;
   dupla: DuplasServicio;
   geo: GeoPoint;
+  /** Marca el acta como de prueba (site `test-gruasbacar`). */
+  esTest?: boolean;
 }
 
 export interface RegistrarEventoEnganchePayload {
@@ -697,6 +781,7 @@ export interface AnularServicioPayload {
 export interface ActualizarServicioPayload {
   servicioId: string;
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   grua: string;
   corralon?: string | null;
@@ -713,9 +798,16 @@ export interface AgregarComentarioFotoPayload {
   texto: string;
 }
 
+export interface RotarFotoPayload {
+  servicioId: string;
+  eventoId: string;
+  fotoIndex: number;
+}
+
 /** Alta manual de acta completa (supervisor / admin). */
 export interface CrearActaManualPayload {
   patente: string;
+  descripcionVehiculo?: string;
   numeroInfraccion?: string;
   grua: string;
   dupla: DuplasServicio;
@@ -731,6 +823,86 @@ export interface CrearActaManualPayload {
   fotosEngancheBase64: string[];
   fotosDesenganche?: Omit<Foto, 'url' | 'driveFileId'>[];
   fotosDesengancheBase64?: string[];
+  /** Marca el acta como de prueba (site `test-gruasbacar`). */
+  esTest?: boolean;
+}
+
+export interface SolicitarCambioGruaPayload {
+  gruaPatente: string;
+  tipoFlota: TipoFlota;
+  motivo?: string;
+}
+
+// ── ITV (Inspección Técnica Vehicular) ──────────────────────
+
+export interface RegistroITV {
+  id: string;
+  numero: number;
+  gruaId: string;
+  gruaPatente: string;
+  fechaVencimiento: string;
+  fechaTurnoRenovacion?: string;
+  renovado: boolean;
+  activo: boolean;
+}
+
+// ── Seguros de flota ─────────────────────────────────────────
+
+export interface GruaPoliza {
+  id: string;
+  patente: string;
+  descripcion?: string;
+}
+
+export interface AdjuntoPoliza {
+  storagePath: string;
+  nombre: string;
+  contentType: string;
+  size: number;
+}
+
+export interface PolizaSeguro {
+  id: string;
+  numeroRegistro: number;
+  numeroPoliza?: string;
+  aseguradora: string;
+  titular?: string;
+  cobertura?: string;
+  vigenciaDesde: string;
+  fechaVencimiento: string;
+  gruas: GruaPoliza[];
+  adjunto?: AdjuntoPoliza;
+  activo: boolean;
+  reemplazaA?: string;
+  reemplazadaPor?: string;
+  creadoPorUid: string;
+  creadoPorNombre?: string;
+  creadoEn?: unknown;
+}
+
+export type PolizaEstadoVencimiento = ITVEstadoVencimiento;
+
+export function calcularEstadoPoliza(
+  fechaVencimiento: string,
+  ahora?: Date
+): PolizaEstadoVencimiento {
+  return calcularEstadoITV(fechaVencimiento, ahora);
+}
+
+export type ITVEstadoVencimiento =
+  | 'VIGENTE'
+  | 'POR_VENCER_30D'
+  | 'POR_VENCER_15D'
+  | 'POR_VENCER_7D'
+  | 'VENCIDO';
+
+export function calcularEstadoITV(fechaVencimiento: string, ahora?: Date): ITVEstadoVencimiento {
+  const dias = diasParaVencimiento(fechaVencimiento, ahora);
+  if (dias <= 0) return 'VENCIDO';
+  if (dias <= 7) return 'POR_VENCER_7D';
+  if (dias <= 15) return 'POR_VENCER_15D';
+  if (dias <= 30) return 'POR_VENCER_30D';
+  return 'VIGENTE';
 }
 
 // ── Carnets de conducir ──────────────────────────────────────

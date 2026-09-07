@@ -136,8 +136,8 @@ import { useAuth } from "../hooks/useAuth";
 
 ## Variables de entorno
 
-- **Frontend:** Prefijo `VITE_` para variables accesibles en el cliente. Se configuran en `.env` / `.env.local`.
-- **Functions:** Secrets con `defineSecret()`. No hay `.env` en el directorio de functions.
+- **Frontend:** Prefijo `VITE_` para variables accesibles en el cliente. `npm run dev` carga `.env.development` con `VITE_USE_EMULATORS=true`. En Vite DEV el frontend no puede hablar con producción.
+- **Functions:** Secrets con `defineSecret()`. En emulador, Drive y FCM están bloqueados salvo `DRIVE_EN_EMULADOR=true` (carpeta de prueba).
 - **Ejemplo `.env` frontend:**
   ```
   VITE_FIREBASE_API_KEY=...
@@ -145,3 +145,4 @@ import { useAuth } from "../hooks/useAuth";
   VITE_FIREBASE_PROJECT_ID=...
   VITE_USE_EMULATORS=true
   ```
+- **`VITE_ES_TEST=true`:** build del site de prueba (`test-gruasbacar`). Las actas nuevas se guardan con `esTest: true` y el site de producción las oculta en historial/KPIs/reportes. Deploy: `npm run ship:test`.

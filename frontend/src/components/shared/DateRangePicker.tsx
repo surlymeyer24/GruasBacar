@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
 const WEEKDAYS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"] as const;
 const MONTHS = [
@@ -42,12 +43,32 @@ function normalizeRange(from: string, to: string): { from: string; to: string } 
   return from <= to ? { from, to } : { from: to, to: from };
 }
 
-function rangeLabel(from: string, to: string): string {
-  if (!from && !to) return "Todas las fechas";
-  if (from && !to) return `Desde ${formatDisplay(from)}`;
-  const { from: a, to: b } = normalizeRange(from, to);
-  if (a === b) return formatDisplay(a);
-  return `${formatDisplay(a)} – ${formatDisplay(b)}`;
+function rangeLabel(from: string, to: string, horaFrom: string, horaTo: string): string {
+  const hasDate = Boolean(from || to);
+  const hasHora = Boolean(horaFrom || horaTo);
+
+  let datePart = "";
+  if (!hasDate) {
+    datePart = hasHora ? "Todas las fechas" : "";
+  } else if (from && !to) {
+    datePart = `Desde ${formatDisplay(from)}`;
+  } else {
+    const { from: a, to: b } = normalizeRange(from, to);
+    datePart = a === b ? formatDisplay(a) : `${formatDisplay(a)} – ${formatDisplay(b)}`;
+  }
+
+  let horaPart = "";
+  if (horaFrom && horaTo) {
+    horaPart = `${horaFrom} a ${horaTo}`;
+  } else if (horaFrom) {
+    horaPart = `desde ${horaFrom}`;
+  } else if (horaTo) {
+    horaPart = `hasta ${horaTo}`;
+  }
+
+  if (!hasDate && !hasHora) return "Todas las fechas";
+  if (datePart && horaPart) return `${datePart}, ${horaPart}`;
+  return datePart || horaPart;
 }
 
 function getCalendarDays(year: number, month: number): (Date | null)[] {
@@ -70,6 +91,9 @@ interface DateRangePickerProps {
   from: string;
   to: string;
   onChange: (from: string, to: string) => void;
+  horaFrom?: string;
+  horaTo?: string;
+  onHoraChange?: (horaFrom: string, horaTo: string) => void;
   className?: string;
   ariaLabel?: string;
 }
@@ -78,6 +102,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   from,
   to,
   onChange,
+  horaFrom = "",
+  horaTo = "",
+  onHoraChange,
   className = "w-full sm:w-60 shrink-0",
   ariaLabel = "Filtrar por rango de fechas",
 }) => {
@@ -88,10 +115,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   });
   const [selectingEnd, setSelectingEnd] = useState(false);
   const [hoverYmd, setHoverYmd] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  const label = rangeLabel(from, to);
+  const label = rangeLabel(from, to, horaFrom, horaTo);
   const hasRange = Boolean(from || to);
+  const hasHora = Boolean(horaFrom || horaTo);
+  const hasAny = hasRange || hasHora;
 
   const calendarDays = useMemo(
     () => getCalendarDays(viewMonth.getFullYear(), viewMonth.getMonth()),
@@ -102,11 +133,11 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     if (!open) return;
 
     const handlePointerDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSelectingEnd(false);
-        setHoverYmd(null);
-      }
+      const target = e.target as Node;
+      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      setOpen(false);
+      setSelectingEnd(false);
+      setHoverYmd(null);
     };
 
     const handleEscape = (e: KeyboardEvent) => {
@@ -122,6 +153,35 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !buttonRef.current) return;
+
+    const updatePosition = () => {
+      const rect = buttonRef.current!.getBoundingClientRect();
+      const panelHeight = 440;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUpward = spaceBelow < panelHeight && rect.top > spaceBelow;
+
+      setMenuStyle({
+        position: "fixed",
+        left: rect.left,
+        width: Math.max(rect.width, 296),
+        zIndex: 9999,
+        ...(openUpward
+          ? { bottom: window.innerHeight - rect.top + 6 }
+          : { top: rect.bottom + 6 }),
+      });
+    };
+
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
     };
   }, [open]);
 
@@ -146,23 +206,159 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     onChange(start, end);
     setSelectingEnd(false);
     setHoverYmd(null);
-    setOpen(false);
   };
 
   const previewEnd = selectingEnd && from && hoverYmd ? hoverYmd : to;
   const rangeStart = from;
   const rangeEnd = previewEnd;
 
+  const calendarPanel = (
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-label={ariaLabel}
+      style={menuStyle}
+      className="p-4 bg-white border border-brand-seashell rounded-2xl shadow-lg"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <button
+          type="button"
+          onClick={() =>
+            setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))
+          }
+          className="p-1.5 rounded-lg hover:bg-brand-bg text-brand-pale hover:text-brand-purply transition-colors"
+          aria-label="Mes anterior"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <p className="text-sm font-bold text-brand-purply capitalize">
+          {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
+        </p>
+        <button
+          type="button"
+          onClick={() =>
+            setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))
+          }
+          className="p-1.5 rounded-lg hover:bg-brand-bg text-brand-pale hover:text-brand-purply transition-colors"
+          aria-label="Mes siguiente"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      <p className="text-[10px] text-brand-pale mb-2">
+        {selectingEnd && from
+          ? "Elegí la fecha de fin del rango"
+          : "Elegí la fecha de inicio del rango"}
+      </p>
+
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {WEEKDAYS.map((day) => (
+          <span
+            key={day}
+            className="text-[10px] font-bold text-brand-pale text-center py-1"
+          >
+            {day}
+          </span>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-0.5">
+        {calendarDays.map((date, idx) => {
+          if (!date) {
+            return <span key={`empty-${idx}`} />;
+          }
+
+          const ymd = toYmd(date);
+          const isStart = ymd === rangeStart;
+          const isEnd = Boolean(rangeEnd) && ymd === rangeEnd;
+          const inRange =
+            rangeStart &&
+            rangeEnd &&
+            isBetween(ymd, rangeStart, rangeEnd) &&
+            !isStart &&
+            !isEnd;
+          const isToday = ymd === toYmd(new Date());
+
+          return (
+            <button
+              key={ymd}
+              type="button"
+              onClick={() => handleDayClick(date)}
+              onMouseEnter={() => selectingEnd && from && setHoverYmd(ymd)}
+              onMouseLeave={() => setHoverYmd(null)}
+              className={`h-8 text-xs rounded-lg transition-colors ${
+                isStart || isEnd
+                  ? "bg-brand-cta text-white font-bold"
+                  : inRange
+                    ? "bg-brand-cta/15 text-brand-purply font-medium"
+                    : isToday
+                      ? "border border-brand-cta/40 text-brand-purply hover:bg-brand-bg"
+                      : "text-brand-purply hover:bg-brand-bg"
+              }`}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+
+      {onHoraChange && (
+        <div className="mt-3 pt-3 border-t border-brand-seashell">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="w-3.5 h-3.5 text-brand-pale" />
+            <span className="text-[10px] font-bold text-brand-pale uppercase tracking-wider">Rango horario</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="time"
+              value={horaFrom}
+              onChange={(e) => onHoraChange(e.target.value, horaTo)}
+              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-brand-seashell rounded-lg bg-brand-bg text-brand-purply focus:outline-none focus:ring-1 focus:ring-brand-cta/40 focus:border-brand-cta/40 transition-all"
+              aria-label="Hora desde"
+              placeholder="Desde"
+            />
+            <span className="text-[11px] text-brand-pale font-medium">a</span>
+            <input
+              type="time"
+              value={horaTo}
+              onChange={(e) => onHoraChange(horaFrom, e.target.value)}
+              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-brand-seashell rounded-lg bg-brand-bg text-brand-purply focus:outline-none focus:ring-1 focus:ring-brand-cta/40 focus:border-brand-cta/40 transition-all"
+              aria-label="Hora hasta"
+              placeholder="Hasta"
+            />
+          </div>
+        </div>
+      )}
+
+      {hasAny && (
+        <button
+          type="button"
+          onClick={() => {
+            onChange("", "");
+            if (onHoraChange) onHoraChange("", "");
+            setSelectingEnd(false);
+            setHoverYmd(null);
+          }}
+          className="mt-3 w-full py-2 text-xs font-bold text-brand-pale hover:text-brand-purply border border-brand-seashell rounded-xl hover:bg-brand-bg transition-colors"
+        >
+          Limpiar filtros
+        </button>
+      )}
+    </div>
+  );
+
   return (
-    <div ref={ref} className={`relative ${className}`}>
+    <div className={`relative ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="dialog"
         className={`w-full flex items-center pl-7 pr-7 py-2 bg-brand-bg border rounded-xl text-[13px] leading-tight cursor-pointer transition-all text-left ${
-          hasRange ? "text-brand-purply" : "text-brand-pale"
+          hasAny ? "text-brand-purply" : "text-brand-pale"
         } ${
           open
             ? "border-brand-cta/40 ring-2 ring-brand-cta/25"
@@ -178,110 +374,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         }`}
       />
 
-      {open && (
-        <div
-          role="dialog"
-          aria-label={ariaLabel}
-          className="absolute z-30 mt-2 w-[min(100vw-2rem,18.5rem)] p-4 bg-white border border-brand-seashell rounded-2xl shadow-lg"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <button
-              type="button"
-              onClick={() =>
-                setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))
-              }
-              className="p-1.5 rounded-lg hover:bg-brand-bg text-brand-pale hover:text-brand-purply transition-colors"
-              aria-label="Mes anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <p className="text-sm font-bold text-brand-purply capitalize">
-              {MONTHS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
-            </p>
-            <button
-              type="button"
-              onClick={() =>
-                setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))
-              }
-              className="p-1.5 rounded-lg hover:bg-brand-bg text-brand-pale hover:text-brand-purply transition-colors"
-              aria-label="Mes siguiente"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <p className="text-[10px] text-brand-pale mb-2">
-            {selectingEnd && from
-              ? "Elegí la fecha de fin del rango"
-              : "Elegí la fecha de inicio del rango"}
-          </p>
-
-          <div className="grid grid-cols-7 gap-0.5 mb-1">
-            {WEEKDAYS.map((day) => (
-              <span
-                key={day}
-                className="text-[10px] font-bold text-brand-pale text-center py-1"
-              >
-                {day}
-              </span>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-0.5">
-            {calendarDays.map((date, idx) => {
-              if (!date) {
-                return <span key={`empty-${idx}`} />;
-              }
-
-              const ymd = toYmd(date);
-              const isStart = ymd === rangeStart;
-              const isEnd = Boolean(rangeEnd) && ymd === rangeEnd;
-              const inRange =
-                rangeStart &&
-                rangeEnd &&
-                isBetween(ymd, rangeStart, rangeEnd) &&
-                !isStart &&
-                !isEnd;
-              const isToday = ymd === toYmd(new Date());
-
-              return (
-                <button
-                  key={ymd}
-                  type="button"
-                  onClick={() => handleDayClick(date)}
-                  onMouseEnter={() => selectingEnd && from && setHoverYmd(ymd)}
-                  onMouseLeave={() => setHoverYmd(null)}
-                  className={`h-8 text-xs rounded-lg transition-colors ${
-                    isStart || isEnd
-                      ? "bg-brand-cta text-white font-bold"
-                      : inRange
-                        ? "bg-brand-cta/15 text-brand-purply font-medium"
-                        : isToday
-                          ? "border border-brand-cta/40 text-brand-purply hover:bg-brand-bg"
-                          : "text-brand-purply hover:bg-brand-bg"
-                  }`}
-                >
-                  {date.getDate()}
-                </button>
-              );
-            })}
-          </div>
-
-          {hasRange && (
-            <button
-              type="button"
-              onClick={() => {
-                onChange("", "");
-                setSelectingEnd(false);
-                setHoverYmd(null);
-              }}
-              className="mt-3 w-full py-2 text-xs font-bold text-brand-pale hover:text-brand-purply border border-brand-seashell rounded-xl hover:bg-brand-bg transition-colors"
-            >
-              Limpiar fechas
-            </button>
-          )}
-        </div>
-      )}
+      {open && createPortal(calendarPanel, document.body)}
     </div>
   );
 };

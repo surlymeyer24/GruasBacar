@@ -1,4 +1,4 @@
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getMessaging, isSupported, getToken, onMessage } from 'firebase/messaging';
 import type { MessagePayload } from 'firebase/messaging';
 import { httpsCallable } from 'firebase/functions';
 import { app, functions, isMock } from '../firebase';
@@ -6,6 +6,12 @@ import { app, functions, isMock } from '../firebase';
 const FCM_TOKEN_KEY = 'gruasbacar_fcm_token';
 
 let messagingInstance: ReturnType<typeof getMessaging> | null = null;
+
+const supportedPromise = isSupported().catch(() => false);
+
+async function isFcmSupported(): Promise<boolean> {
+  return supportedPromise;
+}
 
 function getMsg() {
   if (!messagingInstance) messagingInstance = getMessaging(app);
@@ -15,6 +21,7 @@ function getMsg() {
 export async function registrarFcmToken(): Promise<string | null> {
   if (isMock) return null;
   if (!('serviceWorker' in navigator) || !('Notification' in window)) return null;
+  if (!(await isFcmSupported())) return null;
 
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return null;
@@ -58,5 +65,18 @@ export function escucharMensajesForeground(
   callback: (payload: MessagePayload) => void,
 ): () => void {
   if (isMock) return () => {};
-  return onMessage(getMsg(), callback);
+  let unsubscribe: (() => void) | undefined;
+  let cancelled = false;
+  supportedPromise.then((supported) => {
+    if (!supported || cancelled) return;
+    try {
+      unsubscribe = onMessage(getMsg(), callback);
+    } catch {
+      // FCM not supported
+    }
+  });
+  return () => {
+    cancelled = true;
+    unsubscribe?.();
+  };
 }

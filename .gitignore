@@ -9,12 +9,36 @@ dist/
 .env.*
 !.env.example
 !.env.*.example
+!.env.development
 *.local
 
 # OS
 .DS_Store
 Thumbs.db
 Desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# IDE / editor
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Logs
+debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Test / coverage
+coverage/
+test-results/
+playwright-report/
 
 # Firebase
 .firebase/
@@ -25,8 +49,13 @@ database-debug.log
 pubsub-debug.log
 .emulator-data/
 .firebaserc
+firebase-export-*/
 **/ServiceAccountKey.json
 **/serviceAccountKey.json
+credentials.json
+**/credentials.json
+*.pem
+*.p12
 
 # Functions build
 functions/lib/
@@ -37,9 +66,16 @@ functions/package-lock.json
 # Shared build
 shared/dist/
 
-# Misc
-debug.log
-firebase-export-*/
+# Lint / format cache
+.eslintcache
+.prettiercache
+
+# Temp / scratch
+tmp/
+temp/
+*.tmp
+
+# Fotos sueltas (capturas de prueba, exports locales)
 *.jpg
 *.png
 *.jpeg

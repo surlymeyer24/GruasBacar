@@ -17,7 +17,8 @@ $FUNCTIONS = @(
   "crearUsuario",
   "actualizarUsuario",
   "desactivarUsuario",
-  "listarUsuarios"
+  "listarUsuarios",
+  "ejecutarBackupFirestore"
 )
 
 Write-Host "Proyecto: $PROJECT | Región: $REGION`n"

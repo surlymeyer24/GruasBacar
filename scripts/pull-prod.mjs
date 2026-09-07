@@ -1,17 +1,18 @@
 /**
- * Baja datos de Firestore y usuarios de Auth desde producción
- * y los carga en los emuladores locales.
+ * Seed del emulador: lee producción y escribe solo en localhost.
+ * Nunca escribe en el proyecto real.
  *
  * Requisitos:
- *   - Emuladores corriendo (npm run emulators)
- *   - ServiceAccountKey.json en functions/src/auth/
+ *   - Emuladores corriendo (npm run emu)
+ *   - ServiceAccountKey.json en functions/src/auth/ (solo para LEER prod)
  *
- * Uso: npm run pull-prod
+ * Uso: npm run seed   |   npm run emu:seed   |   npm run pull-prod
  */
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { applyEmulatorEnv, clearEmulatorEnv } from './lib/initFirebaseAdmin.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -31,9 +32,30 @@ const SUB_COLLECTIONS = {
   servicios: ['eventos', 'fotosStaging', 'versiones'],
 };
 
+/** Tokens FCM de prod notificarían celulares reales si las functions del emulador los usaran. */
+function sanitizeForEmulator(col, data) {
+  if (col !== 'usuarios' || !data || typeof data !== 'object') return data;
+  const { fcmTokens: _omit, ...rest } = data;
+  return rest;
+}
+
+
+if (process.argv.includes('--prod')) {
+  console.error(
+    'Este script nunca escribe en producción. Para sembrar el emulador: npm run seed'
+  );
+  process.exit(1);
+}
+
 // ── Fase 1: leer TODO de producción (sin env vars de emulador) ──
 
+clearEmulatorEnv();
+
 const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
+if (!existsSync(keyPath)) {
+  console.error('No se encontró functions/src/auth/ServiceAccountKey.json (hace falta para LEER prod).');
+  process.exit(1);
+}
 const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
 
 const prodApp = admin.initializeApp(
@@ -90,8 +112,18 @@ async function readAuthUsers() {
   return users;
 }
 
+async function assertEmulatorUp() {
+  try {
+    await fetch('http://127.0.0.1:8081');
+  } catch {
+    console.error('El emulador de Firestore no responde en 127.0.0.1:8081. Levantá `npm run emu`.');
+    process.exit(1);
+  }
+}
+
 async function main() {
-  console.log('Sincronizando producción → emuladores locales...\n');
+  await assertEmulatorUp();
+  console.log('Seed: copiando producción → emuladores (solo lectura de prod; escribe solo en localhost)...\n');
 
   // Fase 1: leer de producción
   console.log('Leyendo de producción...');
@@ -116,8 +148,7 @@ async function main() {
   // ── Fase 2: escribir en emuladores ──
   console.log('\nEscribiendo en emuladores...');
 
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
+  applyEmulatorEnv();
 
   const emuApp = admin.initializeApp({ projectId: 'gruasbacar' }, 'emulator');
   const emuDb = emuApp.firestore();
@@ -132,7 +163,7 @@ async function main() {
     let batchCount = 0;
 
     for (const entry of docs) {
-      batch.set(emuDb.collection(col).doc(entry.id), entry.data);
+      batch.set(emuDb.collection(col).doc(entry.id), sanitizeForEmulator(col, entry.data));
       batchCount++;
       totalDocs++;
 
@@ -197,6 +228,7 @@ async function main() {
 
   console.log(`\nTotal: ${totalDocs} documentos en Firestore, ${authCount} usuarios en Auth.`);
   console.log(`Todos los usuarios usan la contraseña: ${TEST_PASSWORD}`);
+  console.log('Tokens FCM de producción no se copian (el emulador no notifica celulares reales).');
   console.log('Emulator UI: http://localhost:4000');
 
   process.exit(0);

@@ -6,16 +6,50 @@ import {
   esAdmin,
   normalizeRoles,
 } from '@gruasbacar/shared';
+import { enviarEmail, obtenerEmailsAdminsActivos, construirEmailGenerico } from './email.service';
+import { enEmulador } from '../utils/entorno';
 
 const db = () => admin.firestore();
 
 // Tipos que además de la notificación in-app envían push FCM al celular.
 // Para agregar push a otro tipo, añadirlo acá.
 const TIPOS_CON_PUSH = new Set<TipoNotificacion>([
+  'TURNO_ASIGNADO',
+  'TURNO_MODIFICADO',
+  'SOLICITUD_RECONFIG_TURNO',
+  'SOLICITUD_CAMBIO_GRUA',
+  'FOTO_SUBIDA_ERROR',
   'CARNET_POR_VENCER_30D',
   'CARNET_POR_VENCER_15D',
   'CARNET_POR_VENCER_7D',
+  'ITV_POR_VENCER_7D',
+  'ITV_POR_VENCER_1D',
+  'POLIZA_POR_VENCER_30D',
+  'POLIZA_POR_VENCER_15D',
+  'POLIZA_POR_VENCER_7D',
+  'ENGANCHE_TIMEOUT_AVISO',
+  'ENGANCHE_TIMEOUT_ANULADO',
 ]);
+
+// Tipos que además envían email a los admins.
+const TIPOS_CON_EMAIL = new Set<TipoNotificacion>([
+  'CARNET_POR_VENCER_30D',
+  'CARNET_POR_VENCER_15D',
+  'CARNET_POR_VENCER_7D',
+  'ITV_POR_VENCER_7D',
+  'ITV_POR_VENCER_1D',
+  'POLIZA_POR_VENCER_30D',
+  'POLIZA_POR_VENCER_15D',
+  'POLIZA_POR_VENCER_7D',
+  'SOLICITUD_RECONFIG_TURNO',
+  'SOLICITUD_CAMBIO_GRUA',
+  'FOTO_SUBIDA_ERROR',
+]);
+
+export interface EmailContent {
+  subject: string;
+  html: string;
+}
 
 export interface CrearNotificacionInput {
   destinatarioUid: string;
@@ -25,6 +59,7 @@ export interface CrearNotificacionInput {
   datos?: Record<string, string>;
   origenUid?: string;
   claveDedup?: string;
+  email?: EmailContent;
 }
 
 export async function obtenerUidsAdminsActivos(): Promise<string[]> {
@@ -74,9 +109,13 @@ export async function crearNotificacion(input: CrearNotificacionInput): Promise<
   });
 
   if (TIPOS_CON_PUSH.has(tipo)) {
-    enviarPushFcm(destinatarioUid, titulo, cuerpo, datos).catch((err) => {
-      console.error(`[FCM] Error enviando push a ${destinatarioUid}:`, err);
-    });
+    if (enEmulador()) {
+      console.warn(`[FCM] Omitido en emulador (no se notifica dispositivos reales) uid=${destinatarioUid} tipo=${tipo}`);
+    } else {
+      enviarPushFcm(destinatarioUid, titulo, cuerpo, datos).catch((err) => {
+        console.error(`[FCM] Error enviando push a ${destinatarioUid}:`, err);
+      });
+    }
   }
 
   return ref.id;
@@ -86,11 +125,33 @@ export async function notificarAdmins(
   input: Omit<CrearNotificacionInput, 'destinatarioUid'>
 ): Promise<void> {
   const adminUids = await obtenerUidsAdminsActivos();
+  if (adminUids.length === 0) {
+    console.warn('[notificaciones] notificarAdmins: no hay usuarios ADMIN/SUPERADMIN activos');
+  }
   await Promise.all(
     adminUids.map((uid) =>
       crearNotificacion({ ...input, destinatarioUid: uid })
     )
   );
+
+  if (TIPOS_CON_EMAIL.has(input.tipo)) {
+    const emailContent = input.email ?? {
+      subject: `[BACAR] ${input.titulo}`,
+      html: construirEmailGenerico(input.titulo, input.cuerpo),
+    };
+    const admins = await obtenerEmailsAdminsActivos();
+    const emails = admins.map((a) => a.email);
+    if (emails.length > 0) {
+      enviarEmail({
+        to: emails,
+        subject: emailContent.subject,
+        html: emailContent.html,
+        claveDedup: input.claveDedup ? `email:${input.claveDedup}` : undefined,
+      }).catch((err) => {
+        console.error('[EMAIL] Error encolando email:', err);
+      });
+    }
+  }
 }
 
 export async function marcarNotificacionLeida(

@@ -6,20 +6,24 @@ import {
   TipoFlota,
   TIPO_FLOTA_OPTIONS,
   normalizeTipoFlota,
+  labelTipoFlota,
   enganchadorDeDupla,
   duplaDeUsuario,
   legajoKey,
   nombresCoinciden,
   normalizeRoles,
+  turnoSigueVigente,
+  buildGruaId,
 } from "@gruasbacar/shared";
 import { gruaService } from "../../services/grua.service";
 import { duplaService } from "../../services/dupla.service";
 import { obtenerOperadoresActivos, OperadorResumen } from "../../services/usuario.service";
 import { useAuth } from "../../context/AuthContext";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
-import { Truck, User, Users, X, AlertCircle, MessageSquareWarning } from "lucide-react";
+import { Truck, User, Users, X, AlertCircle, MessageSquareWarning, Info } from "lucide-react";
 import { fechaHoyArgentina } from "../../utils/formatters";
 import { CustomSelect } from "../shared/CustomSelect";
+import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { solicitarReconfiguracionTurno } from "../../services/notificacion.service";
 
 interface Operador {
@@ -63,6 +67,44 @@ function findDuplaMatch(
   });
 }
 
+function TipoFlotaBadge({ tipo }: { tipo: TipoFlota | string | undefined }) {
+  const normalized = normalizeTipoFlota(tipo);
+  const isTransporte = normalized === "TRANSPORTE";
+  return (
+    <span
+      className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+        isTransporte
+          ? "bg-blue-50 text-blue-700 border-blue-200/70"
+          : "bg-amber-50 text-amber-700 border-amber-200/70"
+      }`}
+    >
+      {labelTipoFlota(normalized)}
+    </span>
+  );
+}
+
+function gruaOptionContent(g: Grua, showTipoBadge: boolean, enUso: boolean) {
+  const nombre = g.descripcion?.trim() || g.patente;
+  const plainLabel = enUso
+    ? `${nombre} · ${g.patente} (EN USO)`
+    : `${nombre} · ${g.patente}`;
+
+  if (!showTipoBadge) {
+    return plainLabel;
+  }
+
+  return (
+    <span className="flex items-center justify-between gap-2 w-full min-w-0">
+      <span className="truncate min-w-0">
+        <span className="font-semibold">{nombre}</span>
+        <span className="text-brand-pale font-mono text-[11px] ml-1.5">{g.patente}</span>
+        {enUso && <span className="text-amber-700 ml-1">(EN USO)</span>}
+      </span>
+      <TipoFlotaBadge tipo={g.tipo} />
+    </span>
+  );
+}
+
 interface ConfiguracionDiaModalProps {
   isOpen: boolean;
   blocking?: boolean;
@@ -87,6 +129,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   const [gruas, setGruas] = useState<Grua[]>([]);
   const [duplas, setDuplas] = useState<Dupla[]>([]);
   const [cfOperadores, setCfOperadores] = useState<OperadorResumen[]>([]);
+  const [gruasOcupadas, setGruasOcupadas] = useState<Set<string>>(new Set());
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,16 +137,56 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   const [solicitudOk, setSolicitudOk] = useState(false);
   const [solicitudError, setSolicitudError] = useState<string | null>(null);
 
-  const [tipoFlota, setTipoFlota] = useState<TipoFlota>("TRANSITO");
+  const [tipoOperacion, setTipoOperacion] = useState<TipoFlota>("TRANSITO");
+  const [mostrarTodasGruas, setMostrarTodasGruas] = useState(false);
+  const [confirmCrossOperacion, setConfirmCrossOperacion] = useState(false);
   const [gruaPatente, setGruaPatente] = useState("");
   const [choferKey, setChoferKey] = useState("");
   const [enganchadorKey, setEnganchadorKey] = useState("");
   const preselected = useRef(false);
 
   const gruasFiltradas = useMemo(
-    () => gruas.filter((g) => normalizeTipoFlota(g.tipo) === tipoFlota),
-    [gruas, tipoFlota]
+    () => gruas.filter((g) => normalizeTipoFlota(g.tipo) === tipoOperacion),
+    [gruas, tipoOperacion]
   );
+
+  const gruasParaSelect = useMemo(
+    () => (mostrarTodasGruas ? gruas : gruasFiltradas),
+    [mostrarTodasGruas, gruas, gruasFiltradas]
+  );
+
+  const gruaSeleccionada = useMemo(
+    () => gruas.find((g) => g.patente === gruaPatente),
+    [gruas, gruaPatente]
+  );
+
+  const tipoFlotaEfectivo = useMemo(
+    () => normalizeTipoFlota(gruaSeleccionada?.tipo ?? tipoOperacion),
+    [gruaSeleccionada, tipoOperacion]
+  );
+
+  const esCrossOperacion = useMemo(
+    () =>
+      !!gruaSeleccionada && normalizeTipoFlota(gruaSeleccionada.tipo) !== tipoOperacion,
+    [gruaSeleccionada, tipoOperacion]
+  );
+
+  const userIdentity = useMemo<{ nombre?: string; legajo?: string }>(() => {
+    const nombre = userData?.nombre;
+    const legajo = userData?.legajo;
+    if (nombre && legajo) return { nombre, legajo };
+
+    const matchInCf = cfOperadores.find((o) => {
+      if (legajo && legajoKey(o.legajo) === legajoKey(legajo)) return true;
+      if (nombre && nombre !== "Usuario Sin Nombre" && nombresCoinciden(o.nombre, nombre)) return true;
+      return false;
+    });
+    if (matchInCf) return { nombre: matchInCf.nombre, legajo: matchInCf.legajo };
+
+    return { nombre, legajo };
+  }, [userData, cfOperadores]);
+
+  const miDupla = useMemo(() => duplaDeUsuario(duplas, userIdentity), [duplas, userIdentity]);
 
   const choferes = useMemo(() => {
     const fromDuplas = extractOperadores(duplas, "chofer");
@@ -118,8 +201,20 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
       seen.add(key);
       result.push(op);
     }
+    if (userIdentity?.nombre && userIdentity.nombre !== "Usuario Sin Nombre") {
+      const roles = normalizeRoles(userData?.roles, userData?.rol);
+      if (roles.includes("CHOFER")) {
+        const me: Operador = { nombre: userIdentity.nombre, legajo: userIdentity.legajo ?? "" };
+        if (!seen.has(uniqueKey(me))) result.push(me);
+      }
+    }
+    if (miDupla) {
+      const duplaKey = uniqueKey({ nombre: miDupla.chofer, legajo: miDupla.legajoChofer ?? "" });
+      const idx = result.findIndex((o) => uniqueKey(o) === duplaKey);
+      if (idx > 0) result.unshift(...result.splice(idx, 1));
+    }
     return result;
-  }, [duplas, cfOperadores]);
+  }, [duplas, cfOperadores, userData, userIdentity, miDupla]);
 
   const enganchadores = useMemo(() => {
     const fromDuplas = extractOperadores(duplas, "enganchador");
@@ -134,8 +229,21 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
       seen.add(key);
       result.push(op);
     }
+    if (userIdentity?.nombre && userIdentity.nombre !== "Usuario Sin Nombre") {
+      const roles = normalizeRoles(userData?.roles, userData?.rol);
+      if (roles.includes("ENGANCHADOR")) {
+        const me: Operador = { nombre: userIdentity.nombre, legajo: userIdentity.legajo ?? "" };
+        if (!seen.has(uniqueKey(me))) result.push(me);
+      }
+    }
+    if (miDupla) {
+      const eng = enganchadorDeDupla(miDupla);
+      const duplaKey = uniqueKey({ nombre: eng, legajo: miDupla.legajoEnganchador ?? "" });
+      const idx = result.findIndex((o) => uniqueKey(o) === duplaKey);
+      if (idx > 0) result.unshift(...result.splice(idx, 1));
+    }
     return result;
-  }, [duplas, cfOperadores]);
+  }, [duplas, cfOperadores, userData, userIdentity, miDupla]);
 
   const selectedChofer = choferes.find((c) => uniqueKey(c) === choferKey);
   const selectedEnganchador = enganchadores.find((e) => uniqueKey(e) === enganchadorKey);
@@ -145,12 +253,49 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     [duplas, selectedChofer, selectedEnganchador]
   );
 
+  const turnoVigente = useMemo(() => {
+    if (!initialAsignacion?.inicioEn) return null;
+    return turnoSigueVigente(initialAsignacion) ? initialAsignacion : null;
+  }, [initialAsignacion]);
+
+  const gruaReferenciaPatente = useMemo(() => {
+    if (turnoVigente?.gruaPatente) return turnoVigente.gruaPatente;
+    if (
+      initialAsignacion?.gruaPatente &&
+      normalizeTipoFlota(initialAsignacion.tipoFlota) === tipoOperacion
+    ) {
+      return initialAsignacion.gruaPatente;
+    }
+    if (miDupla?.gruaId && gruas.length > 0) {
+      const habitual = gruas.find(
+        (g) => g.id === miDupla.gruaId || buildGruaId(g.patente) === miDupla.gruaId
+      );
+      if (habitual) return habitual.patente;
+    }
+    return gruasFiltradas[0]?.patente ?? "";
+  }, [turnoVigente, initialAsignacion, miDupla, gruas, gruasFiltradas, tipoOperacion]);
+
+  const tipoReferencia = useMemo(() => {
+    if (initialAsignacion?.tipoFlota) return normalizeTipoFlota(initialAsignacion.tipoFlota);
+    if (miDupla?.gruaId && gruas.length > 0) {
+      const habitual = gruas.find(
+        (g) => g.id === miDupla.gruaId || buildGruaId(g.patente) === miDupla.gruaId
+      );
+      if (habitual?.tipo) return normalizeTipoFlota(habitual.tipo);
+    }
+    return "TRANSITO" as TipoFlota;
+  }, [initialAsignacion, miDupla, gruas]);
+
+  const tieneServicioActivo = !!userData?.servicioActivoId;
+
   useEffect(() => {
     if (!isOpen) return;
 
     setError(null);
     preselected.current = false;
-    setTipoFlota(normalizeTipoFlota(initialAsignacion?.tipoFlota));
+    setMostrarTodasGruas(false);
+    setConfirmCrossOperacion(false);
+    setTipoOperacion(normalizeTipoFlota(initialAsignacion?.tipoFlota));
     setGruaPatente(initialAsignacion?.gruaPatente ?? "");
     setChoferKey("");
     setEnganchadorKey("");
@@ -158,14 +303,16 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     const load = async () => {
       setLoadingCatalog(true);
       try {
-        const [activeGruas, activeDuplas, cfOperadores] = await Promise.all([
+        const [activeGruas, activeDuplas, cfOps, ocupadas] = await Promise.all([
           gruaService.getGruasActivas(),
           duplaService.getDuplasActivas(),
           obtenerOperadoresActivos(),
+          gruaService.getGruasOcupadas().catch(() => new Set<string>()),
         ]);
         setGruas(activeGruas);
         setDuplas(activeDuplas);
-        setCfOperadores(cfOperadores);
+        setCfOperadores(cfOps);
+        setGruasOcupadas(ocupadas);
       } catch (err) {
         console.error(err);
         setError("No se pudo cargar grúas y duplas.");
@@ -178,12 +325,15 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   }, [isOpen, initialAsignacion]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    setTipoOperacion(tipoReferencia);
+  }, [isOpen, tipoReferencia]);
+
+  useEffect(() => {
     if (!isOpen || loadingCatalog) return;
 
     if (!preselected.current) {
       preselected.current = true;
-
-      const miDupla = duplaDeUsuario(duplas, userData);
 
       if (miDupla) {
         const choferOp: Operador = { nombre: miDupla.chofer, legajo: miDupla.legajoChofer ?? "" };
@@ -192,8 +342,8 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         setEnganchadorKey(uniqueKey(engOp));
       } else {
         const roles = normalizeRoles(userData?.roles, userData?.rol);
-        const userLegajo = legajoKey(userData?.legajo);
-        const userName = userData?.nombre;
+        const userLegajo = legajoKey(userIdentity?.legajo);
+        const userName = userIdentity?.nombre;
 
         const matchByLegajoOrName = (ops: Operador[]) =>
           ops.find((o) =>
@@ -205,29 +355,39 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
           const match = matchByLegajoOrName(choferes);
           setChoferKey(match ? uniqueKey(match) : "");
           setEnganchadorKey("");
-        } else {
+        } else if (roles.includes("ENGANCHADOR")) {
           const match = matchByLegajoOrName(enganchadores);
           setEnganchadorKey(match ? uniqueKey(match) : "");
           setChoferKey("");
+        } else {
+          setChoferKey("");
+          setEnganchadorKey("");
         }
       }
     }
 
     setGruaPatente((prev) => {
-      if (gruasFiltradas.some((g) => g.patente === prev)) return prev;
-      return gruasFiltradas[0]?.patente ?? "";
+      if (gruasParaSelect.some((g) => g.patente === prev)) return prev;
+      return gruasParaSelect[0]?.patente ?? "";
     });
-  }, [isOpen, loadingCatalog, tipoFlota, gruas, duplas, gruasFiltradas, choferes, enganchadores, userData]);
+  }, [isOpen, loadingCatalog, tipoOperacion, gruas, duplas, gruasParaSelect, choferes, enganchadores, userData, userIdentity, miDupla]);
 
   const gruaOptions = useMemo(
     () =>
-      gruasFiltradas.length === 0
-        ? [{ value: "", label: "Sin grúas de este tipo" }]
-        : gruasFiltradas.map((g) => ({
-            value: g.patente,
-            label: `${g.patente}${g.descripcion ? ` — ${g.descripcion}` : ""}`,
-          })),
-    [gruasFiltradas]
+      gruasParaSelect.length === 0
+        ? [{ value: "", label: mostrarTodasGruas ? "Sin grúas disponibles" : "Sin grúas de este tipo" }]
+        : gruasParaSelect.map((g) => {
+            const enUso = gruasOcupadas.has(g.patente);
+            const plainLabel = enUso
+              ? `${g.descripcion?.trim() || g.patente} · ${g.patente} (EN USO)`
+              : `${g.descripcion?.trim() || g.patente} · ${g.patente}`;
+            const content = gruaOptionContent(g, mostrarTodasGruas, enUso);
+            if (typeof content === "string") {
+              return { value: g.patente, label: content };
+            }
+            return { value: g.patente, label: plainLabel, content };
+          }),
+    [gruasParaSelect, gruasOcupadas, mostrarTodasGruas]
   );
 
   const choferOptions = useMemo(
@@ -252,17 +412,9 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     [enganchadores]
   );
 
-  const handleTipoFlotaChange = (nuevoTipo: TipoFlota) => {
-    setError(null);
-    setTipoFlota(nuevoTipo);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const gruaOk = gruasFiltradas.some((g) => g.patente === gruaPatente);
-    if (!gruaOk || !selectedChofer || !selectedEnganchador) {
-      setError("Elegí grúa, chofer y enganchador para el tipo seleccionado.");
+  const guardarTurno = async () => {
+    if (!gruaSeleccionada || !selectedChofer || !selectedEnganchador) {
+      setError("Elegí grúa, chofer y enganchador.");
       return;
     }
 
@@ -276,7 +428,9 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         duplaEnganchador: selectedEnganchador.nombre,
         legajoChofer: selectedChofer.legajo || undefined,
         legajoEnganchador: selectedEnganchador.legajo || undefined,
-        tipoFlota,
+        tipoFlota: tipoFlotaEfectivo,
+        tipoOperacionReferencia: tipoOperacion,
+        ...(gruaReferenciaPatente ? { gruaReferenciaPatente } : {}),
       };
       await guardarAsignacionDiaria(payload);
       onSaved({
@@ -285,8 +439,9 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         duplaId: duplaMatch?.id ?? "",
         duplaChofer: selectedChofer.nombre,
         duplaEnganchador: selectedEnganchador.nombre,
-        tipoFlota,
+        tipoFlota: tipoFlotaEfectivo,
       });
+      setConfirmCrossOperacion(false);
       if (!blocking) onClose?.();
     } catch (err: unknown) {
       console.error(err);
@@ -296,10 +451,27 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!gruaSeleccionada || !selectedChofer || !selectedEnganchador) {
+      setError("Elegí grúa, chofer y enganchador.");
+      return;
+    }
+
+    if (esCrossOperacion) {
+      setConfirmCrossOperacion(true);
+      return;
+    }
+
+    await guardarTurno();
+  };
+
   if (!isOpen) return null;
 
   const canDismiss = allowDismiss && Boolean(onClose);
-  const sinRecursos = gruasFiltradas.length === 0 || choferes.length === 0 || enganchadores.length === 0;
+  const sinRecursos =
+    gruasParaSelect.length === 0 || choferes.length === 0 || enganchadores.length === 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -357,12 +529,11 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                     <button
                       key={opt.value}
                       type="button"
-                      disabled={saving}
-                      onClick={() => handleTipoFlotaChange(opt.value)}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
-                        tipoFlota === opt.value
+                      disabled
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border cursor-not-allowed opacity-80 ${
+                        tipoOperacion === opt.value
                           ? "bg-brand-cta text-white border-brand-cta"
-                          : "bg-brand-bg text-brand-purply border-brand-seashell hover:border-brand-cta/50"
+                          : "bg-brand-bg text-brand-purply border-brand-seashell"
                       }`}
                     >
                       {opt.label}
@@ -370,6 +541,27 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {tieneServicioActivo && turnoVigente && (
+                <div className="p-3 bg-blue-50 text-blue-800 text-xs rounded-xl border border-blue-200/50 flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Tenés un servicio activo con grúa <strong>{turnoVigente.gruaPatente}</strong>.
+                    El cambio aplica al próximo servicio.
+                  </span>
+                </div>
+              )}
+
+              {esCrossOperacion && (
+                <div className="p-3 bg-amber-50 text-amber-800 text-xs rounded-xl border border-amber-200/50 flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Elegiste la grúa <strong>{gruaPatente}</strong> ({labelTipoFlota(tipoFlotaEfectivo)}).
+                    Tu operación habitual es <strong>{labelTipoFlota(tipoOperacion)}</strong>.
+                    Se notificará al administrador al confirmar.
+                  </span>
+                </div>
+              )}
 
               {sinRecursos && (
                 <p className="text-xs text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200/50">
@@ -390,8 +582,38 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                   placeholder="Seleccioná grúa"
                   icon={Truck}
                   ariaLabel="Grúa asignada"
-                  disabled={saving || gruasFiltradas.length === 0}
+                  disabled={saving || gruasParaSelect.length === 0}
                 />
+                {!mostrarTodasGruas ? (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarTodasGruas(true)}
+                    disabled={saving}
+                    className="mt-1.5 text-[11px] font-semibold text-brand-cta hover:text-brand-cta-hover underline underline-offset-2 cursor-pointer disabled:opacity-60"
+                  >
+                    ¿No es la grúa que necesitás?
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMostrarTodasGruas(false);
+                      setGruaPatente((prev) => {
+                        if (gruasFiltradas.some((g) => g.patente === prev)) return prev;
+                        return gruasFiltradas[0]?.patente ?? "";
+                      });
+                    }}
+                    disabled={saving}
+                    className="mt-1.5 text-[11px] font-semibold text-brand-pale hover:text-brand-purply underline underline-offset-2 cursor-pointer disabled:opacity-60"
+                  >
+                    Ver solo grúas de {labelTipoFlota(tipoOperacion)}
+                  </button>
+                )}
+                {gruaPatente && gruasOcupadas.has(gruaPatente) && (
+                  <p className="text-[11px] text-amber-700 mt-1">
+                    Esta grúa tiene un servicio activo. Si la seleccionás, no podrás crear un enganche hasta que se libere.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -431,9 +653,9 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
           <button
             type="submit"
             disabled={saving || loadingCatalog || sinRecursos || !selectedChofer || !selectedEnganchador}
-            className="w-full py-3 bg-brand-cta hover:bg-brand-cta-hover disabled:bg-brand-cta/40 text-white font-extrabold text-xs rounded-xl cursor-pointer"
+            className="w-full py-3 font-extrabold text-xs rounded-xl cursor-pointer bg-brand-cta hover:bg-brand-cta-hover disabled:bg-brand-cta/40 text-white"
           >
-            {saving ? "Guardando..." : "Confirmar turno del día"}
+            {saving ? "Guardando..." : esCrossOperacion ? "Confirmar turno" : "Confirmar turno del día"}
           </button>
 
           <button
@@ -483,6 +705,24 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
           )}
         </form>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmCrossOperacion}
+        onClose={() => setConfirmCrossOperacion(false)}
+        onConfirm={() => void guardarTurno()}
+        title="Grúa de otra operación"
+        message={
+          <>
+            Estás trayendo una grúa de <strong>{labelTipoFlota(tipoFlotaEfectivo)}</strong> (
+            {gruaPatente}) estando asignado a <strong>{labelTipoFlota(tipoOperacion)}</strong>.
+            <br />
+            <br />
+            ¿Estás seguro? Se avisará al administrador.
+          </>
+        }
+        confirmText="Sí, confirmar"
+        cancelText="Volver"
+      />
     </div>
   );
 };

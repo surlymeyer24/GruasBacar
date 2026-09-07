@@ -11,10 +11,12 @@ import {
   AnularServicioPayload,
   ActualizarServicioPayload,
   AgregarComentarioFotoPayload,
+  RotarFotoPayload,
   ComentarioFoto,
   CrearActaManualPayload,
   Foto,
   EtiquetaFoto,
+  esAdmin,
   esOperador,
   normalizeRoles,
   normalizeTipoFlota,
@@ -25,10 +27,13 @@ import {
   patenteDesdeGruaId,
   diffEdicionServicio,
   cambiosAnulacion,
+  cambiosRestauracion,
   rolEditorVersion,
   RolUsuario,
   AsignacionDiaria,
   DuplasServicio,
+  esPatenteSinNumero,
+  PATENTE_SIN_NUMERO,
 } from '@gruasbacar/shared';
 import {
   validarPatente,
@@ -63,7 +68,7 @@ function registrarVersionActa(
   servicioRef: admin.firestore.DocumentReference,
   versionCountActual: number,
   editor: EditorContext,
-  tipo: 'EDICION' | 'ANULACION' | 'CREACION_MANUAL',
+  tipo: 'EDICION' | 'ANULACION' | 'CREACION_MANUAL' | 'RESTAURACION',
   cambios: ReturnType<typeof diffEdicionServicio>,
   motivo?: string | null
 ): number {
@@ -92,14 +97,19 @@ function registrarVersionActa(
 
 function buildServicioActivoResumen(
   servicioId: string,
-  data: Pick<ServicioActivoResumen, 'estado' | 'patente' | 'numeroInfraccion'>
+  data: Pick<ServicioActivoResumen, 'estado' | 'patente' | 'numeroInfraccion' | 'esTest'> & {
+    descripcionVehiculo?: string;
+  }
 ): ServicioActivoResumen {
-  return {
+  const resumen: ServicioActivoResumen = {
     id: servicioId,
     estado: data.estado,
     patente: data.patente,
     numeroInfraccion: data.numeroInfraccion,
   };
+  if (data.descripcionVehiculo) resumen.descripcionVehiculo = data.descripcionVehiculo;
+  if (data.esTest) resumen.esTest = true;
+  return resumen;
 }
 
 /** Correlativo global de actas (6 dígitos, con ceros a la izquierda). Atómico vía transacción. */
@@ -164,7 +174,7 @@ export async function iniciarEnganche(
   uid: string,
   driveFolderId?: string
 ): Promise<{ servicioId: string }> {
-  const patente = validarPatente(data.patente);
+  const patente = data.patente?.trim() ? validarPatente(data.patente) : PATENTE_SIN_NUMERO;
   validarString(data.grua, 'grua', 20);
   validarString(data.dupla?.chofer, 'dupla.chofer', 100);
   validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador', 100);
@@ -174,7 +184,10 @@ export async function iniciarEnganche(
   const usuarioData = usuarioSnap.data()!;
 
   if (usuarioData.servicioActivoId) {
-    throw new HttpsError('failed-precondition', 'Ya tenés un servicio activo. Terminalo antes de iniciar otro.');
+    throw new HttpsError(
+      'failed-precondition',
+      'Ya tenés un servicio activo. Terminalo antes de iniciar otro. Si lo creaste en el site de prueba, cerralo ahí primero.'
+    );
   }
 
   const legajoRaw = usuarioData.legajo as string | undefined;
@@ -193,6 +206,21 @@ export async function iniciarEnganche(
   const grua = await validarGruaExiste(gruaId);
   const tipoFlota = grua.tipoFlota;
 
+  const serviciosConGrua = await db().collection('servicios')
+    .where('grua', '==', gruaId)
+    .where('estado', 'in', ['ENGANCHADO', 'EN_TRASLADO'])
+    .limit(1)
+    .get();
+  if (!serviciosConGrua.empty) {
+    if (!esAdmin(rolesUsuario)) {
+      throw new HttpsError(
+        'failed-precondition',
+        `La grúa ${gruaId} ya tiene un servicio activo. Contactá al administrador si necesitás usarla.`
+      );
+    }
+    console.warn(`[iniciarEnganche] Admin ${uid} forzó enganche con grúa ${gruaId} que ya tiene servicio activo.`);
+  }
+
   const servicioRef = db().collection('servicios').doc(identificadorCompuesto);
   const existente = await servicioRef.get();
 
@@ -201,6 +229,10 @@ export async function iniciarEnganche(
   }
 
   const geoEnganche: GeoPoint = data.geo ?? { lat: 0, lng: 0 };
+  const descripcionVehiculo = esPatenteSinNumero(patente)
+    ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
+    : undefined;
+  const esTest = data.esTest === true;
 
   await db().runTransaction(async (tx) => {
     const asignacion = usuarioData.asignacionDiaria as AsignacionDiaria | undefined;
@@ -224,6 +256,8 @@ export async function iniciarEnganche(
       dupla: duplaEnriquecida,
       geoEnganche,
       creadoEn: FieldValue.serverTimestamp(),
+      ...(descripcionVehiculo ? { descripcionVehiculo } : {}),
+      ...(esTest ? { esTest: true } : {}),
     });
     tx.update(usuarioRef, {
       servicioActivoId: servicioRef.id,
@@ -231,6 +265,8 @@ export async function iniciarEnganche(
         estado: 'ENGANCHADO',
         patente,
         numeroInfraccion,
+        descripcionVehiculo,
+        ...(esTest ? { esTest: true } : {}),
       }),
     });
   });
@@ -238,22 +274,55 @@ export async function iniciarEnganche(
   const servicioId = servicioRef.id;
 
   if (driveFolderId?.trim()) {
-    void import('./drive.service')
-      .then((drive) =>
-        drive.prepararCarpetasServicio(
-          driveFolderId,
-          legajoChofer,
-          patente,
-          numeroInfraccion,
-          new Date()
-        )
-      )
-      .catch((err) => {
-        console.warn('[iniciarEnganche] Carpetas Drive no preparadas (se crearán al subir fotos):', err);
-      });
+    try {
+      const drive = await import('./drive.service');
+      const { fechaFolderId, carpetaId } = await drive.prepararCarpetasServicio(
+        driveFolderId,
+        legajoChofer,
+        patente,
+        numeroInfraccion,
+        new Date()
+      );
+      await servicioRef.update({ driveCarpetaId: carpetaId, driveFechaFolderId: fechaFolderId });
+    } catch (err) {
+      console.warn('[iniciarEnganche] Carpetas Drive no preparadas (se crearán al subir fotos):', err);
+    }
   }
 
   return { servicioId };
+}
+
+export async function actualizarPatenteServicio(
+  servicioId: string,
+  patente: string,
+  uid: string
+): Promise<void> {
+  const nuevaPatente = validarPatente(patente);
+
+  const servicioRef = db().collection('servicios').doc(servicioId);
+  const usuarioRef = db().collection('usuarios').doc(uid);
+
+  await db().runTransaction(async (tx) => {
+    const servicioSnap = await tx.get(servicioRef);
+    if (!servicioSnap.exists) {
+      throw new HttpsError('not-found', 'Servicio no encontrado.');
+    }
+    const servicio = servicioSnap.data()!;
+    if (servicio.estado !== 'ENGANCHADO') {
+      throw new HttpsError('failed-precondition', 'Solo se puede actualizar la patente en estado ENGANCHADO.');
+    }
+    if (!esPatenteSinNumero(servicio.patente as string)) return;
+
+    tx.update(servicioRef, { patente: nuevaPatente });
+
+    const usuarioSnap = await tx.get(usuarioRef);
+    const resumen = usuarioSnap.data()?.servicioActivoResumen as ServicioActivoResumen | undefined;
+    if (resumen && resumen.id === servicioId) {
+      tx.update(usuarioRef, {
+        'servicioActivoResumen.patente': nuevaPatente,
+      });
+    }
+  });
 }
 
 async function legajoParaFotosDesdeServicio(
@@ -429,7 +498,7 @@ export async function registrarEventoEnganche(
     const geo = data.geo;
     const observacionGeneral = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
 
-    validarLoteFotos(fotos, fotosBase64, 3);
+    validarLoteFotos(fotos, fotosBase64, 5);
 
     const servicioRef = db().collection('servicios').doc(servicioId);
     const servicioSnap = await servicioRef.get();
@@ -619,7 +688,7 @@ export async function confirmarDesenganche(
   const { fotos, fotosBase64 } = normalizarPayloadFotos(data);
   const observacionGeneral = validarStringOpcional(data.observacionGeneral, 'observacionGeneral', 1000);
 
-  validarLoteFotos(fotos, fotosBase64, 3);
+  validarLoteFotos(fotos, fotosBase64, 5);
 
   const servicioRef = db().collection('servicios').doc(servicioId);
   const servicioSnap = await servicioRef.get();
@@ -762,6 +831,10 @@ export async function actualizarServicio(data: ActualizarServicioPayload, editor
 
   const actual = servicioSnap.data()!;
 
+  const descripcionVehiculo = esPatenteSinNumero(patente)
+    ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
+    : undefined;
+
   const updates: Record<string, unknown> = {
     patente,
     numeroInfraccion: numeroInfraccion ?? null,
@@ -769,6 +842,7 @@ export async function actualizarServicio(data: ActualizarServicioPayload, editor
     gruaDocId: gruaValidada.docId,
     tipoFlota: gruaValidada.tipoFlota,
     dupla,
+    descripcionVehiculo: descripcionVehiculo ?? null,
   };
   if (corralonInput !== undefined) {
     updates.corralon = corralonValidado ? corralonValidado.corralonNombre : null;
@@ -851,6 +925,40 @@ export async function agregarComentarioFoto(
   return comentario;
 }
 
+export async function rotarFoto(
+  data: RotarFotoPayload,
+  uid: string
+): Promise<void> {
+  const servicioId = validarString(data.servicioId, 'servicioId');
+  const eventoId = validarString(data.eventoId, 'eventoId');
+  const fotoIndex = data.fotoIndex;
+
+  if (!Number.isInteger(fotoIndex) || fotoIndex < 0) {
+    throw new HttpsError('invalid-argument', 'Índice de foto inválido.');
+  }
+
+  const servicioRef = db().collection('servicios').doc(servicioId);
+  const eventoRef = servicioRef.collection('eventos').doc(eventoId);
+
+  const [servicioSnap, eventoSnap] = await Promise.all([servicioRef.get(), eventoRef.get()]);
+  if (!servicioSnap.exists) throw new HttpsError('not-found', 'Servicio no encontrado.');
+  if (!eventoSnap.exists) throw new HttpsError('not-found', 'Evento no encontrado.');
+
+  const evento = eventoSnap.data()!;
+  const fotos = Array.isArray(evento.fotos) ? (evento.fotos as Foto[]) : [];
+  if (fotoIndex >= fotos.length) {
+    throw new HttpsError('invalid-argument', 'Foto no encontrada.');
+  }
+
+  const driveFileId = fotos[fotoIndex].driveFileId;
+  if (!driveFileId) {
+    throw new HttpsError('failed-precondition', 'La foto no tiene archivo en Drive.');
+  }
+
+  const ds = await driveService();
+  await ds.rotarFotoEnDrive(driveFileId);
+}
+
 function esUrlMaps(texto: string): boolean {
   return /google\.com\/maps|maps\.app\.goo\.gl|g\.page/i.test(texto);
 }
@@ -900,6 +1008,9 @@ export async function crearActaManual(
   driveFolderId: string
 ): Promise<{ servicioId: string }> {
   const patente = validarPatente(data.patente);
+  const descripcionVehiculo = esPatenteSinNumero(patente)
+    ? validarStringOpcional(data.descripcionVehiculo, 'descripcionVehiculo', 200)
+    : undefined;
   const gruaId = normalizeGruaId(validarString(data.grua, 'grua', 20));
   validarString(data.dupla?.chofer, 'dupla.chofer', 100);
   validarString(enganchadorDeDuplaServicio(data.dupla), 'dupla.enganchador', 100);
@@ -909,10 +1020,10 @@ export async function crearActaManual(
   const fotosDesenganche = Array.isArray(data.fotosDesenganche) ? data.fotosDesenganche : [];
   const fotosDesengancheBase64 = Array.isArray(data.fotosDesengancheBase64) ? data.fotosDesengancheBase64 : [];
 
-  validarLoteFotos(fotosEnganche, fotosEngancheBase64, 3);
+  validarLoteFotos(fotosEnganche, fotosEngancheBase64, 5);
   const tieneDesenganche = fotosDesengancheBase64.length > 0;
   if (tieneDesenganche) {
-    validarLoteFotos(fotosDesenganche, fotosDesengancheBase64, 3);
+    validarLoteFotos(fotosDesenganche, fotosDesengancheBase64, 5);
   }
 
   const legajoChofer = validarString(data.legajoEnganchador, 'legajoEnganchador', 50);
@@ -993,7 +1104,9 @@ export async function crearActaManual(
       legajoChofer,
       dupla: data.dupla,
       geoEnganche,
+      ...(descripcionVehiculo ? { descripcionVehiculo } : {}),
       origenManual: true,
+      ...(data.esTest === true ? { esTest: true } : {}),
       creadoEn: ts,
       finalizadoEn: ts,
       versionCount: 0,
@@ -1132,4 +1245,103 @@ export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ li
 
   await usuarioRef.update(LIMPIAR_SERVICIO_ACTIVO_USUARIO);
   return { liberado: true };
+}
+
+export async function anularServicioAutomaticamente(servicioId: string): Promise<boolean> {
+  const servicioRef = db().collection('servicios').doc(servicioId);
+  const servicioSnap = await servicioRef.get();
+  if (!servicioSnap.exists) return false;
+
+  const servicio = servicioSnap.data()!;
+  if (servicio.estado !== 'ENGANCHADO') return false;
+
+  const choferUid = servicio.creadoPor as string;
+  const usuarioRef = db().collection('usuarios').doc(choferUid);
+  const versionCount = (servicio.versionCount as number | undefined) ?? 0;
+  const motivo = 'Anulado automáticamente por inactividad';
+  const cambios = cambiosAnulacion(servicio.estado as EstadoServicio, motivo);
+  const editor: EditorContext = { uid: 'SISTEMA', nombre: 'Sistema', roles: [] };
+
+  await db().runTransaction(async (tx) => {
+    tx.update(servicioRef, {
+      estado: 'ANULADO' as EstadoServicio,
+      motivoAnulacion: motivo,
+      anuladoPor: 'SISTEMA',
+      anuladoEn: FieldValue.serverTimestamp(),
+      anulacionAutomatica: true,
+    });
+    tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
+    registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
+  });
+
+  return true;
+}
+
+const TIMEOUT_DESHACER_MS = 10 * 60 * 1000;
+
+export async function deshacerAnulacionAutomaticaServicio(
+  servicioId: string,
+  uid: string
+): Promise<void> {
+  const servicioRef = db().collection('servicios').doc(servicioId);
+  const servicioSnap = await servicioRef.get();
+  if (!servicioSnap.exists) throw new HttpsError('not-found', 'Servicio no encontrado.');
+
+  const servicio = servicioSnap.data()!;
+  if (servicio.estado !== 'ANULADO') {
+    throw new HttpsError('failed-precondition', 'El servicio no está anulado.');
+  }
+  if (servicio.anulacionAutomatica !== true) {
+    throw new HttpsError('failed-precondition', 'Solo se pueden deshacer anulaciones automáticas.');
+  }
+  if (servicio.creadoPor !== uid) {
+    throw new HttpsError('permission-denied', 'Solo el operador que creó el servicio puede deshacerlo.');
+  }
+
+  const anuladoEn = servicio.anuladoEn;
+  if (anuladoEn) {
+    const ts = anuladoEn.toDate ? anuladoEn.toDate() : new Date(anuladoEn);
+    const elapsed = Date.now() - ts.getTime();
+    if (elapsed > TIMEOUT_DESHACER_MS + 30_000) {
+      throw new HttpsError('failed-precondition', 'El tiempo para deshacer la anulación expiró (10 minutos).');
+    }
+  }
+
+  const usuarioRef = db().collection('usuarios').doc(uid);
+  const usuarioSnap = await usuarioRef.get();
+  if (!usuarioSnap.exists) throw new HttpsError('not-found', 'Usuario no encontrado.');
+
+  const usuario = usuarioSnap.data()!;
+  if (usuario.servicioActivoId) {
+    throw new HttpsError('failed-precondition', 'Ya tenés un servicio activo. No se puede restaurar.');
+  }
+
+  const versionCount = (servicio.versionCount as number | undefined) ?? 0;
+  const usuarioData = usuarioSnap.data()!;
+  const editor: EditorContext = {
+    uid,
+    nombre: usuarioData.nombre ?? 'Operador',
+    roles: normalizeRoles(usuarioData.roles ?? usuarioData.rol),
+  };
+
+  await db().runTransaction(async (tx) => {
+    tx.update(servicioRef, {
+      estado: 'ENGANCHADO' as EstadoServicio,
+      motivoAnulacion: null,
+      anuladoPor: null,
+      anuladoEn: null,
+      anulacionAutomatica: null,
+    });
+    tx.update(usuarioRef, {
+      servicioActivoId: servicioId,
+      servicioActivoResumen: buildServicioActivoResumen(servicioId, {
+        estado: 'ENGANCHADO',
+        patente: servicio.patente as string,
+        numeroInfraccion: servicio.numeroInfraccion as string | undefined,
+        descripcionVehiculo: servicio.descripcionVehiculo as string | undefined,
+        esTest: servicio.esTest as boolean | undefined,
+      }),
+    });
+    registrarVersionActa(tx, servicioRef, versionCount, editor, 'RESTAURACION', cambiosRestauracion(), 'Deshizo anulación automática');
+  });
 }

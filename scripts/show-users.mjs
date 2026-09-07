@@ -2,10 +2,13 @@ import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { requireProdFlag } from './lib/initFirebaseAdmin.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const admin = require('firebase-admin');
+
+requireProdFlag(process.argv, 'show-users.mjs');
 
 const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
 if (!existsSync(keyPath)) {

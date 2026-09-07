@@ -3,12 +3,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: 'AIzaSyDI92aeYmGHJ8HPVkNfgdW0_z3PFwMINds',
-  authDomain: 'gruas-bacar.firebaseapp.com',
-  projectId: 'gruas-bacar',
-  storageBucket: 'gruas-bacar.firebasestorage.app',
-  messagingSenderId: '956942498498',
-  appId: '1:956942498498:web:b58e92fe0a2c9b1c0d7e7f',
+  apiKey: 'AIzaSyBpwQyqqWnVQA8rD7gy_Jxrsqs5xNzTVpI',
+  authDomain: 'gruasbacar.firebaseapp.com',
+  projectId: 'gruasbacar',
+  storageBucket: 'gruasbacar.firebasestorage.app',
+  messagingSenderId: '231607744664',
+  appId: '1:231607744664:web:99e7212a059c01f768f8ed',
 });
 
 const messaging = firebase.messaging();

@@ -12,7 +12,7 @@ import {
   normalizeTipoFlota,
 } from './types';
 
-export type TipoVersionActa = 'EDICION' | 'ANULACION' | 'CREACION_MANUAL';
+export type TipoVersionActa = 'EDICION' | 'ANULACION' | 'CREACION_MANUAL' | 'RESTAURACION';
 
 export interface CambioCampoActa {
   campo: string;
@@ -97,6 +97,15 @@ export function diffEdicionServicio(
   const duplaActual = (actual.dupla ?? {}) as DuplasServicio;
 
   pushCambio(cambios, 'patente', 'Patente', actual.patente, data.patente);
+  if (data.descripcionVehiculo !== undefined || actual.descripcionVehiculo) {
+    pushCambio(
+      cambios,
+      'descripcionVehiculo',
+      'Descripción vehículo',
+      actual.descripcionVehiculo ?? '',
+      data.descripcionVehiculo ?? ''
+    );
+  }
   pushCambio(cambios, 'numeroInfraccion', 'Nº infracción', actual.numeroInfraccion ?? '', data.numeroInfraccion ?? '');
   pushCambio(cambios, 'grua', 'Grúa', actual.grua, data.grua, 'grua');
 
@@ -141,6 +150,17 @@ export function cambiosAnulacion(
   return cambios;
 }
 
+export function cambiosRestauracion(): CambioCampoActa[] {
+  return [
+    {
+      campo: 'estado',
+      etiqueta: 'Estado',
+      valorAnterior: displayValue('ANULADO', 'estado'),
+      valorNuevo: displayValue('ENGANCHADO', 'estado'),
+    },
+  ];
+}
+
 export function rolEditorVersion(roles: RolUsuario[]): VersionActa['editadoPorRol'] {
   if (roles.includes('SUPERADMIN') || roles.includes('ADMIN')) return 'ADMIN';
   if (roles.includes('SUPERVISOR')) return 'SUPERVISOR';
@@ -150,5 +170,6 @@ export function rolEditorVersion(roles: RolUsuario[]): VersionActa['editadoPorRo
 export function labelTipoVersion(tipo: TipoVersionActa): string {
   if (tipo === 'ANULACION') return 'Anulación';
   if (tipo === 'CREACION_MANUAL') return 'Alta manual';
+  if (tipo === 'RESTAURACION') return 'Restauración';
   return 'Edición';
 }

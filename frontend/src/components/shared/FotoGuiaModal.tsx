@@ -1,30 +1,24 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { compressImage } from "../../utils/compressImage";
+import { extractGpsFromFile, GeoCoords } from "../../utils/extractGps";
 import { fotoService } from "../../services/foto.service";
 import { EtiquetaFoto } from "@gruasbacar/shared";
-import { Camera, Check, ChevronLeft, ImagePlus, X } from "lucide-react";
+import {
+  Camera,
+  Check,
+  ChevronRight,
+  ImagePlus,
+  RotateCcw,
+  X,
+  Zap,
+  ZapOff,
+} from "lucide-react";
 
 export const PASOS_FOTO = [
-  {
-    etiqueta: "DELANTERA" as EtiquetaFoto,
-    titulo: "Foto delantera",
-    instruccion: "Tocá el recuadro para sacar la foto delantera.",
-  },
-  {
-    etiqueta: "LADO_DERECHO" as EtiquetaFoto,
-    titulo: "Foto lado copiloto",
-    instruccion: "Tocá el recuadro para sacar la foto del lado copiloto.",
-  },
-  {
-    etiqueta: "TRASERA" as EtiquetaFoto,
-    titulo: "Foto trasera",
-    instruccion: "Tocá el recuadro para sacar la foto trasera.",
-  },
-  {
-    etiqueta: "LADO_IZQUIERDO" as EtiquetaFoto,
-    titulo: "Foto lado piloto",
-    instruccion: "Tocá el recuadro para sacar la foto del lado piloto.",
-  },
+  { etiqueta: "DELANTERA" as EtiquetaFoto, titulo: "Delantera" },
+  { etiqueta: "LADO_DERECHO" as EtiquetaFoto, titulo: "Lado copiloto" },
+  { etiqueta: "TRASERA" as EtiquetaFoto, titulo: "Trasera" },
+  { etiqueta: "LADO_IZQUIERDO" as EtiquetaFoto, titulo: "Lado piloto" },
 ] as const;
 
 export interface SlotFotoGuia {
@@ -34,46 +28,295 @@ export interface SlotFotoGuia {
   base64: string;
 }
 
+interface PendingCapture {
+  blob: Blob;
+  previewUrl: string;
+  base64: string;
+}
+
 interface FotoGuiaModalProps {
   isOpen: boolean;
-  permitirGaleria?: boolean;
   onClose: () => void;
   slots: (SlotFotoGuia | null)[];
   onSlotChange: (index: number, slot: SlotFotoGuia | null) => void;
+  fotosExtra?: SlotFotoGuia[];
+  onExtraAdd?: (extra: SlotFotoGuia) => void;
+  maxExtras?: number;
+  onGeoExif?: (geo: GeoCoords) => void;
   startAtStep?: number;
+  permitirGaleria?: boolean;
+  /** Persistencia síncrona JUSTO antes de abrir la cámara nativa fallback. */
+  onBeforeNativeCapture?: (stepIndex: number) => void;
+  /** Notifica el paso activo para restaurar si la pestaña se recarga. */
+  onStepChange?: (stepIndex: number) => void;
 }
+
+const CAN_GET_USER_MEDIA =
+  typeof navigator !== "undefined" &&
+  typeof navigator.mediaDevices?.getUserMedia === "function";
 
 export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
   isOpen,
   onClose,
   slots,
   onSlotChange,
-  startAtStep = 0,
+  fotosExtra = [],
+  onExtraAdd,
+  maxExtras = 5,
+  onGeoExif,
+  startAtStep,
   permitirGaleria = false,
+  onBeforeNativeCapture,
+  onStepChange,
 }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galeriaInputRef = useRef<HTMLInputElement>(null);
-  const [stepIndex, setStepIndex] = useState(startAtStep);
+  const pendingPreviewRef = useRef<string | null>(null);
+
+  const [phase, setPhase] = useState<"camera" | "review">("camera");
+  const [guidedIndex, setGuidedIndex] = useState(0);
+  const [extraMode, setExtraMode] = useState(false);
+  const [pendingCapture, setPendingCapture] = useState<PendingCapture | null>(
+    null
+  );
   const [processing, setProcessing] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [streamReady, setStreamReady] = useState(false);
+  const [useFallback, setUseFallback] = useState(!CAN_GET_USER_MEDIA);
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchActive, setTorchActive] = useState(false);
 
-  const paso = PASOS_FOTO[stepIndex];
-  const slotActual = slots[stepIndex];
-  const completadas = slots.filter(Boolean).length;
+  // ── Camera management ──────────────────────────────────────────────────
+
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setStreamReady(false);
+    setTorchSupported(false);
+    setTorchActive(false);
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
+
+  const startStream = useCallback(async () => {
+    if (useFallback) return;
+    stopStream();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1440 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {});
+      }
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        try {
+          const caps = track.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
+          setTorchSupported(!!caps?.torch);
+        } catch {
+          setTorchSupported(false);
+        }
+      }
+      setStreamReady(true);
+    } catch {
+      setUseFallback(true);
+    }
+  }, [useFallback, stopStream]);
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────
 
   useEffect(() => {
+    if (isOpen) {
+      if (
+        startAtStep !== undefined &&
+        startAtStep >= 0 &&
+        startAtStep < PASOS_FOTO.length
+      ) {
+        setGuidedIndex(startAtStep);
+        setExtraMode(false);
+      } else {
+        const firstEmpty = slots.findIndex((s) => !s);
+        if (firstEmpty >= 0) {
+          setGuidedIndex(firstEmpty);
+          setExtraMode(false);
+        } else {
+          setExtraMode(true);
+        }
+      }
+      setPhase("camera");
+      setPendingCapture(null);
+      pendingPreviewRef.current = null;
+      setErrorText(null);
+      startStream();
+    } else {
+      stopStream();
+    }
+  }, [isOpen]);
+
+  // Notify parent of step changes
+  useEffect(() => {
     if (!isOpen) return;
-    const start =
-      startAtStep >= 0 && startAtStep < PASOS_FOTO.length ? startAtStep : 0;
-    setStepIndex(start);
-    setErrorText(null);
-  }, [isOpen, startAtStep]);
+    onStepChange?.(extraMode ? -1 : guidedIndex);
+  }, [isOpen, guidedIndex, extraMode]);
+
+  useEffect(
+    () => () => {
+      stopStream();
+      if (pendingPreviewRef.current) {
+        URL.revokeObjectURL(pendingPreviewRef.current);
+      }
+    },
+    [stopStream]
+  );
 
   if (!isOpen) return null;
 
-  const abrirCamara = () => {
+  // ── Computed ───────────────────────────────────────────────────────────
+
+  const emptyOtherGuided = slots.reduce(
+    (n, s, i) => (i !== guidedIndex && !s ? n + 1 : n),
+    0
+  );
+  const isLastEmptyGuided = !extraMode && emptyOtherGuided === 0;
+  const showListo = extraMode || isLastEmptyGuided;
+  const canTakeMoreExtras = fotosExtra.length < maxExtras;
+
+  const currentLabel = extraMode
+    ? `Foto extra ${fotosExtra.length + 1}`
+    : `Foto ${guidedIndex + 1}/${PASOS_FOTO.length} · ${PASOS_FOTO[guidedIndex].titulo}`;
+
+  // ── Processing ─────────────────────────────────────────────────────────
+
+  const processBlob = async (blob: Blob, extractGps: boolean) => {
+    setProcessing(true);
+    setErrorText(null);
+    try {
+      if (extractGps && onGeoExif) {
+        extractGpsFromFile(blob).then((gps) => {
+          if (gps) onGeoExif(gps);
+        });
+      }
+      const compressed = await compressImage(blob);
+      const [previewUrl, base64] = await Promise.all([
+        Promise.resolve(URL.createObjectURL(compressed)),
+        fotoService.blobToBase64(compressed),
+      ]);
+      setPendingCapture({ blob: compressed, previewUrl, base64 });
+      pendingPreviewRef.current = previewUrl;
+      setPhase("review");
+    } catch (err: unknown) {
+      const isMemory =
+        err instanceof RangeError ||
+        (err instanceof Error &&
+          /memory|allocation|out of memory/i.test(err.message));
+      setErrorText(
+        isMemory
+          ? "Memoria insuficiente. Cerrá otras pestañas e intentá de nuevo."
+          : "No se pudo procesar la imagen. Intentá de nuevo."
+      );
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // ── Torch toggle ───────────────────────────────────────────────────────
+
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const next = !torchActive;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: next } as MediaTrackConstraintSet] });
+      setTorchActive(next);
+    } catch {}
+  };
+
+  // ── Capture via ImageCapture API or canvas fallback ─────────────────────
+
+  const captureFromStream = async () => {
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (!video || !video.videoWidth || processing || !stream) return;
+
+    // ImageCapture.takePhoto() produces correctly oriented JPEG with EXIF
+    const IC = (globalThis as Record<string, unknown>).ImageCapture as
+      | (new (t: MediaStreamTrack) => {
+          takePhoto(settings?: { fillLightMode?: string }): Promise<Blob>;
+          getPhotoCapabilities?(): Promise<{ fillLightMode?: { value?: string[] } }>;
+        })
+      | undefined;
+
+    if (IC) {
+      setProcessing(true);
+      try {
+        const ic = new IC(stream.getVideoTracks()[0]);
+        const photoOpts: { fillLightMode?: string } = {};
+        if (torchActive) {
+          try {
+            const photoCaps = await ic.getPhotoCapabilities?.();
+            const modes = photoCaps?.fillLightMode?.value ?? [];
+            if (modes.includes("flash")) photoOpts.fillLightMode = "flash";
+          } catch {}
+        }
+        const blob = await ic.takePhoto(photoOpts);
+        await processBlob(blob, true);
+        return;
+      } catch {
+        setProcessing(false);
+      }
+    }
+
+    // Canvas fallback with orientation heuristic (Safari / older browsers)
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const screenPortrait = window.innerHeight > window.innerWidth;
+    const videoLandscape = vw > vh;
+    const needsRotation = screenPortrait && videoLandscape;
+
+    const canvas = document.createElement("canvas");
+    if (needsRotation) {
+      canvas.width = vh;
+      canvas.height = vw;
+    } else {
+      canvas.width = vw;
+      canvas.height = vh;
+    }
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (needsRotation) {
+      ctx.translate(vh, 0);
+      ctx.rotate(Math.PI / 2);
+    }
+
+    ctx.drawImage(video, 0, 0);
+
+    canvas.toBlob(
+      (blob) => {
+        canvas.width = 0;
+        canvas.height = 0;
+        if (blob) processBlob(blob, false);
+      },
+      "image/jpeg",
+      0.92
+    );
+  };
+
+  // ── Fallback: native camera / gallery via file input ────────────────────
+
+  const abrirCamaraFallback = () => {
     if (processing) return;
     setErrorText(null);
+    onBeforeNativeCapture?.(extraMode ? -1 : guidedIndex);
     fileInputRef.current?.click();
   };
 
@@ -83,225 +326,298 @@ export const FotoGuiaModal: React.FC<FotoGuiaModalProps> = ({
     galeriaInputRef.current?.click();
   };
 
-  const guardarYAvanzar = (foto: SlotFotoGuia, index: number) => {
-    const prev = slots[index];
-    if (prev?.previewUrl && prev.previewUrl !== foto.previewUrl) {
-      URL.revokeObjectURL(prev.previewUrl);
-    }
-    onSlotChange(index, foto);
-
-    if (index < PASOS_FOTO.length - 1) {
-      setStepIndex(index + 1);
-      return;
-    }
-    onClose();
-  };
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    await processBlob(file, true);
+  };
 
-    const index = stepIndex;
-    const etiqueta = PASOS_FOTO[index].etiqueta;
+  // ── Review actions ─────────────────────────────────────────────────────
 
-    setProcessing(true);
-    setErrorText(null);
-    try {
-      const compressed = await compressImage(file);
-      const [previewUrl, base64] = await Promise.all([
-        Promise.resolve(URL.createObjectURL(compressed)),
-        fotoService.blobToBase64(compressed),
-      ]);
-      guardarYAvanzar({ blob: compressed, previewUrl, etiqueta, base64 }, index);
-    } catch (err: unknown) {
-      const isMemory =
-        err instanceof RangeError ||
-        (err instanceof Error && /memory|allocation|out of memory/i.test(err.message));
-      setErrorText(
-        isMemory
-          ? "Memoria insuficiente. Cerrá otras pestañas de Chrome e intentá de nuevo."
-          : "No se pudo procesar la imagen. Tocá el recuadro e intentá de nuevo."
-      );
-    } finally {
-      setProcessing(false);
+  const handleContinuar = () => {
+    if (!pendingCapture) return;
+    pendingPreviewRef.current = null;
+
+    if (extraMode) {
+      onExtraAdd?.({ ...pendingCapture, etiqueta: "OBSERVACION" });
+      if (fotosExtra.length + 1 >= maxExtras) {
+        setPendingCapture(null);
+        onClose();
+        return;
+      }
+    } else {
+      onSlotChange(guidedIndex, {
+        ...pendingCapture,
+        etiqueta: PASOS_FOTO[guidedIndex].etiqueta,
+      });
+
+      if (isLastEmptyGuided) {
+        setExtraMode(true);
+      } else {
+        let next = -1;
+        for (let i = guidedIndex + 1; i < PASOS_FOTO.length; i++) {
+          if (!slots[i]) {
+            next = i;
+            break;
+          }
+        }
+        if (next < 0) {
+          for (let i = 0; i < guidedIndex; i++) {
+            if (!slots[i]) {
+              next = i;
+              break;
+            }
+          }
+        }
+        setGuidedIndex(next >= 0 ? next : guidedIndex + 1);
+      }
     }
-  };
 
-  const irPaso = (index: number) => {
-    if (processing) return;
-    setStepIndex(index);
+    setPendingCapture(null);
+    setPhase("camera");
     setErrorText(null);
   };
+
+  const handleListo = () => {
+    if (pendingCapture) {
+      pendingPreviewRef.current = null;
+      if (extraMode) {
+        onExtraAdd?.({ ...pendingCapture, etiqueta: "OBSERVACION" });
+      } else {
+        onSlotChange(guidedIndex, {
+          ...pendingCapture,
+          etiqueta: PASOS_FOTO[guidedIndex].etiqueta,
+        });
+      }
+      setPendingCapture(null);
+    }
+    onClose();
+  };
+
+  const handleRehacer = () => {
+    if (pendingCapture?.previewUrl) {
+      URL.revokeObjectURL(pendingCapture.previewUrl);
+      pendingPreviewRef.current = null;
+    }
+    setPendingCapture(null);
+    setPhase("camera");
+    setErrorText(null);
+  };
+
+  const handleClose = () => {
+    if (pendingCapture?.previewUrl) {
+      URL.revokeObjectURL(pendingCapture.previewUrl);
+      pendingPreviewRef.current = null;
+    }
+    setPendingCapture(null);
+    onClose();
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────
+
+  const showLiveCamera = streamReady && !useFallback && phase === "camera";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
-
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="foto-guia-titulo"
-        className="relative z-10 w-full sm:max-w-lg max-h-[95dvh] sm:max-h-[90vh] flex flex-col bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl border border-brand-seashell overflow-hidden animate-in slide-in-from-bottom-4 sm:fade-in sm:zoom-in-95 duration-200"
-      >
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 shrink-0">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-brand-orange">
-              Paso {stepIndex + 1} de {PASOS_FOTO.length}
-            </p>
-            <h2 id="foto-guia-titulo" className="text-xl sm:text-2xl font-extrabold uppercase tracking-wide text-gray-900 mt-1">
-              {paso.titulo}
-            </h2>
-          </div>
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+        <div>
+          <p className="text-sm font-bold text-white/90">{currentLabel}</p>
+          {!extraMode && (
+            <div className="flex gap-1.5 mt-1.5">
+              {PASOS_FOTO.map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full ${
+                    slots[i]
+                      ? "bg-emerald-400"
+                      : i === guidedIndex
+                        ? "bg-brand-orange"
+                        : "bg-white/30"
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {torchSupported && showLiveCamera && (
+            <button
+              type="button"
+              onClick={toggleTorch}
+              className={`p-2 rounded-xl cursor-pointer ${
+                torchActive
+                  ? "bg-brand-orange text-white"
+                  : "text-white/70 hover:bg-white/10"
+              }`}
+              aria-label={torchActive ? "Apagar flash" : "Encender flash"}
+            >
+              {torchActive ? <Zap className="w-5 h-5" /> : <ZapOff className="w-5 h-5" />}
+            </button>
+          )}
           <button
             type="button"
-            onClick={onClose}
-            className="p-2 rounded-xl text-gray-400 hover:bg-gray-100 cursor-pointer"
+            onClick={handleClose}
+            className="p-2 rounded-xl text-white/70 hover:bg-white/10 cursor-pointer"
             aria-label="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
+      </div>
 
-        <div className="px-5 py-3 border-b border-gray-100 shrink-0">
-          <div className="flex gap-1.5">
-            {PASOS_FOTO.map((p, i) => {
-              const done = Boolean(slots[i]);
-              const active = i === stepIndex;
-              return (
-                <button
-                  key={p.etiqueta}
-                  type="button"
-                  onClick={() => irPaso(i)}
-                  disabled={processing}
-                  className={`flex-1 min-w-0 py-2 px-1 rounded-xl text-center transition-colors cursor-pointer disabled:opacity-50 ${
-                    active
-                      ? "bg-brand-orange/15 ring-1 ring-brand-orange/40"
-                      : done
-                        ? "bg-emerald-50"
-                        : "bg-brand-bg"
-                  }`}
-                >
-                  <div className="flex justify-center mb-0.5">
-                    {done ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : (
-                      <span
-                        className={`text-[10px] font-bold ${active ? "text-brand-orange" : "text-gray-400"}`}
-                      >
-                        {i + 1}
-                      </span>
-                    )}
-                  </div>
-                  <span className="block text-[8px] font-bold uppercase tracking-wide truncate text-gray-500">
-                    {p.titulo.replace("Foto ", "").replace("lado ", "")}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[10px] text-gray-400 mt-2 text-center">
-            {completadas}/{PASOS_FOTO.length} completadas
-          </p>
-        </div>
+      {/* Hidden file inputs (fallback + gallery) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      {permitirGaleria && (
+        <input
+          ref={galeriaInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      )}
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 min-h-0">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFileChange}
+      {/* Main area */}
+      <div className="flex-1 relative min-h-0">
+        {/* Video — always rendered to keep stream alive, hidden during review */}
+        {!useFallback && (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className={`absolute inset-0 w-full h-full object-cover ${
+              showLiveCamera ? "block" : "hidden"
+            }`}
           />
-          {permitirGaleria && (
-            <input
-              ref={galeriaInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-          )}
+        )}
 
-          <p className="text-xs text-gray-500 text-center">{paso.instruccion}</p>
+        {/* Camera: waiting for stream */}
+        {phase === "camera" && !useFallback && !streamReady && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <div className="w-8 h-8 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            <span className="text-xs font-bold text-white/70">
+              Abriendo cámara...
+            </span>
+          </div>
+        )}
 
-          {errorText && (
-            <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200/40">
-              {errorText}
-            </div>
-          )}
-
+        {/* Camera: fallback tap-to-open */}
+        {phase === "camera" && useFallback && (
           <button
             type="button"
-            onClick={abrirCamara}
+            onClick={abrirCamaraFallback}
             disabled={processing}
-            className="relative w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-brand-orange/40 bg-brand-bg overflow-hidden cursor-pointer hover:bg-brand-orange/5 hover:border-brand-orange/70 active:scale-[0.99] transition-all disabled:cursor-wait disabled:opacity-80"
-            aria-label={`Sacar ${paso.titulo.toLowerCase()}`}
+            className="absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-3 bg-gray-900 cursor-pointer disabled:cursor-wait"
           >
-            {slotActual ? (
-              <>
-                <img
-                  src={slotActual.previewUrl}
-                  alt={paso.titulo}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-                <span className="absolute bottom-3 left-3 text-[10px] font-bold uppercase tracking-wide bg-emerald-500 text-white px-2.5 py-1 rounded-lg flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  OK — tocá para cambiar
-                </span>
-              </>
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-                <div className="p-4 rounded-full bg-brand-orange/10 text-brand-orange">
-                  <Camera className="w-10 h-10" />
-                </div>
-                <span className="text-sm font-bold text-brand-orange">
-                  Tocá para sacar la foto
-                </span>
-              </div>
-            )}
-
-            {processing && (
-              <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2">
-                <div className="w-8 h-8 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                <span className="text-xs font-bold text-white">Procesando...</span>
-              </div>
-            )}
+            <div className="p-4 rounded-full bg-brand-orange/20 text-brand-orange">
+              <Camera className="w-10 h-10" />
+            </div>
+            <span className="text-sm font-bold text-brand-orange">
+              Tocá para sacar la foto
+            </span>
           </button>
+        )}
 
-          {permitirGaleria && (
+        {/* Review: captured photo preview */}
+        {phase === "review" && pendingCapture && (
+          <img
+            src={pendingCapture.previewUrl}
+            alt="Foto capturada"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
+          />
+        )}
+
+        {/* Processing overlay */}
+        {processing && (
+          <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2 z-10">
+            <div className="w-8 h-8 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            <span className="text-xs font-bold text-white">Procesando...</span>
+          </div>
+        )}
+      </div>
+
+      {/* Error */}
+      {errorText && (
+        <div className="px-4 py-2 bg-red-900/80 text-red-200 text-xs text-center shrink-0">
+          {errorText}
+        </div>
+      )}
+
+      {/* Bottom actions */}
+      <div className="px-4 py-4 shrink-0 space-y-2">
+        {/* Camera mode: capture + optional gallery */}
+        {phase === "camera" && showLiveCamera && (
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={abrirGaleria}
+              onClick={captureFromStream}
               disabled={processing}
-              className="w-full py-2.5 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-wait"
+              className="flex-1 py-4 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-60 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform"
             >
-              <ImagePlus className="w-4 h-4" />
-              Subir desde galería
+              <Camera className="w-5 h-5" />
+              Capturar
             </button>
-          )}
-        </div>
+            {permitirGaleria && (
+              <button
+                type="button"
+                onClick={abrirGaleria}
+                disabled={processing}
+                className="py-4 px-5 border border-white/20 rounded-2xl text-white/70 hover:bg-white/10 cursor-pointer flex items-center justify-center"
+                aria-label="Subir desde galería"
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        )}
 
-        <div className="px-5 py-3 border-t border-gray-100 flex justify-between shrink-0 bg-brand-bg/80">
-          <button
-            type="button"
-            disabled={stepIndex === 0 || processing}
-            onClick={() => irPaso(stepIndex - 1)}
-            className="px-3 py-2 text-xs font-bold text-gray-500 disabled:opacity-30 flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Anterior
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={processing}
-            className="px-3 py-2 text-xs font-bold text-gray-500 cursor-pointer disabled:opacity-50"
-          >
-            {completadas === PASOS_FOTO.length ? "Cerrar" : "Continuar después"}
-          </button>
-        </div>
+        {/* Review mode: action buttons */}
+        {phase === "review" && pendingCapture && (
+          <>
+            <button
+              type="button"
+              onClick={handleRehacer}
+              className="w-full py-3 border border-white/20 rounded-xl text-xs font-bold text-white/70 hover:bg-white/10 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Rehacer foto
+            </button>
+
+            <div className="flex gap-2">
+              {showListo && (
+                <button
+                  type="button"
+                  onClick={handleListo}
+                  className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform"
+                >
+                  <Check className="w-5 h-5" />
+                  Listo
+                </button>
+              )}
+
+              {(!extraMode || canTakeMoreExtras) && (
+                <button
+                  type="button"
+                  onClick={handleContinuar}
+                  className="flex-1 py-4 bg-brand-orange hover:bg-brand-orange/90 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-transform"
+                >
+                  Continuar
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

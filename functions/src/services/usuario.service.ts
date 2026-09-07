@@ -8,16 +8,23 @@ import {
   AsignacionDiaria,
   AsignarTurnoOperadorPayload,
   SolicitarReconfiguracionTurnoPayload,
+  SolicitarCambioGruaPayload,
+  RegistroTurno,
+  GestionCambioCrossTipo,
+  MotivoFueraDeServicio,
   esOperador,
   esSuperAdmin,
   normalizeRoles,
   normalizeTipoFlota,
+  labelTipoFlota,
   buildUsuarioUid,
   asignacionCoincideConUsuario,
   turnoSigueVigente,
   RUTA_NOTIF_TURNOS,
 } from '@gruasbacar/shared';
 import * as notificationService from './notification.service';
+import * as gruaService from './grua.service';
+import { validarMotivoFueraDeServicio, validarStringOpcional } from '../utils/validators';
 
 const db = admin.firestore;
 
@@ -336,6 +343,10 @@ export async function guardarAsignacionDiaria(
     throw new HttpsError('invalid-argument', 'El tipo seleccionado no coincide con la grúa elegida.');
   }
 
+  const prevAsignacion = userData.asignacionDiaria as AsignacionDiaria | undefined;
+  const hoy = fechaHoyArgentina();
+  const teniaTurnoHoy = prevAsignacion?.fecha === hoy && turnoSigueVigente(prevAsignacion);
+
   let legajoChofer = (data as any).legajoChofer?.trim() as string | undefined;
   let legajoEnganchador = (data as any).legajoEnganchador?.trim() as string | undefined;
 
@@ -362,10 +373,119 @@ export async function guardarAsignacionDiaria(
   };
 
   await db().collection('usuarios').doc(uid).update({ asignacionDiaria });
+
+  const tipoOperacionReferencia = data.tipoOperacionReferencia
+    ? normalizeTipoFlota(data.tipoOperacionReferencia)
+    : undefined;
+  const gruaReferenciaPatente = validarStringOpcional(
+    data.gruaReferenciaPatente,
+    'gruaReferenciaPatente',
+    20
+  );
+
+  const tipoReferencia = teniaTurnoHoy
+    ? normalizeTipoFlota(prevAsignacion!.tipoFlota)
+    : tipoOperacionReferencia ?? null;
+
+  const gruaCambio = teniaTurnoHoy && prevAsignacion!.gruaPatente !== gruaPatente;
+  const tipoCambio = tipoReferencia !== null && tipoReferencia !== gruaTipo;
+
+  const registroTurno: RegistroTurno = {
+    operadorUid: uid,
+    operadorNombre: (userData.nombre as string) ?? '',
+    ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
+    fecha: asignacionDiaria.fecha,
+    gruaPatente,
+    duplaId: asignacionDiaria.duplaId,
+    duplaChofer,
+    duplaEnganchador,
+    ...(legajoChofer ? { legajoChofer } : {}),
+    ...(legajoEnganchador ? { legajoEnganchador } : {}),
+    tipoFlota: gruaTipo,
+    origenAsignacion: 'operador',
+    creadoEn: new Date().toISOString(),
+    ...(gruaCambio || tipoCambio
+      ? { gruaAnterior: teniaTurnoHoy ? prevAsignacion!.gruaPatente : gruaReferenciaPatente }
+      : {}),
+    ...(gruaCambio || tipoCambio
+      ? { cambioTipo: tipoCambio ? 'CROSS_TIPO' as const : 'MISMO_TIPO' as const }
+      : {}),
+  };
+  db().collection('turnos').add(registroTurno).catch((err) =>
+    logger.error('Error registrando turno en historial', err),
+  );
+
+  if (tipoCambio) {
+    const operadorNombre = (userData.nombre as string) ?? '';
+    const legajoTxt = userData.legajo ? ` (leg. ${userData.legajo})` : '';
+    const tipoAnterior = tipoReferencia!;
+    const gruaAnteriorPatente = teniaTurnoHoy
+      ? prevAsignacion!.gruaPatente
+      : (gruaReferenciaPatente ?? '');
+    const gruaDesc = (gruaData.descripcion as string | undefined)?.trim() || '';
+
+    notificationService.notificarAdmins({
+      tipo: 'SOLICITUD_CAMBIO_GRUA',
+      titulo: `Cambio de grúa cross-tipo — ${operadorNombre}`,
+      cuerpo:
+        `${operadorNombre}${legajoTxt} cambió de grúa ${gruaAnteriorPatente || '—'} (${labelTipoFlota(tipoAnterior)}) ` +
+        `a ${gruaDesc ? `${gruaDesc} — ` : ''}${gruaPatente} (${labelTipoFlota(gruaTipo)}). ` +
+        `Verificá que esté correcto o modificalo desde la notificación.`,
+      origenUid: uid,
+      claveDedup: `cambio_grua_auto:${uid}:${gruaPatente}:${tipoAnterior}`,
+      datos: {
+        operadorUid: uid,
+        operadorNombre,
+        ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
+        gruaActualPatente: gruaAnteriorPatente,
+        tipoFlotaActual: tipoAnterior,
+        gruaSolicitadaPatente: gruaPatente,
+        ...(gruaDesc ? { gruaSolicitadaDescripcion: gruaDesc } : {}),
+        tipoFlotaSolicitado: gruaTipo,
+        accionRuta: RUTA_NOTIF_TURNOS,
+      },
+    }).catch((err) => logger.error('Error notificando cambio cross-tipo a admins', err));
+  }
+
   return asignacionDiaria;
 }
 
 const SOLICITUD_RECONFIG_MIN_MS = 30 * 60 * 1000;
+
+function parseGestionCrossTipo(
+  gestion: GestionCambioCrossTipo | undefined,
+): {
+  gruaOos?: string;
+  categoria?: MotivoFueraDeServicio;
+  motivo?: string;
+  deshabilitar: boolean;
+  tipoOrigen?: ReturnType<typeof normalizeTipoFlota>;
+} {
+  if (!gestion) return { deshabilitar: false };
+
+  const gruaOos = gestion.gruaFueraDeServicioPatente?.trim();
+  const categoria = validarMotivoFueraDeServicio(gestion.categoriaFueraDeServicio);
+  const motivo = validarStringOpcional(gestion.motivoCambio, 'motivoCambio', 300);
+  const deshabilitar = gestion.deshabilitarGrua === true;
+  const tipoOrigen = gestion.tipoFlotaOrigen
+    ? normalizeTipoFlota(gestion.tipoFlotaOrigen)
+    : undefined;
+
+  if (deshabilitar && !gruaOos) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Indicá qué grúa quedó fuera de servicio para deshabilitarla en flota.'
+    );
+  }
+  if (gruaOos && !categoria) {
+    throw new HttpsError('invalid-argument', 'Indicá la categoría de fuera de servicio.');
+  }
+  if (categoria === 'OTRO' && !motivo) {
+    throw new HttpsError('invalid-argument', 'Indicá el motivo cuando la categoría es "Otro".');
+  }
+
+  return { gruaOos, categoria, motivo, deshabilitar, tipoOrigen };
+}
 
 export async function asignarTurnoOperador(
   data: AsignarTurnoOperadorPayload,
@@ -405,6 +525,16 @@ export async function asignarTurnoOperador(
   }
 
   const gruaPatente = asignacion.gruaPatente.trim();
+  const gestionParsed = parseGestionCrossTipo(data.gestionCrossTipo);
+
+  if (gestionParsed.gruaOos) {
+    await gruaService.validarGruaFueraDeServicio(
+      gestionParsed.gruaOos,
+      gestionParsed.tipoOrigen,
+      gruaPatente
+    );
+  }
+
   const gruaSnap = await db()
     .collection('gruas')
     .where('patente', '==', gruaPatente)
@@ -466,6 +596,62 @@ export async function asignarTurnoOperador(
     },
   });
 
+  const gruaCambio = teniaTurnoHoy && prevAsignacion!.gruaPatente !== gruaPatente;
+  const tipoCambio = teniaTurnoHoy && normalizeTipoFlota(prevAsignacion!.tipoFlota) !== normalizeTipoFlota(asignacionDiaria.tipoFlota);
+
+  const registroTurno: RegistroTurno = {
+    operadorUid,
+    operadorNombre: (userData.nombre as string) ?? '',
+    ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
+    fecha: asignacionDiaria.fecha,
+    gruaPatente,
+    ...(gruaDescripcion ? { gruaDescripcion } : {}),
+    duplaId: duplaId || '',
+    duplaChofer: asignacionDiaria.duplaChofer,
+    duplaEnganchador: asignacionDiaria.duplaEnganchador,
+    ...(asignacionDiaria.legajoChofer ? { legajoChofer: asignacionDiaria.legajoChofer } : {}),
+    ...(asignacionDiaria.legajoEnganchador ? { legajoEnganchador: asignacionDiaria.legajoEnganchador } : {}),
+    tipoFlota: normalizeTipoFlota(asignacionDiaria.tipoFlota),
+    origenAsignacion: 'admin',
+    asignadoPorUid: adminCtx.uid,
+    asignadoPorNombre: adminCtx.nombre,
+    creadoEn: new Date().toISOString(),
+    ...(gruaCambio ? { gruaAnterior: prevAsignacion!.gruaPatente } : {}),
+    ...(gruaCambio ? { cambioTipo: tipoCambio ? 'CROSS_TIPO' as const : 'MISMO_TIPO' as const } : {}),
+    ...(gestionParsed.motivo ? { motivoCambio: gestionParsed.motivo } : {}),
+    ...(gestionParsed.gruaOos ? { gruaFueraDeServicioPatente: gestionParsed.gruaOos } : {}),
+    ...(gestionParsed.categoria ? { categoriaFueraDeServicio: gestionParsed.categoria } : {}),
+    ...(gestionParsed.deshabilitar ? { gruaDeshabilitada: true } : {}),
+  };
+
+  let turnoRef: string | undefined;
+  try {
+    const turnoDoc = await db().collection('turnos').add(registroTurno);
+    turnoRef = turnoDoc.id;
+  } catch (err) {
+    logger.error('Error registrando turno en historial', err);
+  }
+
+  if (gestionParsed.deshabilitar && gestionParsed.gruaOos && gestionParsed.categoria) {
+    await gruaService.desactivarGruaFueraDeServicio(
+      gestionParsed.gruaOos,
+      gruaService.buildFueraDeServicioSnapshot(
+        gestionParsed.categoria,
+        adminCtx,
+        { motivo: gestionParsed.motivo, turnoRef }
+      )
+    );
+  }
+
+  const notificacionId = data.notificacionId?.trim();
+  if (notificacionId) {
+    try {
+      await notificationService.marcarNotificacionLeida(adminCtx.uid, notificacionId);
+    } catch (err) {
+      logger.warn('No se pudo marcar notificación como leída', { notificacionId, err });
+    }
+  }
+
   return asignacionDiaria;
 }
 
@@ -499,7 +685,7 @@ export async function solicitarReconfiguracionTurno(
   const legajoTxt = operador.legajo ? ` (leg. ${operador.legajo})` : '';
   const cuerpoBase = tieneVigente
     ? `${operador.nombre}${legajoTxt} necesita que reconfigures su turno. ` +
-      `Dupla actual: ${asignacion.duplaChofer} / ${asignacion.duplaEnganchador}, grúa ${asignacion.gruaPatente}.`
+      `Dupla actual: ${asignacion.duplaChofer} / ${asignacion.duplaEnganchador}, grúa ${asignacion.gruaDescripcion ? `${asignacion.gruaDescripcion} — ` : ''}${asignacion.gruaPatente}.`
     : `${operador.nombre}${legajoTxt} no tiene turno configurado y necesita asistencia.`;
   const cuerpo = mensaje ? `${cuerpoBase} Mensaje: "${mensaje}"` : cuerpoBase;
 
@@ -527,6 +713,94 @@ export async function solicitarReconfiguracionTurno(
 
   await db().collection('usuarios').doc(uid).update({
     ultimaSolicitudReconfigTurnoMs: Date.now(),
+  });
+
+  return { ok: true };
+}
+
+const SOLICITUD_CAMBIO_GRUA_MIN_MS = 10 * 60 * 1000;
+
+export async function solicitarCambioGrua(
+  uid: string,
+  data: SolicitarCambioGruaPayload,
+  operador: { nombre: string; legajo?: string }
+): Promise<{ ok: true }> {
+  const gruaPatenteSolicitada = data.gruaPatente?.trim();
+  if (!gruaPatenteSolicitada) {
+    throw new HttpsError('invalid-argument', 'Falta la patente de la grúa solicitada.');
+  }
+  if (gruaPatenteSolicitada.length > 20) {
+    throw new HttpsError('invalid-argument', 'La patente de grúa no puede superar los 20 caracteres.');
+  }
+
+  const userDoc = await db().collection('usuarios').doc(uid).get();
+  if (!userDoc.exists) {
+    throw new HttpsError('not-found', 'Usuario no encontrado.');
+  }
+
+  const userData = userDoc.data()!;
+  const asignacion = userData.asignacionDiaria as AsignacionDiaria | undefined;
+  const tieneVigente = asignacion && turnoSigueVigente(asignacion);
+
+  if (!tieneVigente) {
+    throw new HttpsError('failed-precondition', 'No tenés un turno vigente. Configurá tu turno primero.');
+  }
+
+  const lastMs = userData.ultimaSolicitudCambioGruaMs as number | undefined;
+  if (lastMs && Date.now() - lastMs < SOLICITUD_CAMBIO_GRUA_MIN_MS) {
+    throw new HttpsError(
+      'resource-exhausted',
+      'Ya enviaste una solicitud recientemente. Esperá unos minutos antes de volver a pedir.'
+    );
+  }
+
+  const gruaSnap = await db()
+    .collection('gruas')
+    .where('patente', '==', gruaPatenteSolicitada)
+    .where('activa', '==', true)
+    .limit(1)
+    .get();
+  if (gruaSnap.empty) {
+    throw new HttpsError('not-found', 'La grúa solicitada no está habilitada.');
+  }
+  const gruaSolicitadaData = gruaSnap.docs[0].data();
+  const gruaSolicitadaDescripcion = (gruaSolicitadaData.descripcion as string | undefined)?.trim() || '';
+  const tipoFlotaSolicitado = normalizeTipoFlota(gruaSolicitadaData.tipo as string | undefined);
+
+  const motivo = data.motivo?.trim().slice(0, 300);
+  const legajoTxt = operador.legajo ? ` (leg. ${operador.legajo})` : '';
+  const tipoActual = normalizeTipoFlota(asignacion.tipoFlota);
+
+  const cuerpo =
+    `${operador.nombre}${legajoTxt} solicita cambio de grúa cross-tipo. ` +
+    `Grúa actual: ${asignacion.gruaDescripcion ? `${asignacion.gruaDescripcion} — ` : ''}${asignacion.gruaPatente} (${tipoActual}). ` +
+    `Grúa solicitada: ${gruaSolicitadaDescripcion ? `${gruaSolicitadaDescripcion} — ` : ''}${gruaPatenteSolicitada} (${tipoFlotaSolicitado}).` +
+    (motivo ? ` Motivo: "${motivo}"` : '');
+
+  const claveDedup = `cambio_grua:${uid}:${Math.floor(Date.now() / SOLICITUD_CAMBIO_GRUA_MIN_MS)}`;
+
+  await notificationService.notificarAdmins({
+    tipo: 'SOLICITUD_CAMBIO_GRUA',
+    titulo: 'Solicitud de cambio de grúa (cross-tipo)',
+    cuerpo,
+    origenUid: uid,
+    claveDedup,
+    datos: {
+      operadorUid: uid,
+      operadorNombre: operador.nombre,
+      ...(operador.legajo ? { operadorLegajo: operador.legajo } : {}),
+      gruaActualPatente: asignacion.gruaPatente,
+      tipoFlotaActual: tipoActual,
+      gruaSolicitadaPatente: gruaPatenteSolicitada,
+      ...(gruaSolicitadaDescripcion ? { gruaSolicitadaDescripcion } : {}),
+      tipoFlotaSolicitado,
+      accionRuta: RUTA_NOTIF_TURNOS,
+      ...(motivo ? { motivo } : {}),
+    },
+  });
+
+  await db().collection('usuarios').doc(uid).update({
+    ultimaSolicitudCambioGruaMs: Date.now(),
   });
 
   return { ok: true };

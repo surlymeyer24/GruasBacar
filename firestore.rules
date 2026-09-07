@@ -98,9 +98,28 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /turnos/{turnoId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /carnets/{carnetId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
+    }
+
+    match /itv/{itvId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /polizas/{polizaId} {
+      allow read: if isAdmin();
+      allow write: if false; // solo via Functions
+    }
+
+    match /mail/{mailId} {
+      allow read, write: if false;
     }
 
     match /notificaciones/{notifId} {

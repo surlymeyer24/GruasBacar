@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { Servicio, ServicioActivoResumen, servicioActivoVigente } from "@gruasbacar/shared";
 import { db, isMock } from "../firebase";
@@ -91,10 +91,13 @@ export const ServicioActivoProvider: React.FC<{ children: React.ReactNode }> = (
     };
   }, [servicioActivoId, userData?.servicioActivoResumen]);
 
+  const contextValue = useMemo(
+    () => ({ servicioActivoId, servicio, loading, error }),
+    [servicioActivoId, servicio, loading, error]
+  );
+
   return (
-    <ServicioActivoContext.Provider
-      value={{ servicioActivoId, servicio, loading, error }}
-    >
+    <ServicioActivoContext.Provider value={contextValue}>
       {children}
     </ServicioActivoContext.Provider>
   );

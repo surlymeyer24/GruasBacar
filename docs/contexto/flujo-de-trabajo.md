@@ -13,50 +13,48 @@
 
 ## Entorno de desarrollo
 
-### Levantar el frontend (solo UI)
-```bash
-npm run dev          # desde la raíz (alias de cd frontend && npm run dev)
-```
-Abre en `http://localhost:5173`. Si `isMock = true` en `frontend/src/firebase.ts`, funciona sin backend.
+Hay **dos bases distintas**. El emulador es un Firestore/Auth/Storage en tu máquina (`127.0.0.1`). Producción es el proyecto `gruasbacar` en Google Cloud. No se mezclan: el frontend de `npm run dev` no puede hablar con producción.
 
-### Levantar todo (frontend + emuladores Firebase)
-```bash
-# Terminal 1: emuladores (Auth, Firestore, Storage, Functions)
-npm run emulators
+Paso a paso de una funcionalidad (emu → prod): `emu-a-prod.md`.
 
-# Terminal 2: frontend apuntando a emuladores
-# Asegurate de tener VITE_USE_EMULATORS=true en frontend/.env.local
+`test-gruasbacar.web.app` **no** es un sandbox: usa la misma base que producción (ver `docs/contexto/entorno-test.md`).
+
+### Flujo del emulador
+
+Hace falta Java 11+. El estado local vive en `.emulator-data/` (no se commitea). `npm run emu` lo importa al arrancar y lo exporta al salir.
+
+**Trabajo diario**
+
+```bash
+# Terminal 1 — emulador (Auth, Firestore, Storage, Functions)
+npm run emu
+
+# Terminal 2 — frontend (siempre contra localhost)
 npm run dev
 ```
-Emulador UI en `http://localhost:4000`. Functions en `http://localhost:5001`.
 
-### Levantar el frontend contra Firebase real (sin emuladores)
-Si necesitás probar contra el proyecto real (por ejemplo porque no tenés los emuladores levantados, o querés ver datos reales) sin tocar tu `.env.local`:
-```bash
-cd frontend && npm run dev:live
-```
-Usa `frontend/.env.live` (copiá `.env.live.example` si no existe) y fuerza `VITE_USE_EMULATORS=false`, sin importar lo que diga `.env.local`. Ojo: esto escribe/lee contra el proyecto real, no un sandbox.
+UI del emulador: `http://localhost:4000`. En la app vas a ver una cinta cyan **EMULADOR LOCAL**.
 
-### Seed de datos de prueba
-```bash
-npm run seed:emulator    # carga grúas, corralones, duplas y usuarios de prueba en los emuladores
-npm run seed             # carga en producción (requiere ServiceAccountKey.json)
-```
-Credenciales de prueba:
-- Admin: `admin@bacar.com` / `Admin123!`
-- Enganchador: `chofer@bacar.com` / `Chofer123!`
+**Datos (solo con el emulador ya corriendo)**
 
-### Clonar datos de producción a los emuladores
 ```bash
-npm run pull-prod    # requiere ServiceAccountKey.json y emuladores levantados
+npm run seed         # igual que emu:seed y pull-prod
 ```
-Descarga `usuarios`, `gruas`, `corralones`, `duplas` y `servicios` (con subcolecciones `eventos`, `fotosStaging`, `versiones`) de producción y los carga en los emuladores. Copia también los usuarios de Auth con contraseña de prueba `Test1234!`.
 
-### Carga batch de duplas y usuarios nuevos
-```bash
-node scripts/cargar-nuevas-duplas.mjs [--emulator] [--dry-run]
-```
-Script de operaciones puntual: crea usuarios (Auth + Firestore) y duplas del catálogo, con validación de legajos únicos y rollback en Auth si falla Firestore. Sin flags escribe contra producción.
+Copia Firestore + Auth de producción → emulador. Requiere `functions/src/auth/ServiceAccountKey.json` (solo para **leer** prod). **No escribe** en producción. No copia tokens FCM. En el emulador todos los usuarios Auth usan la contraseña `Test1234!`.
+
+No hace falta sembrar todos los días: si `.emulator-data` ya tiene datos, `emu` los reimporta.
+
+> **Importante — no hay comando para vaciar la base.**  
+> No existe `vaciar-bd`, `emu:clean` ni ningún script que borre Firestore/Auth.  
+> Si el emulador quedó raro (datos incoherentes, Auth desfasado, seed a medias):
+>
+> 1. Parar `npm run emu` (Ctrl+C).
+> 2. Borrar a mano la carpeta `.emulator-data` en la raíz del repo.
+> 3. Volver a `npm run emu` y, con el emulador arriba, `npm run seed`.
+
+### Scripts Admin SDK
+Un script no elige destino por flag. O es de emulador (`initEmulatorAdmin`, rechaza `--prod`) o es de producción (`initProdAdmin` / `--prod`, rechaza `--emulator` y variables de emulador).
 
 ---
 
@@ -168,19 +166,33 @@ Script PowerShell que habilita invocación pública (`allUsers` → `roles/run.i
 
 | Comando | Qué hace |
 |---|---|
-| `npm run dev` | Levanta frontend en dev (Vite) |
-| `npm run dev:live` | Frontend en dev contra Firebase real (usa `frontend/.env.live`) |
-| `npm run pull-prod` | Clona datos de producción a los emuladores locales |
-| `node scripts/cargar-nuevas-duplas.mjs` | Carga batch de usuarios y duplas (soporta `--emulator` y `--dry-run`) |
-| `npm run emulators` | Compila shared + functions y levanta emuladores Firebase |
+| `npm run dev` | Frontend en dev **contra emuladores** (no toca prod) |
+| `npm run seed` / `emu:seed` / `pull-prod` | Copia de solo lectura: producción → emulador (sin tokens FCM) |
+| `npm run emu` / `npm run emulators` | Compila shared + functions y levanta emuladores Firebase. Persistencia: `.emulator-data/` |
 | `npm run build` | Compila los tres workspaces en orden |
 | `npm run deploy` | Build completo + deploy a Firebase |
 | `npm run deploy:functions` | Predeploy + deploy solo Cloud Functions |
-| `npm run seed` | Carga datos iniciales en Firestore producción |
-| `npm run seed:emulator` | Carga datos iniciales en emuladores locales |
-| `npm run sync-usuarios` | Sincroniza usuarios de Auth → Firestore |
-| `npm run sync-usuarios:emulator` | Idem en emuladores |
-| `npm run fix-invokers` | Habilita invocación pública en Cloud Functions v2 |
+| `npm run sync-usuarios` | Limpia docs huérfanos Auth ↔ Firestore (producción) |
+
+### Backup de Firestore en Drive
+
+Todos los días a las **03:00 (Argentina)** la function `backupFirestoreDiario` exporta las colecciones (incluye `eventos` y `versiones` de cada acta, más el listado de Auth **sin contraseñas**) y sube un `.json.gz` privado a:
+
+`Backups/{YYYY-MM-DD}/gruasbacar-firestore-….json.gz`
+
+junto con un `manifest.json`. Las carpetas de más de **30 días** van a la papelera de Drive. Un admin puede disparar el mismo backup a mano con la callable `ejecutarBackupFirestore`. No incluye fotos: esas ya viven en Drive.
+
+### Importar actas desde fotos de Drive
+
+Si hay carpetas de fotos en Drive (fecha, legajo, patente, n° de acta) pero no el documento en Firestore:
+
+```bash
+node scripts/importar-actas-desde-drive.mjs --scan --desde 2026-07-01 --hasta 2026-07-31
+node scripts/importar-actas-desde-drive.mjs --csv .backups/actas-drive-faltantes.csv
+node scripts/importar-actas-desde-drive.mjs --csv .backups/actas-drive-faltantes.csv --write
+```
+
+No re-sube fotos: enlaza los `driveFileId` existentes. Completá hora, chofer y grúa en el CSV si el script no los infiere del turno de ese día. La ubicación queda como **PENDIENTE**.
 
 ---
 

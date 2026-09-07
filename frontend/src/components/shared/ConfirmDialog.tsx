@@ -6,10 +6,12 @@ interface ConfirmDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  blocking?: boolean;
+  cancelDanger?: boolean;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -21,6 +23,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmText = "Confirmar",
   cancelText = "Cancelar",
   danger = false,
+  blocking = false,
+  cancelDanger = false,
 }) => {
   if (!isOpen) return null;
 
@@ -28,7 +32,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6">
       <div
         className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
+        onClick={blocking ? undefined : onClose}
         aria-hidden
       />
 
@@ -43,14 +47,16 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         {danger && <div className="h-1.5 bg-brand-cta" />}
 
         <div className="relative px-6 pt-7 pb-5 sm:px-8 sm:pt-8 text-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-lg text-brand-pale hover:bg-brand-bg transition-colors cursor-pointer"
-            aria-label="Cerrar"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!blocking && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-brand-pale hover:bg-brand-bg transition-colors cursor-pointer"
+              aria-label="Cerrar"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
 
           <div
             className={`mx-auto mb-5 w-16 h-16 rounded-full flex items-center justify-center ${
@@ -79,7 +85,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 py-3.5 px-5 bg-white text-brand-purply border-2 border-brand-seashell hover:bg-brand-bg rounded-xl text-sm font-bold cursor-pointer transition-colors"
+            className={`flex-1 py-3.5 px-5 bg-white border-2 rounded-xl text-sm font-bold cursor-pointer transition-colors ${
+              cancelDanger
+                ? "text-red-600 border-red-200 hover:bg-red-50"
+                : "text-brand-purply border-brand-seashell hover:bg-brand-bg"
+            }`}
           >
             {cancelText}
           </button>
@@ -88,7 +98,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             type="button"
             onClick={() => {
               onConfirm();
-              onClose();
+              if (!blocking) onClose();
             }}
             className={`flex-1 py-3.5 px-5 text-white rounded-xl text-sm font-extrabold cursor-pointer shadow-md transition-all focus:ring-2 focus:ring-offset-2 ${
               danger

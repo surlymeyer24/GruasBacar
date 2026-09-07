@@ -93,12 +93,12 @@ const dryFlag = dryRun ? ' --debug' : '';
 
 try {
   if (deployAll) {
-    step('Deployando todo...');
-    run(`firebase deploy${dryFlag}`);
+    step('Deployando functions + rules + hosting producción...');
+    run(`firebase deploy --only functions,firestore,storage,hosting:production${dryFlag}`);
   } else {
     if (onlyHosting) {
-      step('Deployando hosting (frontend)...');
-      run(`firebase deploy --only hosting${dryFlag}`);
+      step('Deployando hosting producción (frontend)...');
+      run(`firebase deploy --only hosting:production${dryFlag}`);
     }
     if (onlyFunctions) {
       step('Deployando Cloud Functions...');

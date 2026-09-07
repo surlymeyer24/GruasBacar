@@ -14,8 +14,10 @@ interface ResumenConfirmacionProps {
 }
 
 function formatGrua(values: DatosFormFields): string {
-  const label = [values.gruaDescripcion, values.gruaPatente].filter(Boolean).join(" — ");
-  return label || "Sin grúa asignada";
+  const desc = values.gruaDescripcion?.trim();
+  const pat = values.gruaPatente?.trim();
+  if (desc && pat) return `${desc} (${pat})`;
+  return desc || pat || "Sin grúa asignada";
 }
 
 function formatEnganchador(values: DatosFormFields): string {
@@ -54,7 +56,7 @@ export const ResumenConfirmacion: React.FC<ResumenConfirmacionProps> = ({
         <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-gray-200 gap-4 sm:gap-0 pb-3 border-b border-gray-200">
           <div className="flex-1 space-y-1 sm:pr-4">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Patente / Dominio Encontrado</span>
-            <span className="font-mono font-extrabold text-xl text-brand-purply tracking-widest">{displayPatente(values.patente)}</span>
+            <span className="font-mono font-extrabold text-xl text-brand-purply tracking-widest">{displayPatente(values.patente, values.descripcionVehiculo)}</span>
           </div>
         </div>
 

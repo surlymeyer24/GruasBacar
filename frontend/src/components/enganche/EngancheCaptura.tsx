@@ -45,6 +45,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
   const { getPosition } = useGeolocation();
 
   const PATENTE_KEY = `gruasbacar_patente_${turno.duplaId}`;
+  const DESC_VEH_KEY = `gruasbacar_descveh_${turno.duplaId}`;
   const [patente, setPatenteRaw] = useState(() => {
     try { return sessionStorage.getItem(PATENTE_KEY) ?? ""; } catch { return ""; }
   });
@@ -52,6 +53,13 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
     setPatenteRaw(v);
     try { sessionStorage.setItem(PATENTE_KEY, v); } catch { /* quota */ }
   }, [PATENTE_KEY]);
+  const [descripcionVehiculo, setDescripcionVehiculoRaw] = useState(() => {
+    try { return sessionStorage.getItem(DESC_VEH_KEY) ?? ""; } catch { return ""; }
+  });
+  const setDescripcionVehiculo = useCallback((v: string) => {
+    setDescripcionVehiculoRaw(v);
+    try { sessionStorage.setItem(DESC_VEH_KEY, v); } catch { /* quota */ }
+  }, [DESC_VEH_KEY]);
 
   const [patenteError, setPatenteError] = useState<string | null>(null);
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | undefined>();
@@ -61,6 +69,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [fotosYaRegistradas, setFotosYaRegistradas] = useState(false);
   const [activeServicioId, setActiveServicioId] = useState<string | null>(servicioActivoId ?? null);
+  const activeServicioIdRef = useRef<string | null>(activeServicioId);
   const [creandoServicio, setCreandoServicio] = useState(false);
   const submittingRef = useRef(false);
   const creandoServicioRef = useRef(false);
@@ -83,10 +92,12 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
     [turno.duplaId]
   );
 
-  const crearServicioAnticipado = async () => {
-    if (creandoServicioRef.current || activeServicioId || submittingRef.current) return;
-    const patErr = validatePatenteText(patente);
-    if (patErr) return;
+  const crearServicioAnticipado = async (requierePatente = false) => {
+    if (creandoServicioRef.current || activeServicioIdRef.current || submittingRef.current) return;
+    if (requierePatente) {
+      const patErr = validatePatenteText(patente);
+      if (patErr) return;
+    }
 
     creandoServicioRef.current = true;
     setCreandoServicio(true);
@@ -99,10 +110,12 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         } catch { /* GPS opcional */ }
       }
 
-      const normalizedPatente = normalizarPatenteInput(patente);
+      const patenteValida = !validatePatenteText(patente);
+      const normalizedPatente = patenteValida ? normalizarPatenteInput(patente) : undefined;
       const res = await servicioService.iniciarEnganche(
         {
-          patente: normalizedPatente,
+          ...(normalizedPatente ? { patente: normalizedPatente } : {}),
+          ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
           grua: turno.gruaPatente,
           gruaPatente: turno.gruaPatente,
           dupla: turno.duplaId,
@@ -114,15 +127,24 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         userId,
         userDisplayName
       );
+      activeServicioIdRef.current = res.servicioId;
       setActiveServicioId(res.servicioId);
-      onServiceCreated(res.servicioId, normalizedPatente);
-    } catch {
-      // Si falla, se reintenta al confirmar
+      onServiceCreated(res.servicioId, normalizedPatente ?? "");
+    } catch (err) {
+      if (!esErrorDeRed(err)) {
+        setErrorText(
+          getFirebaseErrorMessage(err, "No se pudo iniciar el enganche. Intentá de nuevo.")
+        );
+      }
     } finally {
       creandoServicioRef.current = false;
       setCreandoServicio(false);
     }
   };
+
+  const handlePrimeraFoto = useCallback(() => {
+    crearServicioAnticipado();
+  }, [patente, geoCoords]);
 
   const handleFotosListas = useCallback((listas: boolean) => {
     if (listas) crearServicioAnticipado();
@@ -208,10 +230,9 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
     }
 
     submittingRef.current = true;
-    setFlowState("SUBMITTING");
     setErrorText(null);
 
-    let sId = activeServicioId;
+    let sId = activeServicioIdRef.current;
     let fotosRegistradas = false;
 
     try {
@@ -226,10 +247,12 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
       }
 
       if (!sId) {
-        const normalizedPatente = normalizarPatenteInput(patente);
+        const patenteValida = !validatePatenteText(patente);
+        const normalizedPatente = patenteValida ? normalizarPatenteInput(patente) : undefined;
         const res = await servicioService.iniciarEnganche(
           {
-            patente: normalizedPatente,
+            ...(normalizedPatente ? { patente: normalizedPatente } : {}),
+            ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
             grua: turno.gruaPatente,
             gruaPatente: turno.gruaPatente,
             dupla: turno.duplaId,
@@ -242,14 +265,28 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
           userDisplayName
         );
         sId = res.servicioId;
+        activeServicioIdRef.current = sId;
         setActiveServicioId(sId);
-        onServiceCreated(sId, normalizedPatente);
+        onServiceCreated(sId, normalizedPatente ?? "");
+      } else {
+        const patenteValida = !validatePatenteText(patente);
+        if (patenteValida) {
+          const normalizedPatente = normalizarPatenteInput(patente);
+          try {
+            await servicioService.actualizarPatente(sId, normalizedPatente);
+          } catch {
+            // no bloquear el flujo si falla la actualización de patente
+          }
+        }
       }
+
+      const geoEnganche = result.geoExif ?? activeGeo;
+      console.info("[EngancheCaptura] geo →", { geoExif: result.geoExif, activeGeo, geoEnganche });
 
       await fotoService.registrarEventoEnganche(
         sId,
         result.fotosMeta,
-        activeGeo,
+        geoEnganche,
         result.fotosBase64,
         result.comentario,
         result.fotosSubidas
@@ -257,8 +294,9 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
 
       fotosRegistradas = true;
       setFotosYaRegistradas(true);
+      setFlowState("SUBMITTING");
       await confirmarTrasladoConRetry(sId);
-      try { sessionStorage.removeItem(PATENTE_KEY); } catch { /* ok */ }
+      try { sessionStorage.removeItem(PATENTE_KEY); sessionStorage.removeItem(DESC_VEH_KEY); } catch { /* ok */ }
       onCompletedRef.current();
     } catch (err: unknown) {
       if (fotosRegistradas && sId) {
@@ -267,7 +305,6 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
           getFirebaseErrorMessage(err, "Error al iniciar el traslado. Intentá de nuevo.")
         );
       } else {
-        setFlowState("CAPTURING");
         setErrorText(
           getFirebaseErrorMessage(err, "No se pudo confirmar el enganche. Intentá de nuevo.")
         );
@@ -358,7 +395,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         <div className="flex flex-wrap items-center gap-3 text-xs text-brand-pale">
           <span className="inline-flex items-center gap-1.5 font-bold">
             <Tag className="w-3.5 h-3.5 text-brand-cta" />
-            <span className="text-brand-purply">{turno.gruaDescripcion ? `${turno.gruaDescripcion} — ` : ""}<span className="font-mono">{turno.gruaPatente}</span></span>
+            <span className="text-brand-purply">{turno.gruaDescripcion || turno.gruaPatente}{turno.gruaDescripcion && turno.gruaPatente ? <span className="font-mono text-brand-pale ml-1.5">({turno.gruaPatente})</span> : null}</span>
           </span>
           <span className="text-brand-seashell">·</span>
           <span className="inline-flex items-center gap-1.5 font-medium">
@@ -377,6 +414,8 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
           onChange={setPatente}
           error={patenteError}
           onErrorChange={setPatenteError}
+          descripcionVehiculo={descripcionVehiculo}
+          onDescripcionVehiculoChange={setDescripcionVehiculo}
         />
       </div>
 
@@ -398,8 +437,8 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         backLabel={backLabel}
         onConfirm={handleConfirmFotos}
         onFotosListas={handleFotosListas}
-        permitirGaleria
-        maxExtras={3}
+        onPrimeraFoto={handlePrimeraFoto}
+        maxExtras={5}
       />
     </div>
   );

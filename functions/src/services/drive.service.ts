@@ -1,10 +1,11 @@
 import { Readable } from 'stream';
+import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import {
-  buildCarpetaPatenteInfraccion,
+  buildCarpetaServicio,
   fechaCarpetaDrive,
-  sanitizePathPart,
 } from '../utils/validators';
+import { driveHabilitadoEnEmulador, enEmulador } from '../utils/entorno';
 
 const DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive',
@@ -31,6 +32,8 @@ type DriveClient = ReturnType<GoogleApisModule['google']['drive']>;
 
 const folderCache = new Map<string, string>();
 const rootFolderNameCache = new Map<string, string>();
+/** Lock por clave para evitar creaciones duplicadas concurrentes en la misma instancia. */
+const folderCreateLocks = new Map<string, Promise<string>>();
 let cachedServiceAccountEmail: string | null = null;
 let googleApisPromise: Promise<GoogleApisModule> | null = null;
 
@@ -42,7 +45,18 @@ async function loadGoogleApis(): Promise<GoogleApisModule> {
   return googleApisPromise;
 }
 
+function assertDriveNoTocaProduccion(): void {
+  if (enEmulador() && !driveHabilitadoEnEmulador()) {
+    throw new Error(
+      'Drive bloqueado en emulador para no escribir en la carpeta de producción. ' +
+        'Las fotos son opcionales en local. Para probar Drive, definí DRIVE_EN_EMULADOR=true ' +
+        'y un GOOGLE_DRIVE_FOLDER_ID de una carpeta de prueba (nunca la de prod).'
+    );
+  }
+}
+
 async function getDriveClient(): Promise<DriveClient> {
+  assertDriveNoTocaProduccion();
   const { google } = await loadGoogleApis();
   const auth = new google.auth.GoogleAuth({ scopes: DRIVE_SCOPES });
   return google.drive({ version: 'v3', auth });
@@ -133,9 +147,6 @@ async function assertRootFolderAccess(drive: DriveClient, folderId: string): Pro
     if (folder.mimeType !== 'application/vnd.google-apps.folder') {
       throw new HttpsError('invalid-argument', 'El ID configurado no corresponde a una carpeta de Google Drive.');
     }
-    if (!folder.driveId) {
-      throw new HttpsError('failed-precondition', sharedDriveRequiredMessage(saEmail));
-    }
   } catch (err) {
     if (err instanceof HttpsError) throw err;
     console.error('[assertRootFolderAccess]', folderId, saEmail, err);
@@ -144,10 +155,6 @@ async function assertRootFolderAccess(drive: DriveClient, folderId: string): Pro
       `La service account (${saEmail}) no puede acceder a la carpeta. ${driveErrorMessage(err, folderId, saEmail)}`
     );
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function findChildFolder(
@@ -206,37 +213,71 @@ async function createFolderOnDrive(
   return created.data.id;
 }
 
+function folderCacheDocId(parentId: string, name: string): string {
+  return `${parentId}__${name}`.replace(/\//g, '_').slice(0, 500);
+}
+
 /**
  * Busca carpeta en Drive; crea solo si no existe.
- * Las carpetas del servicio se preparan al iniciar enganche; acá solo se resuelven segmentos faltantes.
+ * Usa Firestore como lock distribuido para evitar duplicados entre instancias de CF:
+ * 1. Cache en memoria (misma instancia)
+ * 2. Firestore _driveFolders (cross-instancia, fuertemente consistente)
+ * 3. Drive files.list (eventualmente consistente, fallback)
+ * 4. Crear + claim atómico en Firestore (primer escritor gana)
  */
 async function getOrCreateFolder(drive: DriveClient, parentId: string, name: string): Promise<string> {
   const cacheKey = `${parentId}/${name}`;
   const cached = folderCache.get(cacheKey);
   if (cached) return cached;
 
-  for (let attempt = 0; attempt < 5; attempt++) {
+  const pendingLock = folderCreateLocks.get(cacheKey);
+  if (pendingLock) return pendingLock;
+
+  const work = (async () => {
+    const docRef = admin.firestore().collection('_driveFolders').doc(folderCacheDocId(parentId, name));
+
+    try {
+      const docSnap = await docRef.get();
+      if (docSnap.exists && docSnap.data()?.folderId) {
+        const folderId = docSnap.data()!.folderId as string;
+        folderCache.set(cacheKey, folderId);
+        return folderId;
+      }
+    } catch (err) {
+      console.warn('[getOrCreateFolder] Firestore cache read falló, continúa con Drive:', err);
+    }
+
     const existing = await findChildFolder(drive, parentId, name);
     if (existing) {
       folderCache.set(cacheKey, existing);
+      docRef.set({ folderId: existing, parentId, name }).catch(() => {});
       return existing;
     }
-    if (attempt < 4) {
-      await sleep(100 * (attempt + 1) + Math.floor(Math.random() * 50));
-    }
-  }
 
-  try {
-    const folderId = await createFolderOnDrive(drive, parentId, name);
-    folderCache.set(cacheKey, folderId);
-    return folderId;
-  } catch (err) {
-    const fallback = await findChildFolder(drive, parentId, name);
-    if (fallback) {
-      folderCache.set(cacheKey, fallback);
-      return fallback;
+    const created = await createFolderOnDrive(drive, parentId, name);
+
+    try {
+      await docRef.create({ folderId: created, parentId, name });
+    } catch {
+      try {
+        const snap = await docRef.get();
+        if (snap.exists && snap.data()?.folderId) {
+          const canonical = snap.data()!.folderId as string;
+          folderCache.set(cacheKey, canonical);
+          return canonical;
+        }
+      } catch { /* fallback al creado */ }
     }
-    throw err;
+
+    folderCache.set(cacheKey, created);
+    return created;
+  })();
+
+  folderCreateLocks.set(cacheKey, work);
+  try {
+    return await work;
+  } finally {
+    folderCreateLocks.delete(cacheKey);
   }
 }
 
@@ -273,27 +314,33 @@ async function ensureFolderPath(
 
 type FechaServicioInput = Date | string | { toDate: () => Date } | null | undefined;
 
-/** Crea la jerarquía de carpetas del servicio al iniciar enganche (fecha, legajo, acta, eng/des). */
+/** Inyecta un folder ID conocido en el caché para evitar creaciones duplicadas entre instancias. */
+export function seedFolderCache(parentId: string, name: string, folderId: string): void {
+  folderCache.set(`${parentId.trim()}/${name}`, folderId);
+}
+
+/** Crea carpeta fecha/servicio. Devuelve ambos folder IDs para persistirlos en Firestore. */
 export async function prepararCarpetasServicio(
   rootFolderId: string,
   legajo: string,
   patente: string,
   numeroInfraccion: string | undefined,
   fechaServicio?: FechaServicioInput
-): Promise<void> {
+): Promise<{ fechaFolderId: string; carpetaId: string }> {
   const folderId = rootFolderId.trim();
   if (!folderId) {
     throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
   }
 
-  const fechaStr = fechaCarpetaDrive(fechaServicio ?? new Date());
-  const legajoSafe = sanitizePathPart(legajo);
-  const servicioSafe = buildCarpetaPatenteInfraccion(patente, numeroInfraccion);
-  const basePath = ['Gruas', fechaStr, legajoSafe, servicioSafe];
+  const fecha = fechaServicio ?? new Date();
+  const fechaStr = fechaCarpetaDrive(fecha);
+  const carpetaServicio = buildCarpetaServicio(legajo, patente, numeroInfraccion, fecha);
 
   const drive = await getDriveClient();
-  await ensureFolderPath(drive, folderId, [...basePath, 'enganche']);
-  await ensureFolderPath(drive, folderId, [...basePath, 'desenganche']);
+  // Bajo Gruas/ (o directo en raíz si GOOGLE_DRIVE_FOLDER_ID ya es la carpeta Gruas).
+  const fechaFolderId = await ensureFolderPath(drive, folderId, ['Gruas', fechaStr]);
+  const carpetaId = await ensureFolderPath(drive, folderId, ['Gruas', fechaStr, carpetaServicio]);
+  return { fechaFolderId, carpetaId };
 }
 
 /** Resuelve parentId de una ruta relativa sin crear carpetas (solo listado Drive + caché en memoria). */
@@ -512,6 +559,26 @@ export async function obtenerUrlsPreviewFotos(
   return result;
 }
 
+/** Descarga la imagen de Drive, la rota 90° CW con sharp, y la re-sube al mismo fileId. */
+export async function rotarFotoEnDrive(driveFileId: string): Promise<void> {
+  const drive = await getDriveClient();
+
+  const res = await drive.files.get(
+    { fileId: driveFileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' }
+  );
+  const original = Buffer.from(res.data as ArrayBuffer);
+
+  const sharp = (await import('sharp')).default;
+  const rotated = await sharp(original).rotate(90).jpeg({ quality: 92 }).toBuffer();
+
+  await drive.files.update({
+    fileId: driveFileId,
+    media: { mimeType: 'image/jpeg', body: Readable.from(rotated) },
+    supportsAllDrives: true,
+  });
+}
+
 const MAX_FOTOS_PDF = 30;
 const MAX_BYTES_FOTO_PDF = 4 * 1024 * 1024;
 
@@ -602,4 +669,125 @@ export async function verificarAccesoDrive(folderId: string): Promise<VerificarD
       driveErrorMessage(err, normalizedId, serviceAccountEmail)
     );
   }
+}
+
+export interface SubirArchivoDriveResult {
+  driveFileId: string;
+  url: string;
+  folderId: string;
+}
+
+/** Sube un archivo privado (sin enlace público). No usar para fotos operativas. */
+export async function subirArchivoPrivadoDrive(
+  rootFolderId: string,
+  relativePath: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<SubirArchivoDriveResult> {
+  const folderId = rootFolderId.trim();
+  if (!folderId) {
+    throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
+  }
+
+  const parts = relativePath.split('/').filter(Boolean);
+  const fileName = parts.pop();
+  if (!fileName) {
+    throw new HttpsError('invalid-argument', 'Ruta de archivo inválida.');
+  }
+
+  const drive = await getDriveClient();
+  const parentId =
+    parts.length > 0 ? await ensureFolderPath(drive, folderId, parts) : folderId;
+
+  const existingFileId = await findFileInFolder(drive, parentId, fileName);
+  if (existingFileId) {
+    const updated = await drive.files.update({
+      fileId: existingFileId,
+      media: { mimeType, body: Readable.from(buffer) },
+      fields: 'id, webViewLink',
+      supportsAllDrives: true,
+    });
+    const fileId = updated.data.id ?? existingFileId;
+    return {
+      driveFileId: fileId,
+      url: updated.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
+      folderId: parentId,
+    };
+  }
+
+  const created = await drive.files.create({
+    requestBody: { name: fileName, parents: [parentId] },
+    media: { mimeType, body: Readable.from(buffer) },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
+  });
+
+  if (!created.data.id) {
+    throw new HttpsError('internal', 'Drive no devolvió el ID del archivo subido.');
+  }
+
+  return {
+    driveFileId: created.data.id,
+    url: created.data.webViewLink ?? `https://drive.google.com/file/d/${created.data.id}/view`,
+    folderId: parentId,
+  };
+}
+
+async function listChildFolders(
+  drive: DriveClient,
+  parentId: string
+): Promise<Array<{ id: string; name: string }>> {
+  const folders: Array<{ id: string; name: string }> = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'nextPageToken, files(id, name)',
+      pageSize: 100,
+      pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    for (const file of res.data.files ?? []) {
+      if (file.id && file.name) folders.push({ id: file.id, name: file.name });
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return folders;
+}
+
+/**
+ * Mueve a papelera las carpetas `YYYY-MM-DD` más viejas que `diasRetencion`
+ * dentro de `folderSegments` (p. ej. Backups).
+ */
+export async function purgarCarpetasFechaDrive(
+  rootFolderId: string,
+  folderSegments: string[],
+  diasRetencion: number
+): Promise<{ purged: string[] }> {
+  const folderId = rootFolderId.trim();
+  if (!folderId) {
+    throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
+  }
+
+  const drive = await getDriveClient();
+  const parentId = await ensureFolderPath(drive, folderId, folderSegments);
+  const children = await listChildFolders(drive, parentId);
+  const cutoff = Date.now() - diasRetencion * 24 * 60 * 60 * 1000;
+  const purged: string[] = [];
+
+  for (const child of children) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(child.name)) continue;
+    const folderDate = Date.parse(`${child.name}T00:00:00-03:00`);
+    if (Number.isNaN(folderDate) || folderDate >= cutoff) continue;
+
+    await drive.files.update({
+      fileId: child.id,
+      requestBody: { trashed: true },
+      supportsAllDrives: true,
+    });
+    purged.push(child.name);
+  }
+
+  return { purged };
 }

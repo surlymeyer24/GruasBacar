@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
@@ -35,9 +35,10 @@ export const DesenganchePage: React.FC = () => {
   const [corralonCompletadoNombre, setCorralonCompletadoNombre] = useState("");
 
   const { servicio, loading: serviceLoading } = useServicioActivo();
+  const completadoRef = useRef(false);
 
   useEffect(() => {
-    if (step === "COMPLETADO") return;
+    if (step === "COMPLETADO" || completadoRef.current) return;
     if (!profileLoading) {
       if (!userData || !esOperador(userData.roles)) {
         navigate(rutaInicioPorRoles(userData?.roles ?? []), { replace: true });
@@ -51,13 +52,14 @@ export const DesenganchePage: React.FC = () => {
   }, [userData, profileLoading, navigate, step]);
 
   useEffect(() => {
-    if (step === "COMPLETADO") return;
+    if (step === "COMPLETADO" || completadoRef.current) return;
     if (!servicio) return;
 
     if (servicio.estado === "DESENGANCHADO") {
       updateServicioActivo(null)
         .catch((err) => console.error("Error al liberar servicio entregado:", err))
         .finally(() => {
+          if (completadoRef.current) return;
           navigate("/", {
             replace: true,
             state: { successMsg: "Este servicio ya fue entregado. Grúa liberada." },
@@ -70,6 +72,7 @@ export const DesenganchePage: React.FC = () => {
       updateServicioActivo(null)
         .catch((err) => console.error("Error al liberar servicio anulado:", err))
         .finally(() => {
+          if (completadoRef.current) return;
           navigate(rutaInicioPorRoles(userData?.roles ?? []), { replace: true });
         });
       return;
@@ -157,13 +160,15 @@ export const DesenganchePage: React.FC = () => {
         userData.servicioActivoId,
         observacion || undefined
       );
-      await limpiarBorradorFotos(claveBorradorFotos(userData.servicioActivoId, "desenganche"));
 
+      completadoRef.current = true;
       if (servicio) {
         setServicioCompletado({ ...servicio, estado: "DESENGANCHADO" });
         setCorralonCompletadoNombre(activeCorralonName);
       }
       setStep("COMPLETADO");
+
+      limpiarBorradorFotos(claveBorradorFotos(userData.servicioActivoId, "desenganche")).catch(console.warn);
 
       updateServicioActivo(null).catch((err) =>
         console.error("Error al liberar servicio activo:", err)
@@ -176,6 +181,7 @@ export const DesenganchePage: React.FC = () => {
         msg.includes("ya fue entregado") ||
         servicio?.estado === "DESENGANCHADO"
       ) {
+        completadoRef.current = true;
         if (servicio) {
           setServicioCompletado({ ...servicio, estado: "DESENGANCHADO" });
           setCorralonCompletadoNombre(activeCorralonName);

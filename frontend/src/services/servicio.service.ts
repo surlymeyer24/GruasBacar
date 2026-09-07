@@ -1,6 +1,6 @@
 import { httpsCallable } from "firebase/functions";
-import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
-import { isMock, app, functions, db } from "../firebase";
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from "firebase/firestore";
+import { isMock, app, functions, db, esEntornoTest } from "../firebase";
 import { addMockService, getMockServices, updateMockService } from "../data/mockData";
 import { fotoService } from "./foto.service";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
@@ -12,17 +12,20 @@ import {
   ActualizarServicioPayload,
   AnularServicioPayload,
   AgregarComentarioFotoPayload,
+  RotarFotoPayload,
   ComentarioFoto,
   CrearActaManualPayload,
   enganchadorDeDupla,
   GeoPoint,
   buildIdentificadorCompuesto,
   normalizeGruaId,
+  parseFirestoreLikeDate,
 } from "@gruasbacar/shared";
 
 export interface IniciarEngancheData {
   numeroInfraccion?: string;
-  patente: string;
+  patente?: string;
+  descripcionVehiculo?: string;
   grua: string;
   gruaPatente?: string;
   dupla: string;
@@ -41,23 +44,27 @@ export const servicioService = {
       const cloudFn = httpsCallable<
         {
           numeroInfraccion?: string;
-          patente: string;
+          patente?: string;
+          descripcionVehiculo?: string;
           grua: string;
           dupla: { chofer: string; enganchador: string };
           geo: { lat: number; lng: number };
+          esTest?: boolean;
         },
         { servicioId: string }
       >(functions, "iniciarEnganche");
       try {
         const res = await cloudFn({
           numeroInfraccion: data.numeroInfraccion,
-          patente: data.patente,
+          ...(data.patente ? { patente: data.patente } : {}),
+          ...(data.descripcionVehiculo ? { descripcionVehiculo: data.descripcionVehiculo } : {}),
           grua: gruaPatente,
           dupla: {
             chofer: data.duplaChofer?.trim() || "—",
             enganchador: data.duplaEnganchador?.trim() || "—",
           },
           geo,
+          ...(esEntornoTest ? { esTest: true } : {}),
         });
         return res.data;
       } catch (err) {
@@ -86,7 +93,7 @@ export const servicioService = {
       }
     }
 
-    const patente = data.patente.toUpperCase().trim();
+    const patente = data.patente?.toUpperCase().trim() || "S/N";
     const numeroInfraccion = data.numeroInfraccion?.toUpperCase().trim() || undefined;
     const legajoChofer = data.legajoEnganchador?.trim() || "SIM";
     const gruaId = normalizeGruaId(patenteGruaParaServicio(data.gruaPatente, data.grua));
@@ -158,6 +165,19 @@ export const servicioService = {
     }
     const found = getMockServices().find((s) => s.id === servicioId);
     return found?.estado ?? null;
+  },
+
+  async actualizarPatente(servicioId: string, patente: string): Promise<void> {
+    if (!isMock && app) {
+      const cloudFn = httpsCallable<{ servicioId: string; patente: string }, { ok: boolean }>(
+        functions,
+        "actualizarPatenteServicio"
+      );
+      await cloudFn({ servicioId, patente });
+      return;
+    }
+    const found = getMockServices().find((s) => s.id === servicioId);
+    if (found) found.patente = patente.toUpperCase().trim();
   },
 
   async confirmarTraslado(servicioId: string): Promise<{ ok: true }> {
@@ -368,6 +388,9 @@ export async function actualizarServicio(data: ActualizarServicioPayload): Promi
     dupla: data.dupla,
     corralon: data.corralon ?? found.corralon,
     tipoFlota: data.tipoFlota ?? found.tipoFlota,
+    ...(data.descripcionVehiculo !== undefined
+      ? { descripcionVehiculo: data.descripcionVehiculo.trim() || undefined }
+      : {}),
   });
   updateMockService(found);
 }
@@ -416,6 +439,18 @@ export async function agregarComentarioFoto(
   return comentario;
 }
 
+export async function rotarFoto(data: RotarFotoPayload): Promise<void> {
+  if (!isMock) {
+    const fn = httpsCallable<RotarFotoPayload, { ok: boolean }>(functions, "rotarFoto");
+    try {
+      await fn(data);
+      return;
+    } catch (err) {
+      throw new Error(getFirebaseErrorMessage(err, "No se pudo rotar la foto."));
+    }
+  }
+}
+
 export async function anularServicio(data: AnularServicioPayload): Promise<void> {
   if (!isMock) {
     const fn = httpsCallable<AnularServicioPayload, { ok: boolean }>(functions, "anularServicio");
@@ -436,13 +471,18 @@ export async function anularServicio(data: AnularServicioPayload): Promise<void>
 }
 
 export async function crearActaManual(data: CrearActaManualPayload): Promise<{ servicioId: string }> {
+  const payload: CrearActaManualPayload = {
+    ...data,
+    ...(esEntornoTest ? { esTest: true } : {}),
+  };
+
   if (!isMock) {
     const fn = httpsCallable<CrearActaManualPayload, { servicioId: string }>(
       functions,
       "crearActaManual"
     );
     try {
-      const res = await fn(data);
+      const res = await fn(payload);
       return res.data;
     } catch (err) {
       throw new Error(
@@ -451,11 +491,11 @@ export async function crearActaManual(data: CrearActaManualPayload): Promise<{ s
     }
   }
 
-  const patente = data.patente.toUpperCase().trim();
-  const numeroInfraccion = data.numeroInfraccion?.toUpperCase().trim() || undefined;
-  const legajoChofer = data.legajoEnganchador.trim();
+  const patente = payload.patente.toUpperCase().trim();
+  const numeroInfraccion = payload.numeroInfraccion?.toUpperCase().trim() || undefined;
+  const legajoChofer = payload.legajoEnganchador.trim();
   if (!legajoChofer) throw new Error("El legajo del enganchador es obligatorio.");
-  const gruaId = normalizeGruaId(data.grua);
+  const gruaId = normalizeGruaId(payload.grua);
   const identificadorCompuesto = buildIdentificadorCompuesto(numeroInfraccion, legajoChofer, patente);
   addMockService({
     id: identificadorCompuesto,
@@ -464,14 +504,47 @@ export async function crearActaManual(data: CrearActaManualPayload): Promise<{ s
     identificadorCompuesto,
     estado: "DESENGANCHADO",
     grua: gruaId,
-    corralon: data.corralon ?? undefined,
+    corralon: payload.corralon ?? undefined,
     creadoPor: "mock-supervisor",
     legajoChofer,
-    dupla: data.dupla,
+    dupla: payload.dupla,
     origenManual: true,
+    ...(payload.esTest ? { esTest: true } : {}),
     creadoEn: new Date().toISOString(),
     finalizadoEn: new Date().toISOString(),
     eventos: [],
   } as Servicio);
   return { servicioId: identificadorCompuesto };
+}
+
+const TIMEOUT_DESHACER_MS = 10 * 60 * 1000;
+
+export async function obtenerUltimaAnulacionAutomatica(uid: string): Promise<Servicio | null> {
+  if (isMock || !db) return null;
+  const q = query(
+    collection(db, "servicios"),
+    where("creadoPor", "==", uid),
+    where("estado", "==", "ANULADO"),
+    where("anulacionAutomatica", "==", true),
+    orderBy("anuladoEn", "desc"),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+
+  const docSnap = snap.docs[0];
+  const data = docSnap.data() as Servicio;
+  const anuladoEn = parseFirestoreLikeDate(data.anuladoEn);
+  if (!anuladoEn) return null;
+
+  const elapsed = Date.now() - anuladoEn.getTime();
+  if (elapsed > TIMEOUT_DESHACER_MS) return null;
+
+  return { ...data, id: docSnap.id };
+}
+
+export async function deshacerAnulacionAutomatica(servicioId: string): Promise<void> {
+  if (isMock) return;
+  const fn = httpsCallable(functions, "deshacerAnulacionAutomatica");
+  await fn({ servicioId });
 }

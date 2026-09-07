@@ -1,15 +1,16 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { esOperador, rutaInicioPorRoles } from "@gruasbacar/shared";
-import HomePage from "../../pages/HomePage";
+
+const HomePage = lazy(() => import("../../pages/HomePage"));
 
 /** Home operador; admin sin rol de campo va al dashboard admin. */
 export const HomeRoute: React.FC = () => {
   const { userData, sessionLoading, profileLoading } = useAuth();
 
-  if (sessionLoading || profileLoading) {
+  if (sessionLoading || (profileLoading && !userData)) {
     return <LoadingSpinner fullScreen message="Cargando..." />;
   }
 
@@ -21,7 +22,11 @@ export const HomeRoute: React.FC = () => {
     return <Navigate to={rutaInicioPorRoles(userData.roles)} replace />;
   }
 
-  return <HomePage />;
+  return (
+    <Suspense fallback={<LoadingSpinner fullScreen message="Cargando..." />}>
+      <HomePage />
+    </Suspense>
+  );
 };
 
 export default HomeRoute;

@@ -72,6 +72,27 @@ export function gruaIdParaServicio(
   return normalizeGruaId(candidata);
 }
 
+/** Devuelve la descripción de la grúa, o la patente si no tiene descripción. */
+export function resolverDescripcionGrua(
+  gruaValor: string | undefined,
+  gruas: Grua[] = []
+): string {
+  if (!gruaValor?.trim()) return "—";
+
+  const val = gruaValor.trim();
+
+  const byDocId = gruas.find((g) => g.id === val);
+  if (byDocId?.descripcion?.trim()) return byDocId.descripcion.trim();
+
+  const patente = resolverPatenteGrua(val, gruas);
+  const byPatente = gruas.find(
+    (g) => g.patente?.trim().toUpperCase() === patente.toUpperCase()
+  );
+  if (byPatente?.descripcion?.trim()) return byPatente.descripcion.trim();
+
+  return patente;
+}
+
 /** Devuelve "Descripción — PATENTE" o solo la patente si no hay descripción. */
 export function resolverLabelGrua(
   gruaValor: string | undefined,

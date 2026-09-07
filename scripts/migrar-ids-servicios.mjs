@@ -6,25 +6,14 @@
  *   npm run migrate-servicios
  *   npm run migrate-servicios -- --apply
  */
-import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
 import {
   buildIdentificadorCompuesto,
   normalizeGruaId,
 } from '../shared/dist/index.js';
+import { initProdAdmin } from './lib/initFirebaseAdmin.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-
+const { db } = initProdAdmin(process.argv, { scriptName: 'migrar-ids-servicios.mjs' });
 const dryRun = !process.argv.includes('--apply');
-
-const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
-admin.initializeApp({ credential: admin.credential.cert(JSON.parse(readFileSync(keyPath, 'utf8'))) });
-
-const db = admin.firestore();
 
 async function copySubcollection(fromRef, toRef, name) {
   const snap = await fromRef.collection(name).get();

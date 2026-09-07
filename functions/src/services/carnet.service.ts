@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { notificarAdmins } from './notification.service';
+import { construirEmailVencimiento } from './email.service';
 import { TipoNotificacion, diasParaVencimiento } from '@gruasbacar/shared';
 
 const db = admin.firestore;
@@ -103,16 +104,28 @@ export async function verificarVencimientosCarnets(): Promise<void> {
 
     for (const umbral of UMBRALES) {
       if (dias === umbral.dias) {
+        const nombre = data.nombre as string;
+        const legajo = data.legajo as string;
+        const numStr = String(data.numero).padStart(6, '0');
+        const fechaVenc = data.fechaVencimiento as string;
+
         await notificarAdmins({
           tipo: umbral.tipo,
-          titulo: `Carnet por vencer — ${data.nombre}`,
-          cuerpo: `El carnet #${String(data.numero).padStart(6, '0')} de ${data.nombre} (legajo ${data.legajo}) vence en ${dias} días (${data.fechaVencimiento}).`,
+          titulo: `Carnet por vencer — ${nombre}`,
+          cuerpo: `El carnet #${numStr} de ${nombre} (legajo ${legajo}) vence en ${dias} días (${fechaVenc}).`,
           claveDedup: `carnet_venc:${doc.id}:${umbral.dias}d`,
           datos: {
             carnetId: doc.id,
-            operadorNombre: data.nombre as string,
+            operadorNombre: nombre,
             diasRestantes: String(dias),
           },
+          email: construirEmailVencimiento({
+            tipoDoc: 'Carnet',
+            identificador: `#${numStr}`,
+            descripcion: `${nombre} (legajo ${legajo})`,
+            fechaVencimiento: fechaVenc,
+            diasRestantes: dias,
+          }),
         });
         break;
       }

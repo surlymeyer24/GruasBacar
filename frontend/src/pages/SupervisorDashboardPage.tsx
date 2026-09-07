@@ -3,18 +3,28 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
-import { Truck, Link2, Route, CheckCircle2, CalendarDays } from "lucide-react";
+import { Truck, Link2, Route, CheckCircle2, CalendarDays, CalendarCheck } from "lucide-react";
 import { isMock } from "../firebase";
-import { duplaEnganchadorDeAsignacion, displayPatente } from "@gruasbacar/shared";
+import { Grua, duplaEnganchadorDeAsignacion, displayPatente, labelTipoFlota } from "@gruasbacar/shared";
 import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
+import { gruaService } from "../services/grua.service";
+import { resolverDescripcionGrua, resolverPatenteGrua } from "../utils/gruaDisplay";
 
 export const SupervisorDashboardPage: React.FC = () => {
-  const { loading } = useAuth();
+  const { userData, sessionLoading, profileLoading } = useAuth();
+  const authPending = sessionLoading || (profileLoading && !userData);
 
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [gruasCatalog, setGruasCatalog] = useState<Grua[]>([]);
   const [now, setNow] = useState(() => new Date());
+
+  const etiquetaGrua = (gruaId: string) => {
+    const desc = resolverDescripcionGrua(gruaId, gruasCatalog);
+    const pat = resolverPatenteGrua(gruaId, gruasCatalog);
+    return { desc, pat, mostrarPatente: desc !== pat && pat !== "—" };
+  };
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
@@ -22,7 +32,7 @@ export const SupervisorDashboardPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (loading || isMock) return;
+    if (authPending || isMock) return;
 
     let cancelled = false;
     setLoadingStats(true);
@@ -37,7 +47,9 @@ export const SupervisorDashboardPage: React.FC = () => {
             actasEnEnganche: 0,
             actasEnTraslado: 0,
             actasFinalizadas: 0,
+            actasHoy: 0,
             actasEsteMes: 0,
+            hoyLabel: "",
             mesActualLabel: "",
             gruasActivas: 0,
             gruasEnOperacion: 0,
@@ -50,12 +62,19 @@ export const SupervisorDashboardPage: React.FC = () => {
         if (!cancelled) setLoadingStats(false);
       });
 
+    gruaService
+      .getAllGruas()
+      .then((gruas) => {
+        if (!cancelled) setGruasCatalog(gruas);
+      })
+      .catch((err) => console.error("Error cargando catálogo de grúas:", err));
+
     return () => {
       cancelled = true;
     };
-  }, [loading, isMock]);
+  }, [authPending, isMock]);
 
-  if (loading) {
+  if (authPending) {
     return <LoadingSpinner fullScreen message="Cargando panel de supervisión..." />;
   }
 
@@ -92,9 +111,27 @@ export const SupervisorDashboardPage: React.FC = () => {
         </div>
 
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 items-stretch">
             <Link
-              to="/reportes"
+              to="/historial?periodo=hoy"
+              className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-sky-500 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
+            >
+              <div>
+                <p className="text-xs font-bold text-brand-pale uppercase tracking-widest">Actas hoy</p>
+                <p className="text-2xl font-black text-brand-purply mt-1">
+                  {loadingStats ? "—" : (stats?.actasHoy ?? 0)}
+                </p>
+                <p className="text-[10px] text-brand-pale mt-0.5 capitalize">
+                  {stats?.hoyLabel ?? "—"}
+                </p>
+              </div>
+              <div className="p-3 bg-sky-50 text-sky-600 rounded-xl shrink-0">
+                <CalendarCheck className="w-6 h-6" />
+              </div>
+            </Link>
+
+            <Link
+              to="/historial?periodo=mes"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-violet-500 shadow-sm hover:shadow-md hover:border-violet-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -112,7 +149,7 @@ export const SupervisorDashboardPage: React.FC = () => {
             </Link>
 
             <Link
-              to="/historial"
+              to="/historial?estado=ENGANCHADO"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-amber-500 shadow-sm hover:shadow-md hover:border-amber-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -127,7 +164,7 @@ export const SupervisorDashboardPage: React.FC = () => {
             </Link>
 
             <Link
-              to="/historial"
+              to="/historial?estado=EN_TRASLADO"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-brand-cta shadow-sm hover:shadow-md hover:border-brand-cta/30 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -142,7 +179,7 @@ export const SupervisorDashboardPage: React.FC = () => {
             </Link>
 
             <Link
-              to="/historial"
+              to="/historial?estado=DESENGANCHADO"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -164,7 +201,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                     ? "—"
                     : `${stats?.gruasEnOperacion ?? 0} de ${stats?.gruasActivas ?? 0}`}
                 </p>
-                <p className="text-[10px] text-brand-pale mt-0.5">Activas con servicio / flota habilitada</p>
+                <p className="text-[10px] text-brand-pale mt-0.5">Con turno configurado hoy / flota habilitada</p>
               </div>
               <div className="p-3 bg-brand-cta/10 text-brand-cta rounded-xl shrink-0">
                 <Truck className="w-6 h-6" />
@@ -180,7 +217,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                   Actas Abiertas ({stats?.serviciosActivos?.length ?? 0})
                 </h3>
               </div>
-              <div className="space-y-3 overflow-y-auto pr-1 pb-1">
+              <div className="space-y-3 overflow-y-auto scrollbar-hide pr-1 pb-1">
                 {loadingStats ? (
                   <p className="text-xs text-brand-pale text-center py-2">Cargando...</p>
                 ) : stats?.serviciosActivos?.length === 0 ? (
@@ -188,22 +225,33 @@ export const SupervisorDashboardPage: React.FC = () => {
                     No hay actas en curso.
                   </p>
                 ) : (
-                  stats?.serviciosActivos?.map((s, idx) => (
-                    <div
+                  stats?.serviciosActivos?.map((s, idx) => {
+                    const grua = etiquetaGrua(s.grua);
+                    return (
+                    <Link
                       key={s.id ?? `${s.patente}-${s.numeroInfraccion}-${idx}`}
-                      className="p-3 bg-brand-bg rounded-xl border border-brand-seashell flex justify-between items-center hover:border-brand-cta/30 transition-colors"
+                      to={`/historial?servicio=${encodeURIComponent(s.id)}`}
+                      className="block p-3 bg-brand-bg rounded-xl border border-brand-seashell flex justify-between items-center hover:border-brand-cta/30 transition-colors cursor-pointer"
                     >
                       <div>
-                        <p className="font-mono text-sm font-bold text-brand-purply">{displayPatente(s.patente)}</p>
+                        <p className="font-mono text-sm font-bold text-brand-purply">{displayPatente(s.patente, s.descripcionVehiculo)}</p>
                         <p className="text-[10px] text-brand-pale">
-                          Grúa: <span className="font-bold">{s.grua}</span>{s.numeroInfraccion ? ` • N°: ${s.numeroInfraccion}` : ''}
+                          Grúa:{" "}
+                          <span className="font-bold text-brand-purply/80">
+                            {grua.desc}
+                            {grua.mostrarPatente ? (
+                              <span className="font-mono text-brand-pale/70 ml-1">({grua.pat})</span>
+                            ) : null}
+                          </span>
+                          {s.numeroInfraccion ? ` • N°: ${s.numeroInfraccion}` : ""}
                         </p>
                       </div>
                       <span className="text-[9px] font-bold bg-brand-cta/10 text-brand-cta px-2 py-0.5 rounded-full border border-brand-cta/20 uppercase font-mono">
                         {s.estado.replace("_", " ")}
                       </span>
-                    </div>
-                  ))
+                    </Link>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -215,7 +263,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                   Operadores en Turno ({stats?.usuariosEnTurno?.length ?? 0})
                 </h3>
               </div>
-              <div className="space-y-3 overflow-y-auto pr-1 pb-1">
+              <div className="space-y-3 overflow-y-auto scrollbar-hide pr-1 pb-1">
                 {loadingStats ? (
                   <p className="text-xs text-brand-pale text-center py-2">Cargando...</p>
                 ) : stats?.usuariosEnTurno?.length === 0 ? (
@@ -233,8 +281,9 @@ export const SupervisorDashboardPage: React.FC = () => {
                         <p className="text-[10px] text-brand-pale mt-0.5">
                           Grúa:{" "}
                           <span className="font-bold text-brand-purply/80">
-                            {u.asignacionDiaria.gruaDescripcion ? `${u.asignacionDiaria.gruaDescripcion} — ` : ""}{u.asignacionDiaria.gruaPatente}
+                            {u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPatente}{u.asignacionDiaria.gruaDescripcion && u.asignacionDiaria.gruaPatente ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPatente})</span> : null}
                           </span>{" "}
+                          {u.asignacionDiaria.tipoFlota ? <span className="bg-brand-bg px-1.5 py-0.5 rounded text-[9px] font-medium text-brand-purply border border-brand-seashell">{labelTipoFlota(u.asignacionDiaria.tipoFlota)}</span> : null}{" "}
                           • D: {u.asignacionDiaria.duplaChofer} +{" "}
                           {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}
                         </p>

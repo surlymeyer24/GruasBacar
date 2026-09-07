@@ -1,10 +1,10 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import {
-  sanitizePathPart,
-  buildCarpetaPatenteInfraccion,
+  buildCarpetaServicio,
   fechaCarpetaDrive,
 } from '../utils/validators';
+import { driveHabilitadoEnEmulador, enEmulador } from '../utils/entorno';
 
 function db() {
   return admin.firestore();
@@ -199,6 +199,12 @@ export async function migrarCarpetasDrive(
   rootFolderId: string,
   dryRun: boolean
 ): Promise<MigrationResult> {
+  if (enEmulador() && !driveHabilitadoEnEmulador()) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Migración de Drive deshabilitada en emulador (no se toca el Drive de producción).'
+    );
+  }
   const folderId = rootFolderId.trim();
   if (!folderId) {
     throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
@@ -244,18 +250,12 @@ export async function migrarCarpetasDrive(
     const fotos = extractFotosFromEventos(eventosSnap);
     if (fotos.length === 0) continue;
 
-    const fechaStr = fechaCarpetaDrive(fechaServicio);
-    const legajoSafe = sanitizePathPart(legajo);
-    const servicioSafe = buildCarpetaPatenteInfraccion(patente, numeroInfraccion);
+    const carpetaServicio = buildCarpetaServicio(legajo, patente, numeroInfraccion, fechaServicio);
 
-    // Resolver carpetas correctas (enganche/desenganche) una sola vez por servicio
-    const correctParentIds: Record<string, string> = {};
-    for (const carpeta of ['enganche', 'desenganche'] as const) {
-      const segments = ['Gruas', fechaStr, legajoSafe, servicioSafe, carpeta];
-      correctParentIds[carpeta] = await ensureFolderPath(
-        drive, folderId, rootFolderName.trim().toLowerCase(), segments
-      );
-    }
+    const fechaStr = fechaCarpetaDrive(fechaServicio);
+    const correctParentId = await ensureFolderPath(
+      drive, folderId, rootFolderName.trim().toLowerCase(), ['Gruas', fechaStr, carpetaServicio]
+    );
 
     // Obtener parents actuales en batch
     const fileIds = fotos.map((f) => f.driveFileId);
@@ -275,9 +275,9 @@ export async function migrarCarpetasDrive(
         continue;
       }
 
-      const correctParentId = correctParentIds[foto.carpeta];
+      const correctParent = correctParentId;
 
-      if (currentParentId === correctParentId) {
+      if (currentParentId === correctParent) {
         result.alreadyCorrect++;
         result.details.push({
           servicioId,
@@ -289,12 +289,12 @@ export async function migrarCarpetasDrive(
 
       try {
         const fromName = await getFolderName(drive, currentParentId);
-        const toPath = `${fechaStr}/${legajoSafe}/${servicioSafe}/${foto.carpeta}`;
+        const toPath = carpetaServicio;
 
         if (!dryRun) {
           await drive.files.update({
             fileId: foto.driveFileId,
-            addParents: correctParentId,
+            addParents: correctParent,
             removeParents: currentParentId,
             supportsAllDrives: true,
           });

@@ -3,6 +3,7 @@ import { Evento, Servicio } from "@gruasbacar/shared";
 import { db, isMock } from "../firebase";
 import { getMockServices } from "../data/mockData";
 import { fechaServicio } from "../utils/formatters";
+import { filtrarActasPorEntorno } from "../utils/actasEntorno";
 
 export type AdminServiciosScope = "full" | `personal:${string}`;
 
@@ -14,6 +15,7 @@ export interface AdminServiciosData {
 type ScopeEntry = {
   data: AdminServiciosData | null;
   loading: Promise<AdminServiciosData> | null;
+  fetchedAt: number;
 };
 
 const byScope = new Map<AdminServiciosScope, ScopeEntry>();
@@ -21,7 +23,7 @@ const byScope = new Map<AdminServiciosScope, ScopeEntry>();
 function getEntry(scope: AdminServiciosScope): ScopeEntry {
   let entry = byScope.get(scope);
   if (!entry) {
-    entry = { data: null, loading: null };
+    entry = { data: null, loading: null, fetchedAt: 0 };
     byScope.set(scope, entry);
   }
   return entry;
@@ -51,13 +53,15 @@ async function fetchServiciosList(scope: AdminServiciosScope): Promise<Servicio[
       (a, b) =>
         (fechaServicio(b)?.getTime() ?? 0) - (fechaServicio(a)?.getTime() ?? 0)
     );
-    return list;
+    return filtrarActasPorEntorno(list);
   }
 
   const allServices = getMockServices();
-  if (scope === "full") return allServices;
-  const uid = scope.slice("personal:".length);
-  return allServices.filter((s) => s.creadoPor === uid);
+  const scoped =
+    scope === "full"
+      ? allServices
+      : allServices.filter((s) => s.creadoPor === scope.slice("personal:".length));
+  return filtrarActasPorEntorno(scoped);
 }
 
 function photoCountFromServicio(s: Servicio): number | undefined {
@@ -123,10 +127,14 @@ export function getAdminServiciosSnapshot(scope: AdminServiciosScope): AdminServ
 
 export async function ensureAdminServicios(
   scope: AdminServiciosScope,
-  options: { withPhotoCounts?: boolean; force?: boolean } = {}
+  options: { withPhotoCounts?: boolean; force?: boolean; maxAge?: number } = {}
 ): Promise<AdminServiciosData> {
-  const { withPhotoCounts = false, force = false } = options;
+  const { withPhotoCounts = false, maxAge } = options;
   const entry = getEntry(scope);
+  const stale = maxAge != null && entry.fetchedAt > 0
+    ? Date.now() - entry.fetchedAt > maxAge
+    : false;
+  const force = options.force === true || stale;
 
   if (!force && entry.data) {
     if (!withPhotoCounts || entry.data.photoCounts !== undefined) {
@@ -158,6 +166,7 @@ export async function ensureAdminServicios(
     const photoCounts = withPhotoCounts ? await fetchPhotoCounts(servicios) : undefined;
     const data: AdminServiciosData = { servicios, photoCounts };
     entry.data = data;
+    entry.fetchedAt = Date.now();
     entry.loading = null;
     return data;
   })().catch((err) => {

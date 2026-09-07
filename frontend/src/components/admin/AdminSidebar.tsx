@@ -81,6 +81,14 @@ export const AdminSidebar: React.FC = () => {
               <LayoutDashboard className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Dashboard</span>}
             </NavLink>
+            <NavLink
+              to="/supervisor/nueva-acta"
+              className={linkClass}
+              title={collapsed ? "Nueva acta" : undefined}
+            >
+              <FilePlus className="w-4 h-4 shrink-0" />
+              {!collapsed && <span className="truncate">Nueva acta</span>}
+            </NavLink>
             <NavLink to="/turnos" className={linkClass} title={collapsed ? "Diagramación" : undefined}>
               <LayoutGrid className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Diagramación</span>}
@@ -115,14 +123,16 @@ export const AdminSidebar: React.FC = () => {
               <LayoutDashboard className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Dashboard</span>}
             </NavLink>
-            <NavLink
-              to="/supervisor/nueva-acta"
-              className={linkClass}
-              title={collapsed ? "Nueva acta" : undefined}
-            >
-              <FilePlus className="w-4 h-4 shrink-0" />
-              {!collapsed && <span className="truncate">Nueva acta</span>}
-            </NavLink>
+            {isSupervisorOnly && (
+              <NavLink
+                to="/supervisor/nueva-acta"
+                className={linkClass}
+                title={collapsed ? "Nueva acta" : undefined}
+              >
+                <FilePlus className="w-4 h-4 shrink-0" />
+                {!collapsed && <span className="truncate">Nueva acta</span>}
+              </NavLink>
+            )}
             <NavLink to="/historial" className={linkClass} title={collapsed ? "Historial" : undefined}>
               <History className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Historial</span>}

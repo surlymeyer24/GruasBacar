@@ -7,9 +7,9 @@ import ReportesPanel from "../components/reportes/ReportesPanel";
 import { puedeVerHistorialCompleto, rutaInicioPorRoles } from "@gruasbacar/shared";
 
 export const ReportesPage: React.FC = () => {
-  const { userData, loading } = useAuth();
+  const { userData, sessionLoading, profileLoading } = useAuth();
 
-  if (loading) {
+  if (sessionLoading || (profileLoading && !userData)) {
     return <LoadingSpinner fullScreen message="Cargando reportes..." />;
   }
 

@@ -26,10 +26,9 @@ import {
   cargarLogoBacar,
   cargarImagenParaPdf,
   fitAspectInBox,
-  nombreArchivoPdfSupervisor,
+  nombreArchivoPdf,
   reportProgress,
   fotoKey,
-  descargarPdfsSecuencial,
 } from "./exportActaPdfShared";
 
 const PAGE_W = 210;
@@ -620,16 +619,15 @@ function drawSeccionesComunes(
   return y;
 }
 
-function buildPdfSupervisor(
-  JsPDF: Awaited<ReturnType<typeof crearPdf>>,
+function buildParteSupervisor(
+  doc: JsPDFType,
   logo: LogoAsset | null,
   ctx: SupervisorPdfContext,
   parte: "ENGANCHE" | "DESENGANCHE",
   eventosParte: Evento[],
   fotosAnexo: FotoAnexoItem[],
   imagenesAnexo: Map<string, ImagenPdf>
-): JsPDFType {
-  const doc = new JsPDF({ unit: "mm", format: "a4" });
+): void {
   let y = drawHeader(doc, logo, ctx.servicio, parte);
   y = drawSeccionesComunes(doc, y, ctx, parte);
 
@@ -672,9 +670,6 @@ function buildPdfSupervisor(
     );
     drawAnexoFotografico(doc, fotosAnexo, imagenesAnexo, parte === "ENGANCHE" ? "Enganche" : "Desenganche");
   }
-
-  drawFooters(doc);
-  return doc;
 }
 
 function filtrarFotosAnexo(items: FotoAnexoItem[], tipo: "ENGANCHE" | "DESENGANCHE"): FotoAnexoItem[] {
@@ -741,9 +736,11 @@ export async function exportActaPdfSupervisor(options: ExportActaPdfOptions): Pr
     eventoDesenganche,
   };
 
-  reportProgress(onProgress, 72, "Generando PDF de enganche…");
-  const docEnganche = buildPdfSupervisor(
-    JsPDF,
+  reportProgress(onProgress, 72, "Generando PDF…");
+  const doc = new JsPDF({ unit: "mm", format: "a4" });
+
+  buildParteSupervisor(
+    doc,
     logo,
     ctx,
     "ENGANCHE",
@@ -752,9 +749,10 @@ export async function exportActaPdfSupervisor(options: ExportActaPdfOptions): Pr
     imagenesAnexo
   );
 
-  reportProgress(onProgress, 84, "Generando PDF de desenganche…");
-  const docDesenganche = buildPdfSupervisor(
-    JsPDF,
+  doc.addPage();
+
+  buildParteSupervisor(
+    doc,
     logo,
     ctx,
     "DESENGANCHE",
@@ -763,19 +761,22 @@ export async function exportActaPdfSupervisor(options: ExportActaPdfOptions): Pr
     imagenesAnexo
   );
 
-  reportProgress(onProgress, 96, "Guardando archivos PDF…");
+  drawFooters(doc);
 
-  const blobEnganche = docEnganche.output("blob");
-  const blobDesenganche = docDesenganche.output("blob");
+  reportProgress(onProgress, 96, "Guardando PDF…");
+
+  const blob = doc.output("blob");
 
   if (returnBlob) {
-    reportProgress(onProgress, 100, "PDFs listos");
-    return blobEnganche;
+    reportProgress(onProgress, 100, "PDF listo");
+    return blob;
   }
 
-  await descargarPdfsSecuencial([
-    { blob: blobEnganche, filename: nombreArchivoPdfSupervisor(servicio, "enganche") },
-    { blob: blobDesenganche, filename: nombreArchivoPdfSupervisor(servicio, "desenganche") },
-  ]);
-  reportProgress(onProgress, 100, "PDFs listos");
+  const filename = nombreArchivoPdf(servicio);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  reportProgress(onProgress, 100, "PDF listo");
 }

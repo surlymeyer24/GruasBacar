@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Bell, CheckCheck } from "lucide-react";
-import { Notificacion, RUTA_NOTIF_TURNOS, RUTA_NOTIF_HISTORIAL } from "@gruasbacar/shared";
+import { Notificacion, RUTA_NOTIF_TURNOS, RUTA_NOTIF_HISTORIAL, esAdmin } from "@gruasbacar/shared";
 import { useNotifications } from "../../context/NotificationProvider";
+import { useAuth } from "../../hooks/useAuth";
+import { GestionSolicitudModal } from "../admin/GestionSolicitudModal";
 
 function tiempoRelativo(creadaEn: unknown): string {
   const ms = (() => {
@@ -22,6 +24,10 @@ function tiempoRelativo(creadaEn: unknown): string {
   return `hace ${Math.floor(diffH / 24)} d`;
 }
 
+function esSolicitudGestionable(notif: Notificacion): boolean {
+  return notif.tipo === "SOLICITUD_CAMBIO_GRUA" || notif.tipo === "SOLICITUD_RECONFIG_TURNO";
+}
+
 function rutaAccion(notif: Notificacion): string | null {
   const ruta = notif.datos?.accionRuta;
   if (ruta) return ruta;
@@ -34,12 +40,18 @@ function rutaAccion(notif: Notificacion): string | null {
   if (notif.tipo === "CARNET_POR_VENCER_30D" || notif.tipo === "CARNET_POR_VENCER_15D" || notif.tipo === "CARNET_POR_VENCER_7D") {
     return "/documentacion";
   }
+  if (notif.tipo === "ITV_POR_VENCER_7D" || notif.tipo === "ITV_POR_VENCER_1D") {
+    return "/documentacion";
+  }
   return null;
 }
 
 export const NotificationBell: React.FC = () => {
   const { notificaciones, noLeidas, marcarLeida, marcarTodasLeidas } = useNotifications();
+  const { userData } = useAuth();
+  const isAdmin = esAdmin(userData?.roles ?? []);
   const [abierto, setAbierto] = useState(false);
+  const [solicitudModal, setSolicitudModal] = useState<Notificacion | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -62,6 +74,13 @@ export const NotificationBell: React.FC = () => {
         console.error(err);
       }
     }
+
+    if (isAdmin && esSolicitudGestionable(notif)) {
+      setAbierto(false);
+      setSolicitudModal(notif);
+      return;
+    }
+
     const ruta = rutaAccion(notif);
     if (ruta) {
       setAbierto(false);
@@ -174,6 +193,13 @@ export const NotificationBell: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+      {solicitudModal && (
+        <GestionSolicitudModal
+          notificacion={solicitudModal}
+          onClose={() => setSolicitudModal(null)}
+          onResolved={() => setSolicitudModal(null)}
+        />
       )}
     </div>
   );

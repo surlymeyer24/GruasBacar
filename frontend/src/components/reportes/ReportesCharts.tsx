@@ -1,5 +1,5 @@
 import React from "react";
-import { displayPatente } from "@gruasbacar/shared";
+import { displayPatente, formatDuracion } from "@gruasbacar/shared";
 import {
   Area,
   AreaChart,
@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { ReportesAggregations, ReportesKpis } from "../../hooks/useReportesData";
+import type { ReportesAggregations, ReportesKpis, AnalisisTramos } from "../../hooks/useReportesData";
 
 const CHART_COLORS = {
   purple: "#7C3AED",
@@ -37,8 +37,15 @@ const ESTADO_COLORS: Record<string, string> = {
 interface ReportesChartsProps {
   kpis: ReportesKpis;
   aggregations: ReportesAggregations;
+  analisisTramos: AnalisisTramos;
   generated: boolean;
 }
+
+const TRAMO_COLORS: Record<string, string> = {
+  enganche: CHART_COLORS.orange,
+  traslado: CHART_COLORS.blue,
+  desenganche: CHART_COLORS.green,
+};
 
 function EmptyChart({ message }: { message: string }) {
   return (
@@ -51,6 +58,7 @@ function EmptyChart({ message }: { message: string }) {
 export const ReportesCharts: React.FC<ReportesChartsProps> = ({
   kpis,
   aggregations,
+  analisisTramos,
   generated,
 }) => {
   if (!generated) {
@@ -266,6 +274,103 @@ export const ReportesCharts: React.FC<ReportesChartsProps> = ({
           <EmptyChart message="Sin datos de duplas" />
         )}
       </div>
+
+      {/* Tiempos por tramo */}
+      {analisisTramos.stats.length > 0 && (
+        <>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h3 className="text-sm font-bold text-gray-800 mb-4 text-center">
+              Tiempo promedio por tramo
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              {analisisTramos.stats.map((st) => (
+                <div
+                  key={st.tramo}
+                  className="rounded-xl border border-gray-100 p-4 text-center"
+                  style={{ borderLeftWidth: 4, borderLeftColor: TRAMO_COLORS[st.tramo] }}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                    {st.label}
+                  </p>
+                  <p className="text-xl font-bold" style={{ color: TRAMO_COLORS[st.tramo] }}>
+                    {st.promedioLabel}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-1">{st.count} actas</p>
+                </div>
+              ))}
+            </div>
+
+            <h4 className="text-xs font-semibold text-gray-600 mb-3 text-center">
+              Distribución de tiempos
+            </h4>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={analisisTramos.distribucion} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="bucket" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                <Legend />
+                <Bar dataKey="enganche" name="Enganche" fill={CHART_COLORS.orange} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="traslado" name="Traslado" fill={CHART_COLORS.blue} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="desenganche" name="Desenganche" fill={CHART_COLORS.green} radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {analisisTramos.outliers.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-x-auto">
+              <h3 className="text-sm font-bold text-gray-800 mb-1">
+                Actas fuera de la media
+              </h3>
+              <p className="text-xs text-gray-400 mb-4">
+                Servicios que superaron 1 desviación estándar en algún tramo
+              </p>
+              <table className="w-full text-sm min-w-[720px]">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {["Patente", "Acta", "Tramo", "Duración", "Promedio", "Desvíos", "Dupla", "Grúa", "Fecha"].map(
+                      (col) => (
+                        <th
+                          key={col}
+                          className="text-left py-2 px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400"
+                        >
+                          {col}
+                        </th>
+                      )
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {analisisTramos.outliers.slice(0, 30).map((o, i) => (
+                    <tr key={`${o.patente}-${o.tramo}-${i}`} className="border-b border-gray-50 hover:bg-gray-50/50">
+                      <td className="py-2 px-3 font-mono text-gray-800">{displayPatente(o.patente)}</td>
+                      <td className="py-2 px-3 text-gray-700">{o.acta}</td>
+                      <td className="py-2 px-3">
+                        <span
+                          className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold text-white"
+                          style={{ backgroundColor: TRAMO_COLORS[o.tramo] }}
+                        >
+                          {o.tramoLabel}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-gray-900">{o.duracionLabel}</td>
+                      <td className="py-2 px-3 text-gray-500">{formatDuracion(o.promedioMs)}</td>
+                      <td className="py-2 px-3">
+                        <span className={`font-semibold ${o.desvios >= 2 ? 'text-red-600' : 'text-amber-600'}`}>
+                          +{o.desvios}σ
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-gray-700">{o.dupla}</td>
+                      <td className="py-2 px-3 font-mono text-gray-700">{o.grua}</td>
+                      <td className="py-2 px-3 text-gray-700">{o.fecha}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Tabla resumen */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 overflow-x-auto">

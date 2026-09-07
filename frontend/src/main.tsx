@@ -8,13 +8,11 @@ registerSW({
   immediate: true,
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
-    const checkForUpdate = () => {
+    // No chequear updates al volver de la cámara nativa: autoUpdate +
+    // visibilitychange puede recargar la PWA a mitad del flujo de fotos.
+    window.setInterval(() => {
       void registration.update().catch(() => {});
-    };
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') checkForUpdate();
-    });
-    window.setInterval(checkForUpdate, 10 * 60 * 1000);
+    }, 10 * 60 * 1000);
   },
 });
 
