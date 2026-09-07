@@ -12,6 +12,9 @@ import { execSync } from 'child_process';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { requireProdFlag } from './lib/initFirebaseAdmin.mjs';
+
+requireProdFlag(process.argv, 'backup-firestore.mjs');
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const backupsDir = join(ROOT, '.backups');

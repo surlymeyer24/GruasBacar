@@ -15,6 +15,7 @@ export interface AdminServiciosData {
 type ScopeEntry = {
   data: AdminServiciosData | null;
   loading: Promise<AdminServiciosData> | null;
+  fetchedAt: number;
 };
 
 const byScope = new Map<AdminServiciosScope, ScopeEntry>();
@@ -22,7 +23,7 @@ const byScope = new Map<AdminServiciosScope, ScopeEntry>();
 function getEntry(scope: AdminServiciosScope): ScopeEntry {
   let entry = byScope.get(scope);
   if (!entry) {
-    entry = { data: null, loading: null };
+    entry = { data: null, loading: null, fetchedAt: 0 };
     byScope.set(scope, entry);
   }
   return entry;
@@ -126,10 +127,14 @@ export function getAdminServiciosSnapshot(scope: AdminServiciosScope): AdminServ
 
 export async function ensureAdminServicios(
   scope: AdminServiciosScope,
-  options: { withPhotoCounts?: boolean; force?: boolean } = {}
+  options: { withPhotoCounts?: boolean; force?: boolean; maxAge?: number } = {}
 ): Promise<AdminServiciosData> {
-  const { withPhotoCounts = false, force = false } = options;
+  const { withPhotoCounts = false, maxAge } = options;
   const entry = getEntry(scope);
+  const stale = maxAge != null && entry.fetchedAt > 0
+    ? Date.now() - entry.fetchedAt > maxAge
+    : false;
+  const force = options.force === true || stale;
 
   if (!force && entry.data) {
     if (!withPhotoCounts || entry.data.photoCounts !== undefined) {
@@ -161,6 +166,7 @@ export async function ensureAdminServicios(
     const photoCounts = withPhotoCounts ? await fetchPhotoCounts(servicios) : undefined;
     const data: AdminServiciosData = { servicios, photoCounts };
     entry.data = data;
+    entry.fetchedAt = Date.now();
     entry.loading = null;
     return data;
   })().catch((err) => {

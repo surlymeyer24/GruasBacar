@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
-import { Truck, Link2, Route, CheckCircle2, CalendarDays } from "lucide-react";
+import { Truck, Link2, Route, CheckCircle2, CalendarDays, CalendarCheck } from "lucide-react";
 import { isMock } from "../firebase";
 import { Grua, duplaEnganchadorDeAsignacion, displayPatente, labelTipoFlota } from "@gruasbacar/shared";
 import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
@@ -47,7 +47,9 @@ export const SupervisorDashboardPage: React.FC = () => {
             actasEnEnganche: 0,
             actasEnTraslado: 0,
             actasFinalizadas: 0,
+            actasHoy: 0,
             actasEsteMes: 0,
+            hoyLabel: "",
             mesActualLabel: "",
             gruasActivas: 0,
             gruasEnOperacion: 0,
@@ -109,9 +111,27 @@ export const SupervisorDashboardPage: React.FC = () => {
         </div>
 
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 items-stretch">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4 items-stretch">
             <Link
-              to="/reportes"
+              to="/historial?periodo=hoy"
+              className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-sky-500 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
+            >
+              <div>
+                <p className="text-xs font-bold text-brand-pale uppercase tracking-widest">Actas hoy</p>
+                <p className="text-2xl font-black text-brand-purply mt-1">
+                  {loadingStats ? "—" : (stats?.actasHoy ?? 0)}
+                </p>
+                <p className="text-[10px] text-brand-pale mt-0.5 capitalize">
+                  {stats?.hoyLabel ?? "—"}
+                </p>
+              </div>
+              <div className="p-3 bg-sky-50 text-sky-600 rounded-xl shrink-0">
+                <CalendarCheck className="w-6 h-6" />
+              </div>
+            </Link>
+
+            <Link
+              to="/historial?periodo=mes"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-violet-500 shadow-sm hover:shadow-md hover:border-violet-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -129,7 +149,7 @@ export const SupervisorDashboardPage: React.FC = () => {
             </Link>
 
             <Link
-              to="/historial"
+              to="/historial?estado=ENGANCHADO"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-amber-500 shadow-sm hover:shadow-md hover:border-amber-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -144,7 +164,7 @@ export const SupervisorDashboardPage: React.FC = () => {
             </Link>
 
             <Link
-              to="/historial"
+              to="/historial?estado=EN_TRASLADO"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-brand-cta shadow-sm hover:shadow-md hover:border-brand-cta/30 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -159,7 +179,7 @@ export const SupervisorDashboardPage: React.FC = () => {
             </Link>
 
             <Link
-              to="/historial"
+              to="/historial?estado=DESENGANCHADO"
               className="p-5 bg-white rounded-2xl border border-brand-seashell border-l-4 border-l-emerald-500 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all flex items-center justify-between gap-4 cursor-pointer"
             >
               <div>
@@ -208,9 +228,10 @@ export const SupervisorDashboardPage: React.FC = () => {
                   stats?.serviciosActivos?.map((s, idx) => {
                     const grua = etiquetaGrua(s.grua);
                     return (
-                    <div
+                    <Link
                       key={s.id ?? `${s.patente}-${s.numeroInfraccion}-${idx}`}
-                      className="p-3 bg-brand-bg rounded-xl border border-brand-seashell flex justify-between items-center hover:border-brand-cta/30 transition-colors"
+                      to={`/historial?servicio=${encodeURIComponent(s.id)}`}
+                      className="block p-3 bg-brand-bg rounded-xl border border-brand-seashell flex justify-between items-center hover:border-brand-cta/30 transition-colors cursor-pointer"
                     >
                       <div>
                         <p className="font-mono text-sm font-bold text-brand-purply">{displayPatente(s.patente, s.descripcionVehiculo)}</p>
@@ -228,7 +249,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                       <span className="text-[9px] font-bold bg-brand-cta/10 text-brand-cta px-2 py-0.5 rounded-full border border-brand-cta/20 uppercase font-mono">
                         {s.estado.replace("_", " ")}
                       </span>
-                    </div>
+                    </Link>
                     );
                   })
                 )}

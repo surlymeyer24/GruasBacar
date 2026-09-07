@@ -1,6 +1,9 @@
 # Entorno de prueba (test-gruasbacar)
 
-Misma Firestore / Auth / Functions que producción. Las actas creadas desde el site de test se marcan con `esTest: true` y **no aparecen** en historial, reportes ni KPIs de producción.
+**No es una base aparte.** Misma Firestore / Auth / Functions que producción. Las actas creadas desde el site de test se marcan con `esTest: true` y **no aparecen** en historial, reportes ni KPIs de producción.
+
+Para desarrollar **sin tocar producción** usá emuladores (`npm run emu` + `npm run dev`). Paso a paso emu → prod: `emu-a-prod.md`. Ver también `docs/contexto/flujo-de-trabajo.md`.
+
 
 ## Setup (una sola vez)
 

@@ -4,37 +4,13 @@
  * Reemplaza las 2 duplas viejas que quedaron con pareos incorrectos
  * (Benitez-Chacon -> Benitez-Asinardi, Quiroga-Isaac -> Quiroga-Lescano).
  *
- * Uso: node scripts/cargar-nuevas-duplas.mjs [--emulator] [--dry-run]
+ * Uso: node scripts/cargar-nuevas-duplas.mjs --prod [--dry-run]
  */
-import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import { initProdAdmin } from './lib/initFirebaseAdmin.mjs';
 import { buildUsuarioUid } from '../shared/dist/index.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-
-const useEmulator = process.argv.includes('--emulator');
+const { admin, db, auth } = initProdAdmin(process.argv, { scriptName: 'cargar-nuevas-duplas.mjs' });
 const dryRun = process.argv.includes('--dry-run');
-
-if (useEmulator) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-  admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'gruasbacar' });
-} else {
-  const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
-  if (!existsSync(keyPath)) {
-    console.error('No se encontró functions/src/auth/ServiceAccountKey.json');
-    process.exit(1);
-  }
-  const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-const db = admin.firestore();
-const auth = admin.auth();
 
 const PASSWORD_TEMPORAL = 'Bacar2026!';
 
@@ -156,8 +132,7 @@ async function crearDupla(d) {
 }
 
 async function main() {
-  const destino = useEmulator ? 'emuladores locales' : 'gruasbacar (PRODUCCIÓN)';
-  console.log(`Destino: ${destino}${dryRun ? ' [DRY RUN]' : ''}\n`);
+  console.log(`Destino: gruasbacar (PRODUCCIÓN)${dryRun ? ' [DRY RUN]' : ''}\n`);
 
   console.log('== Creando usuarios nuevos ==');
   for (const u of NUEVOS_USUARIOS) {

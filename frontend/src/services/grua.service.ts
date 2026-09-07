@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { Grua } from "@gruasbacar/shared";
+import { Grua, EstadoServicio, patenteDesdeGruaId } from "@gruasbacar/shared";
 
 export const gruaService = {
   async getGruasActivas(): Promise<Grua[]> {
@@ -18,5 +18,20 @@ export const gruaService = {
       ...(docSnap.data() as Grua),
       id: docSnap.id,
     }));
+  },
+
+  async getGruasOcupadas(): Promise<Set<string>> {
+    const estados: EstadoServicio[] = ['ENGANCHADO', 'EN_TRASLADO'];
+    const q = query(
+      collection(db, "servicios"),
+      where("estado", "in", estados)
+    );
+    const snap = await getDocs(q);
+    const ocupadas = new Set<string>();
+    snap.docs.forEach((d) => {
+      const grua = d.data().grua as string | undefined;
+      if (grua) ocupadas.add(patenteDesdeGruaId(grua));
+    });
+    return ocupadas;
   },
 };

@@ -46,6 +46,21 @@ export function fechaDiaServicio(servicio: {
   }).format(d);
 }
 
+/** Hora del servicio en Argentina (HH:MM, 24h) para filtros. */
+export function horaServicio(servicio: {
+  creadoEn?: unknown;
+  fechaCreacion?: unknown;
+}): string | null {
+  const d = fechaServicio(servicio);
+  if (!d) return null;
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(d);
+}
+
 export function formatHora(value: unknown, fallback = '—'): string {
   const d = parseFirestoreDate(value);
   if (!d) return fallback;

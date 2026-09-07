@@ -14,7 +14,7 @@ import {
 } from "../../services/fotoCache.service";
 import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { EtiquetaFoto, Foto } from "@gruasbacar/shared";
-import { Camera, Check, ImagePlus, PenLine, Plus, X } from "lucide-react";
+import { Camera, Check, ImagePlus, PenLine, X } from "lucide-react";
 import { extractGpsFromFile, GeoCoords } from "../../utils/extractGps";
 import { FotoGuiaModal, PASOS_FOTO, SlotFotoGuia } from "./FotoGuiaModal";
 import { FlowBackButton } from "./FlowBackButton";
@@ -56,6 +56,7 @@ interface FotoLoteUploadProps {
   backLabel?: string;
   onConfirm: (result: FotosLoteResult) => Promise<void>;
   onFotosListas?: (listas: boolean) => void;
+  onPrimeraFoto?: () => void;
 }
 
 export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
@@ -73,6 +74,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   backLabel = "Volver",
   onConfirm,
   onFotosListas,
+  onPrimeraFoto,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galeriaInputRef = useRef<HTMLInputElement>(null);
@@ -103,7 +105,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalStartStep, setModalStartStep] = useState(0);
+  const [modalStartStep, setModalStartStep] = useState<number | undefined>(0);
   const [fotosSubidas, setFotosSubidas] = useState<Foto[] | null>(null);
   const [prefetchError, setPrefetchError] = useState<string | null>(null);
   const [cacheRestored, setCacheRestored] = useState(false);
@@ -294,12 +296,24 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
   onFotosListasRef.current = onFotosListas;
   const prevTodasListasRef = useRef(false);
 
+  const onPrimeraFotoRef = useRef(onPrimeraFoto);
+  onPrimeraFotoRef.current = onPrimeraFoto;
+  const primeraFotoFiredRef = useRef(false);
+
   useEffect(() => {
     if (todasListas !== prevTodasListasRef.current) {
       prevTodasListasRef.current = todasListas;
       onFotosListasRef.current?.(todasListas);
     }
   }, [todasListas]);
+
+  const tieneFotos = fotosCargadas > 0 || fotosExtra.length > 0;
+  useEffect(() => {
+    if (tieneFotos && !primeraFotoFiredRef.current) {
+      primeraFotoFiredRef.current = true;
+      onPrimeraFotoRef.current?.();
+    }
+  }, [tieneFotos]);
 
   const slotsSignature = slots.map((s) => s?.base64 ?? "").join("|");
   const prefetchServicioId = prefetchUpload?.servicioId;
@@ -366,7 +380,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
     prefetchPromiseRef.current = promise;
   }, [prefetchServicioId, prefetchCarpeta, todasListas, slotsSignature]);
 
-  const abrirGuia = (startAt = 0) => {
+  const abrirGuia = (startAt?: number) => {
     setModalStartStep(startAt);
     setModalOpen(true);
   };
@@ -393,11 +407,6 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
       next.splice(index, 1);
       return next;
     });
-  };
-
-  const abrirSelectorExtra = () => {
-    pendingTargetRef.current = "extra";
-    fileInputRef.current?.click();
   };
 
   const abrirGaleriaExtra = () => {
@@ -614,6 +623,9 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
         onClose={handleModalClose}
         slots={slots}
         onSlotChange={handleSlotChange}
+        fotosExtra={fotosExtra}
+        onExtraAdd={(extra) => setFotosExtra((prev) => [...prev, extra])}
+        maxExtras={MAX_EXTRAS}
         startAtStep={modalStartStep}
         permitirGaleria={permitirGaleria}
         onBeforeNativeCapture={handleBeforeNativeCapture}
@@ -698,7 +710,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
       <div className="flex gap-2 w-full">
         <button
           type="button"
-          onClick={() => abrirGuia(todasListas ? 0 : fotosCargadas > 0 ? slots.findIndex((s) => !s) : 0)}
+          onClick={() => abrirGuia(todasListas ? undefined : fotosCargadas > 0 ? slots.findIndex((s) => !s) : 0)}
           disabled={isUploading}
           className={`${permitirGaleria ? "flex-1" : "w-full"} py-4 bg-brand-orange hover:bg-brand-orange/90 disabled:opacity-60 text-white font-extrabold text-sm rounded-2xl flex items-center justify-center gap-2 cursor-pointer shadow-sm`}
         >
@@ -706,7 +718,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
           {fotosCargadas === 0
             ? "Sacar fotos"
             : todasListas
-              ? "Revisar fotos"
+              ? "Sacar más fotos"
               : "Continuar"}
         </button>
         {permitirGaleria && (
@@ -815,7 +827,7 @@ export const FotoLoteUpload: React.FC<FotoLoteUploadProps> = ({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={abrirSelectorExtra}
+                onClick={() => abrirGuia()}
                 disabled={isUploading}
                 className="flex-1 py-3 border border-dashed border-gray-300 rounded-xl text-xs font-bold text-gray-500 hover:text-brand-orange hover:border-brand-orange/50 hover:bg-brand-orange/5 cursor-pointer flex items-center justify-center gap-2 transition-colors"
               >

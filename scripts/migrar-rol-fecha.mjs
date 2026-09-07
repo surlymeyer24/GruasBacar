@@ -4,37 +4,13 @@
  *   - servicios: `fechaCreacion` → `creadoEn`, luego borra `fechaCreacion`
  *
  * Uso:
- *   node scripts/migrar-rol-fecha.mjs              # simulación
- *   node scripts/migrar-rol-fecha.mjs --apply      # ejecutar
- *   node scripts/migrar-rol-fecha.mjs --emulator --apply
+ *   node scripts/migrar-rol-fecha.mjs --prod           # simulación
+ *   node scripts/migrar-rol-fecha.mjs --prod --apply   # ejecutar
  */
-import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import { initProdAdmin } from './lib/initFirebaseAdmin.mjs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-
-const useEmulator = process.argv.includes('--emulator');
+const { admin, db } = initProdAdmin(process.argv, { scriptName: 'migrar-rol-fecha.mjs' });
 const dryRun = !process.argv.includes('--apply');
-
-if (useEmulator) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-  admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'gruasbacar' });
-} else {
-  const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
-  if (!existsSync(keyPath)) {
-    console.error('No se encontró functions/src/auth/ServiceAccountKey.json');
-    process.exit(1);
-  }
-  const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-const db = admin.firestore();
 const FieldValue = admin.firestore.FieldValue;
 
 const ROLES_VALIDOS = ['SUPERADMIN', 'ADMIN', 'SUPERVISOR', 'VISOR', 'CHOFER', 'ENGANCHADOR'];
@@ -152,8 +128,7 @@ function printResults(label, results) {
 }
 
 async function main() {
-  const destino = useEmulator ? 'emuladores locales' : 'producción';
-  console.log(`Migración rol→roles + fechaCreacion→creadoEn (${destino})`);
+  console.log('Migración rol→roles + fechaCreacion→creadoEn (producción)');
   console.log(dryRun ? 'MODO: simulación (agregá --apply para ejecutar)\n' : 'MODO: APLICAR CAMBIOS\n');
 
   const usuariosSnap = await db.collection('usuarios').get();

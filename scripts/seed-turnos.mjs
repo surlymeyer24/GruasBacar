@@ -1,18 +1,11 @@
 /**
  * Carga datos de prueba en la colección turnos/ para verificar el historial.
  * Uso: node scripts/seed-turnos.mjs
- * Siempre apunta al emulador local.
+ * Solo emulador local.
  */
-import { createRequire } from 'module';
+import { initEmulatorAdmin } from './lib/initFirebaseAdmin.mjs';
 
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'gruasbacar' });
-console.log('Conectado al emulador de Firestore.');
-
-const db = admin.firestore();
+const { db } = initEmulatorAdmin(process.argv);
 
 const TURNOS_SEED = [
   {

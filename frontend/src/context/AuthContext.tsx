@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { AuthContext } from "./auth-context";
 import { 
   signInWithEmailAndPassword, 
@@ -464,23 +464,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const contextValue = useMemo(
+    () => ({
+      user,
+      userData,
+      pendienteActivacion,
+      sessionLoading,
+      profileLoading,
+      loading,
+      login,
+      register,
+      logout,
+      updateServicioActivo,
+      refreshUserData,
+      guardarAsignacionDiaria,
+    }),
+    [user, userData, pendienteActivacion, sessionLoading, profileLoading, loading]
+  );
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        userData,
-        pendienteActivacion,
-        sessionLoading,
-        profileLoading,
-        loading,
-        login,
-        register,
-        logout,
-        updateServicioActivo,
-        refreshUserData,
-        guardarAsignacionDiaria,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

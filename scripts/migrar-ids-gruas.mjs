@@ -5,36 +5,12 @@
  * Uso:
  *   npm run migrate-gruas              # simulación
  *   npm run migrate-gruas -- --apply   # ejecutar
- *   npm run migrate-gruas:emulator -- --apply
  */
-import { readFileSync, existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import { initProdAdmin } from './lib/initFirebaseAdmin.mjs';
 import { buildGruaId } from '../shared/dist/index.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-
-const useEmulator = process.argv.includes('--emulator');
+const { db } = initProdAdmin(process.argv, { scriptName: 'migrar-ids-gruas.mjs' });
 const dryRun = !process.argv.includes('--apply');
-
-if (useEmulator) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-  admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'gruasbacar' });
-} else {
-  const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
-  if (!existsSync(keyPath)) {
-    console.error('No se encontró functions/src/auth/ServiceAccountKey.json');
-    process.exit(1);
-  }
-  const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-const db = admin.firestore();
 
 function normalizePatente(patente) {
   return patente?.trim().toUpperCase().replace(/\s/g, '') ?? '';
@@ -152,8 +128,7 @@ async function migrateOneGrua(docSnap, reservedNewIds) {
 }
 
 async function main() {
-  const destino = useEmulator ? 'emuladores locales' : 'gruasbacar (producción)';
-  console.log(`Migración de IDs de grúas (${destino})`);
+  console.log('Migración de IDs de grúas (gruasbacar / producción)');
   console.log(dryRun ? 'MODO: simulación (agregá --apply para ejecutar)\n' : 'MODO: APLICAR CAMBIOS\n');
 
   const snap = await db.collection('gruas').get();

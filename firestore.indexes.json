@@ -49,6 +49,24 @@
       ]
     },
     {
+      "collectionGroup": "servicios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "creadoPor", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "anulacionAutomatica", "order": "ASCENDING" },
+        { "fieldPath": "anuladoEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "servicios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "grua", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "turnos",
       "queryScope": "COLLECTION",
       "fields": [

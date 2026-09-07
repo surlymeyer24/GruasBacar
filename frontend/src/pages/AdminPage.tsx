@@ -21,11 +21,12 @@ import {
   Tag,
   Trash2,
   Settings,
+  RotateCcw,
 } from "lucide-react";
 import { isMock, db, functions } from "../firebase";
-import { setDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { setDoc, updateDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { Grua, Corralon, TipoFlota, TIPO_FLOTA_OPTIONS, TIPO_FLOTA_FILTER_OPTIONS, labelTipoFlota, normalizeTipoFlota, matchesTipoFlotaFilter, buildGruaId } from "@gruasbacar/shared";
+import { Grua, Corralon, TipoFlota, TIPO_FLOTA_OPTIONS, TIPO_FLOTA_FILTER_OPTIONS, labelTipoFlota, normalizeTipoFlota, matchesTipoFlotaFilter, buildGruaId, labelMotivoFueraDeServicio } from "@gruasbacar/shared";
 import { codigoInternoVisible } from "../utils/codigoVisible";
 import { GruaDoc, CorralonDoc } from "../services/adminCatalog.cache";
 
@@ -106,6 +107,11 @@ export const AdminPage: React.FC = () => {
       );
     });
   }, [gruas, gruaSearch, gruaEstadoFilter, gruaTipoFilter]);
+
+  const gruasFueraDeServicio = useMemo(
+    () => gruas.filter((g) => !g.activa && g.fueraDeServicio),
+    [gruas]
+  );
 
   const filteredCorralones = useMemo(() => {
     return corralones.filter((c) => {
@@ -237,15 +243,45 @@ export const AdminPage: React.FC = () => {
     if (!data) return;
     try {
       if (!isMock && db) {
-        await updateDoc(doc(db, "gruas", docId), { activa: !current });
+        const payload = current
+          ? { activa: false }
+          : { activa: true, fueraDeServicio: deleteField() };
+        await updateDoc(doc(db, "gruas", docId), payload);
       }
-      const next = gruas.map((g) => (g.docId === docId ? { ...g, activa: !current } : g));
+      const next = gruas.map((g) =>
+        g.docId === docId
+          ? { ...g, activa: !current, ...(current ? {} : { fueraDeServicio: undefined }) }
+          : g
+      );
       sync({ ...data, gruas: next });
       if (isMock) {
         localStorage.setItem("gruas_bacar_asset_catalog", JSON.stringify(next));
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const reactivarGrua = async (docId: string) => {
+    if (!data) return;
+    if (!window.confirm("¿La grúa vuelve a estar operativa en flota?")) return;
+    try {
+      if (!isMock && db) {
+        await updateDoc(doc(db, "gruas", docId), {
+          activa: true,
+          fueraDeServicio: deleteField(),
+        });
+      }
+      const next = gruas.map((g) =>
+        g.docId === docId ? { ...g, activa: true, fueraDeServicio: undefined } : g
+      );
+      sync({ ...data, gruas: next });
+      if (isMock) {
+        localStorage.setItem("gruas_bacar_asset_catalog", JSON.stringify(next));
+      }
+    } catch (err) {
+      console.error(err);
+      setPageError("No se pudo reactivar la grúa.");
     }
   };
 
@@ -492,6 +528,15 @@ export const AdminPage: React.FC = () => {
                   }}
                 />
               )}
+              {activeTab === "GRUAS" && gruasFueraDeServicio.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setGruaEstadoFilter("INACTIVE")}
+                  className="mt-2 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200/60 rounded-xl px-3 py-2 hover:bg-rose-100 cursor-pointer transition-colors"
+                >
+                  Fuera de servicio ({gruasFueraDeServicio.length}) — ver listado
+                </button>
+              )}
               {activeTab === "CORRALONES" && (
                 <AdminListFilters
                   search={corralonSearch}
@@ -590,6 +635,12 @@ export const AdminPage: React.FC = () => {
                                   </span>
                                 </div>
                                 <p className="text-xs font-mono font-bold text-red-600 mt-1 tracking-wide">{g.patente}</p>
+                                {!g.activa && g.fueraDeServicio && (
+                                  <p className="text-[11px] text-rose-700 mt-1">
+                                    {labelMotivoFueraDeServicio(g.fueraDeServicio.categoria)}
+                                    {g.fueraDeServicio.motivo ? ` — ${g.fueraDeServicio.motivo}` : ""}
+                                  </p>
+                                )}
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
@@ -610,14 +661,26 @@ export const AdminPage: React.FC = () => {
                                 >
                                   <Pencil className="w-4 h-4" />
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleGruaActive(g.docId, g.activa)}
-                                  className="p-1.5 rounded-lg border border-brand-seashell hover:border-brand-cta text-brand-pale hover:text-brand-cta cursor-pointer transition-colors"
-                                  title="Alternar disponibilidad"
-                                >
-                                  <Power className="w-4 h-4" />
-                                </button>
+                                {!g.activa && g.fueraDeServicio ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => reactivarGrua(g.docId)}
+                                    className="px-2.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-bold hover:bg-emerald-100 cursor-pointer transition-colors flex items-center gap-1"
+                                    title="Reactivar grúa en flota"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    Reactivar
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGruaActive(g.docId, g.activa)}
+                                    className="p-1.5 rounded-lg border border-brand-seashell hover:border-brand-cta text-brand-pale hover:text-brand-cta cursor-pointer transition-colors"
+                                    title="Alternar disponibilidad"
+                                  >
+                                    <Power className="w-4 h-4" />
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => setDeleteTarget({ kind: "grua", item: g })}

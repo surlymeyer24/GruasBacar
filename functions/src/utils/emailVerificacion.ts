@@ -20,7 +20,12 @@ async function identityToolkitRequest<T>(
     );
   }
 
-  const res = await fetch(`${IDENTITY_TOOLKIT}/${path}?key=${encodeURIComponent(apiKey)}`, {
+  const emu = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+  const base = emu
+    ? `${emu.startsWith('http') ? emu : `http://${emu}`}/identitytoolkit.googleapis.com/v1`
+    : IDENTITY_TOOLKIT;
+
+  const res = await fetch(`${base}/${path}?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

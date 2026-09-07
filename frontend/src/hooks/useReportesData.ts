@@ -5,7 +5,9 @@ import {
   TIPO_FLOTA_FILTER_OPTIONS,
   resumenDuracionActa,
   formatDuracion,
+  duracionPorTramo,
   labelTipoFlota,
+  type NombreTramo,
 } from "@gruasbacar/shared";
 import { CORRALONES } from "../data/mockData";
 import { fechaServicio } from "../utils/formatters";
@@ -69,6 +71,35 @@ export interface ReportesAggregations {
     duracion: string;
     fecha: string;
   }[];
+}
+
+export interface TramoStats {
+  tramo: NombreTramo;
+  label: string;
+  promedioMs: number;
+  promedioLabel: string;
+  desviacionMs: number;
+  count: number;
+}
+
+export interface OutlierServicio {
+  patente: string;
+  acta: string;
+  tramo: NombreTramo;
+  tramoLabel: string;
+  duracionMs: number;
+  duracionLabel: string;
+  promedioMs: number;
+  desvios: number;
+  dupla: string;
+  grua: string;
+  fecha: string;
+}
+
+export interface AnalisisTramos {
+  stats: TramoStats[];
+  outliers: OutlierServicio[];
+  distribucion: { bucket: string; enganche: number; traslado: number; desenganche: number }[];
 }
 
 export function useReportesData() {
@@ -289,6 +320,111 @@ export function useReportesData() {
     };
   }, [activeFiltered, gruasCatalog, corralonesCatalog]);
 
+  const analisisTramos = useMemo((): AnalisisTramos => {
+    const porTramo: Record<NombreTramo, number[]> = {
+      enganche: [],
+      traslado: [],
+      desenganche: [],
+    };
+
+    interface ServicioTramoEntry {
+      servicio: Servicio;
+      tramo: NombreTramo;
+      tramoLabel: string;
+      duracionMs: number;
+    }
+    const entries: ServicioTramoEntry[] = [];
+
+    for (const s of activeFiltered) {
+      if (s.estado === 'ANULADO' || !s.eventos?.length) continue;
+      const res = duracionPorTramo(s.eventos);
+      if (!res) continue;
+      for (const t of res.tramos) {
+        porTramo[t.tramo].push(t.duracionMs);
+        entries.push({ servicio: s, tramo: t.tramo, tramoLabel: t.label, duracionMs: t.duracionMs });
+      }
+    }
+
+    const stats: TramoStats[] = (['enganche', 'traslado', 'desenganche'] as NombreTramo[])
+      .map((tramo) => {
+        const vals = porTramo[tramo];
+        if (vals.length === 0) return null;
+        const promedio = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const varianza = vals.reduce((sum, v) => sum + (v - promedio) ** 2, 0) / vals.length;
+        const desviacion = Math.sqrt(varianza);
+        const labels: Record<NombreTramo, string> = {
+          enganche: 'Enganche',
+          traslado: 'Traslado',
+          desenganche: 'Desenganche',
+        };
+        return {
+          tramo,
+          label: labels[tramo],
+          promedioMs: promedio,
+          promedioLabel: formatDuracion(promedio),
+          desviacionMs: desviacion,
+          count: vals.length,
+        };
+      })
+      .filter((s): s is TramoStats => s !== null);
+
+    const statsMap = new Map(stats.map((s) => [s.tramo, s]));
+
+    const outliers: OutlierServicio[] = entries
+      .map((e) => {
+        const st = statsMap.get(e.tramo);
+        if (!st || st.desviacionMs === 0) return null;
+        const desvios = (e.duracionMs - st.promedioMs) / st.desviacionMs;
+        if (desvios <= 1) return null;
+        const duplaKey = duplaKeyFromServicio(e.servicio);
+        return {
+          patente: e.servicio.patente,
+          acta: e.servicio.numeroInfraccion || e.servicio.identificadorCompuesto || '—',
+          tramo: e.tramo,
+          tramoLabel: e.tramoLabel,
+          duracionMs: e.duracionMs,
+          duracionLabel: formatDuracion(e.duracionMs),
+          promedioMs: st.promedioMs,
+          desvios: Math.round(desvios * 10) / 10,
+          dupla: duplaKey ? duplaLabelFromKey(duplaKey) : '—',
+          grua: resolverLabelGrua(e.servicio.grua, gruasCatalog),
+          fecha: fechaServicio(e.servicio)?.toLocaleDateString('es-AR') ?? '—',
+        };
+      })
+      .filter((o): o is OutlierServicio => o !== null)
+      .sort((a, b) => b.desvios - a.desvios);
+
+    const BUCKETS = [
+      { label: '< 15 min', max: 15 * 60_000 },
+      { label: '15-30 min', max: 30 * 60_000 },
+      { label: '30-60 min', max: 60 * 60_000 },
+      { label: '1-2 h', max: 2 * 3600_000 },
+      { label: '> 2 h', max: Infinity },
+    ];
+
+    const distribucion = BUCKETS.map((b) => {
+      const row: { bucket: string; enganche: number; traslado: number; desenganche: number } = {
+        bucket: b.label,
+        enganche: 0,
+        traslado: 0,
+        desenganche: 0,
+      };
+      return row;
+    });
+
+    for (const e of entries) {
+      const idx = BUCKETS.findIndex((b, i) => {
+        const min = i === 0 ? 0 : BUCKETS[i - 1].max;
+        return e.duracionMs >= min && e.duracionMs < b.max;
+      });
+      if (idx >= 0) {
+        distribucion[idx][e.tramo] += 1;
+      }
+    }
+
+    return { stats, outliers, distribucion };
+  }, [activeFiltered, gruasCatalog]);
+
   const generarReporte = () => {
     setAppliedFilters({ ...filters });
     setGenerated(true);
@@ -312,6 +448,7 @@ export function useReportesData() {
     limpiarFiltros,
     kpis,
     aggregations,
+    analisisTramos,
     totalServicios: services.length,
   };
 }

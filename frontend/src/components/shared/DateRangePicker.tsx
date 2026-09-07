@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock } from "lucide-react";
 
 const WEEKDAYS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"] as const;
 const MONTHS = [
@@ -43,12 +43,32 @@ function normalizeRange(from: string, to: string): { from: string; to: string } 
   return from <= to ? { from, to } : { from: to, to: from };
 }
 
-function rangeLabel(from: string, to: string): string {
-  if (!from && !to) return "Todas las fechas";
-  if (from && !to) return `Desde ${formatDisplay(from)}`;
-  const { from: a, to: b } = normalizeRange(from, to);
-  if (a === b) return formatDisplay(a);
-  return `${formatDisplay(a)} – ${formatDisplay(b)}`;
+function rangeLabel(from: string, to: string, horaFrom: string, horaTo: string): string {
+  const hasDate = Boolean(from || to);
+  const hasHora = Boolean(horaFrom || horaTo);
+
+  let datePart = "";
+  if (!hasDate) {
+    datePart = hasHora ? "Todas las fechas" : "";
+  } else if (from && !to) {
+    datePart = `Desde ${formatDisplay(from)}`;
+  } else {
+    const { from: a, to: b } = normalizeRange(from, to);
+    datePart = a === b ? formatDisplay(a) : `${formatDisplay(a)} – ${formatDisplay(b)}`;
+  }
+
+  let horaPart = "";
+  if (horaFrom && horaTo) {
+    horaPart = `${horaFrom} a ${horaTo}`;
+  } else if (horaFrom) {
+    horaPart = `desde ${horaFrom}`;
+  } else if (horaTo) {
+    horaPart = `hasta ${horaTo}`;
+  }
+
+  if (!hasDate && !hasHora) return "Todas las fechas";
+  if (datePart && horaPart) return `${datePart}, ${horaPart}`;
+  return datePart || horaPart;
 }
 
 function getCalendarDays(year: number, month: number): (Date | null)[] {
@@ -71,6 +91,9 @@ interface DateRangePickerProps {
   from: string;
   to: string;
   onChange: (from: string, to: string) => void;
+  horaFrom?: string;
+  horaTo?: string;
+  onHoraChange?: (horaFrom: string, horaTo: string) => void;
   className?: string;
   ariaLabel?: string;
 }
@@ -79,6 +102,9 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   from,
   to,
   onChange,
+  horaFrom = "",
+  horaTo = "",
+  onHoraChange,
   className = "w-full sm:w-60 shrink-0",
   ariaLabel = "Filtrar por rango de fechas",
 }) => {
@@ -93,8 +119,10 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const label = rangeLabel(from, to);
+  const label = rangeLabel(from, to, horaFrom, horaTo);
   const hasRange = Boolean(from || to);
+  const hasHora = Boolean(horaFrom || horaTo);
+  const hasAny = hasRange || hasHora;
 
   const calendarDays = useMemo(
     () => getCalendarDays(viewMonth.getFullYear(), viewMonth.getMonth()),
@@ -133,7 +161,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
     const updatePosition = () => {
       const rect = buttonRef.current!.getBoundingClientRect();
-      const panelHeight = 380;
+      const panelHeight = 440;
       const spaceBelow = window.innerHeight - rect.bottom;
       const openUpward = spaceBelow < panelHeight && rect.top > spaceBelow;
 
@@ -178,7 +206,6 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     onChange(start, end);
     setSelectingEnd(false);
     setHoverYmd(null);
-    setOpen(false);
   };
 
   const previewEnd = selectingEnd && from && hoverYmd ? hoverYmd : to;
@@ -276,17 +303,46 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         })}
       </div>
 
-      {hasRange && (
+      {onHoraChange && (
+        <div className="mt-3 pt-3 border-t border-brand-seashell">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="w-3.5 h-3.5 text-brand-pale" />
+            <span className="text-[10px] font-bold text-brand-pale uppercase tracking-wider">Rango horario</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="time"
+              value={horaFrom}
+              onChange={(e) => onHoraChange(e.target.value, horaTo)}
+              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-brand-seashell rounded-lg bg-brand-bg text-brand-purply focus:outline-none focus:ring-1 focus:ring-brand-cta/40 focus:border-brand-cta/40 transition-all"
+              aria-label="Hora desde"
+              placeholder="Desde"
+            />
+            <span className="text-[11px] text-brand-pale font-medium">a</span>
+            <input
+              type="time"
+              value={horaTo}
+              onChange={(e) => onHoraChange(horaFrom, e.target.value)}
+              className="flex-1 min-w-0 px-2.5 py-1.5 text-xs border border-brand-seashell rounded-lg bg-brand-bg text-brand-purply focus:outline-none focus:ring-1 focus:ring-brand-cta/40 focus:border-brand-cta/40 transition-all"
+              aria-label="Hora hasta"
+              placeholder="Hasta"
+            />
+          </div>
+        </div>
+      )}
+
+      {hasAny && (
         <button
           type="button"
           onClick={() => {
             onChange("", "");
+            if (onHoraChange) onHoraChange("", "");
             setSelectingEnd(false);
             setHoverYmd(null);
           }}
           className="mt-3 w-full py-2 text-xs font-bold text-brand-pale hover:text-brand-purply border border-brand-seashell rounded-xl hover:bg-brand-bg transition-colors"
         >
-          Limpiar fechas
+          Limpiar filtros
         </button>
       )}
     </div>
@@ -302,7 +358,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
         aria-expanded={open}
         aria-haspopup="dialog"
         className={`w-full flex items-center pl-7 pr-7 py-2 bg-brand-bg border rounded-xl text-[13px] leading-tight cursor-pointer transition-all text-left ${
-          hasRange ? "text-brand-purply" : "text-brand-pale"
+          hasAny ? "text-brand-purply" : "text-brand-pale"
         } ${
           open
             ? "border-brand-cta/40 ring-2 ring-brand-cta/25"

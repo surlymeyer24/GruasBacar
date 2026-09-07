@@ -13,6 +13,7 @@ import {
   AsignarTurnoOperadorPayload,
   AsignacionDiaria,
   SolicitarReconfiguracionTurnoPayload,
+  SolicitarCambioGruaPayload,
 } from "@gruasbacar/shared";
 import { db, functions, isMock } from "../firebase";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
@@ -103,6 +104,22 @@ export async function solicitarReconfiguracionTurno(
   } catch (err) {
     throw new Error(
       getFirebaseErrorMessage(err, "No se pudo enviar la solicitud al administrador.")
+    );
+  }
+}
+
+export async function solicitarCambioGrua(
+  data: SolicitarCambioGruaPayload
+): Promise<void> {
+  const fn = httpsCallable<SolicitarCambioGruaPayload, { ok: boolean }>(
+    functions,
+    "solicitarCambioGrua"
+  );
+  try {
+    await fn(data);
+  } catch (err) {
+    throw new Error(
+      getFirebaseErrorMessage(err, "No se pudo enviar la solicitud de cambio de grúa.")
     );
   }
 }

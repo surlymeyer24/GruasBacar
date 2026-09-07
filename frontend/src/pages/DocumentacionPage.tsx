@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import AdminListFilters from "../components/admin/AdminListFilters";
+import PolizasTab from "../components/admin/PolizasTab";
 import { CustomSelect } from "../components/shared/CustomSelect";
 import { CustomDatePicker } from "../components/shared/CustomDatePicker";
 import { ConfirmDialog } from "../components/shared/ConfirmDialog";
@@ -19,6 +21,7 @@ import {
   CheckCircle,
   Clock,
   ShieldCheck,
+  Shield,
 } from "lucide-react";
 import {
   CarnetDeConducir,
@@ -36,7 +39,7 @@ import { gruaService } from "../services/grua.service";
 import { useAdminCatalog } from "../hooks/useAdminCatalog";
 import { esOperador } from "@gruasbacar/shared";
 
-type Tab = "carnets" | "itv";
+type Tab = "carnets" | "itv" | "polizas";
 type EstadoFilter = "ALL" | "VIGENTE" | "POR_VENCER" | "VENCIDO";
 
 const ESTADO_FILTER_OPTIONS: { value: EstadoFilter; label: string }[] = [
@@ -908,8 +911,18 @@ const ITVTab: React.FC = () => {
 // ── Page ───────────────────────────────────────────────────
 
 export const DocumentacionPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>("carnets");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    requestedTab === "itv" || requestedTab === "polizas" ? requestedTab : "carnets"
+  );
   const { data: catalogData } = useAdminCatalog();
+
+  useEffect(() => {
+    if (requestedTab === "itv" || requestedTab === "polizas" || requestedTab === "carnets") {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedTab]);
 
   const operadores = useMemo(() => {
     if (!catalogData?.usuarios) return [];
@@ -921,7 +934,13 @@ export const DocumentacionPage: React.FC = () => {
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: "carnets", label: "Carnets", icon: <FileText className="w-4 h-4" /> },
     { key: "itv", label: "ITV", icon: <ShieldCheck className="w-4 h-4" /> },
+    { key: "polizas", label: "Pólizas", icon: <Shield className="w-4 h-4" /> },
   ];
+
+  const changeTab = (tab: Tab) => {
+    setActiveTab(tab);
+    setSearchParams(tab === "carnets" ? {} : { tab }, { replace: true });
+  };
 
   return (
     <Layout>
@@ -932,7 +951,7 @@ export const DocumentacionPage: React.FC = () => {
             Documentación
           </h1>
           <p className="text-sm text-brand-pale mt-1">
-            Seguimiento de vencimientos de carnets de conducir e ITV.
+            Seguimiento de vencimientos de carnets, ITV y seguros de la flota.
           </p>
         </div>
 
@@ -941,7 +960,7 @@ export const DocumentacionPage: React.FC = () => {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => changeTab(tab.key)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-lg transition-colors cursor-pointer ${
                 activeTab === tab.key
                   ? "bg-white text-gray-900 shadow-sm"
@@ -954,11 +973,9 @@ export const DocumentacionPage: React.FC = () => {
           ))}
         </div>
 
-        {activeTab === "carnets" ? (
-          <CarnetsTab operadores={operadores} />
-        ) : (
-          <ITVTab />
-        )}
+        {activeTab === "carnets" && <CarnetsTab operadores={operadores} />}
+        {activeTab === "itv" && <ITVTab />}
+        {activeTab === "polizas" && <PolizasTab />}
       </div>
     </Layout>
   );

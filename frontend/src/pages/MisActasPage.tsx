@@ -182,7 +182,7 @@ export const MisActasPage: React.FC = () => {
       try {
         const data = await ensureAdminServicios(scope, {
           withPhotoCounts: true,
-          force: true,
+          maxAge: 30_000,
         });
         if (!cancelled) {
           setServices(data.servicios);
@@ -222,11 +222,7 @@ export const MisActasPage: React.FC = () => {
   const getCorralonName = (id?: string) =>
     nombreCorralon(id, corralonesCatalog, CORRALONES);
 
-  // Solo actas propias vigentes (sin anuladas), más recientes primero.
-  const misActas = useMemo(
-    () => services.filter((s) => s.estado !== "ANULADO"),
-    [services]
-  );
+  const misActas = useMemo(() => services, [services]);
 
   const filteredServices = misActas.filter((s) => {
     const q = searchQuery.toLowerCase();
@@ -363,19 +359,24 @@ export const MisActasPage: React.FC = () => {
               const formattedDate = formatFechaHora(fechaServicio(service));
               const photoCount = service.totalFotos ?? photoCounts[service.id] ?? 0;
               const entregada = service.estado === "DESENGANCHADO";
+              const anulada = service.estado === "ANULADO";
 
               return (
                 <div
                   key={service.id}
                   onClick={() => handleSelectService(service)}
-                  className="p-4 transition-colors cursor-pointer flex items-center gap-3 group hover:bg-slate-50/50"
+                  className={`p-4 transition-colors cursor-pointer flex items-center gap-3 group hover:bg-slate-50/50 ${anulada ? "opacity-60" : ""}`}
                 >
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-base font-bold tracking-wide text-gray-900">
                         {displayPatente(service.patente, service.descripcionVehiculo)}
                       </span>
-                      {entregada ? (
+                      {anulada ? (
+                        <span className="text-[10px] bg-red-50 text-red-700 border border-red-200 font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wide inline-block font-mono">
+                          ANULADA
+                        </span>
+                      ) : entregada ? (
                         <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-250 font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wide inline-block font-mono">
                           ENTREGADA
                         </span>

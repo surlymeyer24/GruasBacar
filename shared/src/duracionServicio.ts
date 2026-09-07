@@ -1,3 +1,21 @@
+export type NombreTramo = 'enganche' | 'traslado' | 'desenganche';
+
+export interface DuracionTramo {
+  tramo: NombreTramo;
+  label: string;
+  inicioTipo: string;
+  finTipo: string;
+  inicio: Date;
+  fin: Date;
+  duracionMs: number;
+  etiqueta: string;
+}
+
+export interface ResumenTramos {
+  tramos: DuracionTramo[];
+  totalMs: number;
+}
+
 /** Convierte Timestamp de Firestore, ISO string, Date o { seconds } a Date. */
 export function parseFirestoreLikeDate(value: unknown): Date | null {
   if (!value) return null;
@@ -99,4 +117,63 @@ export function resumenDuracionActa(
   }
 
   return { inicio, fin, duracionMs, etiqueta, enCurso };
+}
+
+// --- Duración por tramo ---
+
+const ORDEN_EVENTOS: Record<string, number> = {
+  ENGANCHE: 0,
+  TRASLADO: 1,
+  LLEGADA_CORRALON: 2,
+  DESENGANCHE: 3,
+};
+
+const TRAMO_CONFIG: { tramo: NombreTramo; label: string; desde: string; hasta: string[] }[] = [
+  { tramo: 'enganche', label: 'Enganche', desde: 'ENGANCHE', hasta: ['TRASLADO'] },
+  { tramo: 'traslado', label: 'Traslado', desde: 'TRASLADO', hasta: ['LLEGADA_CORRALON', 'DESENGANCHE'] },
+  { tramo: 'desenganche', label: 'Desenganche', desde: 'LLEGADA_CORRALON', hasta: ['DESENGANCHE'] },
+];
+
+/** Calcula la duración de cada tramo del servicio a partir de sus eventos. */
+export function duracionPorTramo(eventos: EventoDuracion[]): ResumenTramos | null {
+  if (!eventos?.length) return null;
+
+  const sorted = [...eventos].sort(
+    (a, b) => (ORDEN_EVENTOS[a.tipo] ?? 99) - (ORDEN_EVENTOS[b.tipo] ?? 99)
+  );
+
+  const tsMap = new Map<string, Date>();
+  for (const ev of sorted) {
+    const d = parseFirestoreLikeDate(ev.timestamp);
+    if (d && !tsMap.has(ev.tipo)) tsMap.set(ev.tipo, d);
+  }
+
+  const tramos: DuracionTramo[] = [];
+  for (const cfg of TRAMO_CONFIG) {
+    const inicio = tsMap.get(cfg.desde);
+    if (!inicio) continue;
+    let fin: Date | null = null;
+    let finTipo = '';
+    for (const h of cfg.hasta) {
+      const d = tsMap.get(h);
+      if (d) { fin = d; finTipo = h; break; }
+    }
+    if (!fin) continue;
+    const duracionMs = Math.max(0, fin.getTime() - inicio.getTime());
+    tramos.push({
+      tramo: cfg.tramo,
+      label: cfg.label,
+      inicioTipo: cfg.desde,
+      finTipo,
+      inicio,
+      fin,
+      duracionMs,
+      etiqueta: formatDuracion(duracionMs),
+    });
+  }
+
+  if (tramos.length === 0) return null;
+
+  const totalMs = tramos.reduce((sum, t) => sum + t.duracionMs, 0);
+  return { tramos, totalMs };
 }

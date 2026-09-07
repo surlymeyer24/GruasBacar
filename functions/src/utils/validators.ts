@@ -1,5 +1,6 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { buildIdentificadorCompuesto, normalizarPatenteInput, PATENTE_SIN_NUMERO } from '@gruasbacar/shared';
+import { driveHabilitadoEnEmulador, enEmulador } from './entorno';
 
 export { buildIdentificadorCompuesto };
 
@@ -46,6 +47,18 @@ export function validarStringOpcional(valor: unknown, campo: string, maxLength: 
   return trimmed;
 }
 
+export function validarMotivoFueraDeServicio(valor: unknown): import('@gruasbacar/shared').MotivoFueraDeServicio | undefined {
+  if (valor === undefined || valor === null || valor === '') return undefined;
+  if (typeof valor !== 'string') {
+    throw new HttpsError('invalid-argument', 'La categoría de fuera de servicio debe ser texto.');
+  }
+  const key = valor.trim().toUpperCase();
+  if (key === 'ROTURA' || key === 'TALLER' || key === 'TRAMITE' || key === 'OTRO') {
+    return key;
+  }
+  throw new HttpsError('invalid-argument', 'Categoría de fuera de servicio inválida.');
+}
+
 export function slugifyEtiqueta(etiqueta: string): string {
   return etiqueta
     .toLowerCase()
@@ -89,6 +102,7 @@ export function buildNombreFoto(
 }
 
 export function fotosOpcionalesEnDev(): boolean {
+  if (enEmulador() && !driveHabilitadoEnEmulador()) return true;
   return process.env.FOTOS_OPCIONALES_DEV === 'true';
 }
 
@@ -228,5 +242,6 @@ export function buildRutaFoto(
   const fechaStr = fechaCarpetaDrive(fechaServicio);
   const carpetaServicio = buildCarpetaServicio(legajo, patente, numeroInfraccion, fechaServicio);
   const fileName = buildNombreFoto(etiqueta, index, carpeta, patente, legajo);
-  return `${fechaStr}/${carpetaServicio}/${fileName}`;
+  // Prefijo Gruas/: si GOOGLE_DRIVE_FOLDER_ID ya apunta a "Gruas", stripDuplicateGruasSegment lo omite.
+  return `Gruas/${fechaStr}/${carpetaServicio}/${fileName}`;
 }

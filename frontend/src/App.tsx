@@ -13,6 +13,7 @@ import HomeRoute from "./components/auth/HomeRoute";
 import DefaultRedirect from "./components/auth/DefaultRedirect";
 import GestionActasGuard from "./components/auth/GestionActasGuard";
 import EntornoTestBanner from "./components/shared/EntornoTestBanner";
+import EntornoEmuladorBanner from "./components/shared/EntornoEmuladorBanner";
 
 // Login queda eager (ruta pública)
 import LoginPage from "./pages/LoginPage";
@@ -40,6 +41,7 @@ export default function App() {
     <AuthProvider>
       <NotificationProvider>
       <ServicioActivoProvider>
+      <EntornoEmuladorBanner />
       <EntornoTestBanner />
       <HashRouter>
         <Suspense fallback={<RouteFallback />}>

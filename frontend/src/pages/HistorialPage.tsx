@@ -23,12 +23,13 @@ import {
   MapPin,
   FileDown,
   History,
+  RotateCw,
 } from "lucide-react";
-import { formatFechaHora, fechaServicio, fechaDiaServicio } from "../utils/formatters";
+import { formatFechaHora, fechaServicio, fechaDiaServicio, horaServicio } from "../utils/formatters";
 import { isMock, db } from "../firebase";
 import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { CORRALONES } from "../data/mockData";
-import { Servicio, EstadoServicio, Evento, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla, esPatenteSinNumero, normalizarPatenteInput } from "@gruasbacar/shared";
+import { Servicio, EstadoServicio, Evento, Foto, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla, esPatenteSinNumero, normalizarPatenteInput } from "@gruasbacar/shared";
 import { resolverPatenteGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
 import { gruaService } from "../services/grua.service";
@@ -40,7 +41,7 @@ import {
   urlFotoPreview,
 } from "../utils/driveUrl";
 import { obtenerUrlsPreviewFotos } from "../services/drive.service";
-import { actualizarServicio, anularServicio, agregarComentarioFoto } from "../services/servicio.service";
+import { actualizarServicio, anularServicio, agregarComentarioFoto, rotarFoto } from "../services/servicio.service";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
 import { ensureAdminCatalog } from "../services/adminCatalog.cache";
 import {
@@ -49,7 +50,7 @@ import {
   getAdminServiciosSnapshot,
   updateServicioInAdminCache,
 } from "../services/adminServicios.cache";
-import { ensureEventosServicio } from "../services/historialEventos.cache";
+import { ensureEventosServicio, invalidateEventosServicio } from "../services/historialEventos.cache";
 import { Corralon } from "@gruasbacar/shared";
 import MapaCoordenadasPreview from "../components/shared/MapaCoordenadasPreview";
 import { CustomSelect } from "../components/shared/CustomSelect";
@@ -126,13 +127,33 @@ export const HistorialPage: React.FC = () => {
   const servicioParamHandledRef = useRef(false);
   const [services, setServices] = useState<Servicio[]>([]);
   const [fetching, setFetching] = useState(true);
+  const estadoParam = searchParams.get("estado");
+  const periodoParam = searchParams.get("periodo");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>(
+    estadoParam && ["ENGANCHADO", "EN_TRASLADO", "DESENGANCHADO"].includes(estadoParam) ? estadoParam : "ALL"
+  );
   const [tipoFilter, setTipoFilter] = useState<string>("ALL");
   const [duplaFilter, setDuplaFilter] = useState<string>("ALL");
   const [corralonFilter, setCorralonFilter] = useState<string>("ALL");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState(() => {
+    if (periodoParam === "hoy") {
+      return new Date().toISOString().slice(0, 10);
+    }
+    if (periodoParam === "mes") {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+    }
+    return "";
+  });
+  const [dateTo, setDateTo] = useState(() => {
+    if (periodoParam === "hoy" || periodoParam === "mes") {
+      return new Date().toISOString().slice(0, 10);
+    }
+    return "";
+  });
+  const [horaFrom, setHoraFrom] = useState("");
+  const [horaTo, setHoraTo] = useState("");
   const [historyTab, setHistoryTab] = useState<HistorialTab>("activas");
 
   // Detail Modal selection
@@ -171,6 +192,8 @@ export const HistorialPage: React.FC = () => {
   const [exportandoPdf, setExportandoPdf] = useState(false);
   const [showExportPdfDialog, setShowExportPdfDialog] = useState(false);
   const [exportPdfProgress, setExportPdfProgress] = useState<{ percent: number; label: string } | null>(null);
+  const [rotandoFoto, setRotandoFoto] = useState<string | null>(null);
+  const [fotosRotadas, setFotosRotadas] = useState<Record<string, number>>({});
 
   const puedeGestionar = userData ? puedeGestionarActas(userData.roles) : false;
   const historialCompleto = userData ? puedeVerHistorialCompleto(userData.roles) : false;
@@ -194,9 +217,7 @@ export const HistorialPage: React.FC = () => {
     (async () => {
       if (!snapshot?.servicios) setFetching(true);
       try {
-        // force: true evita mostrar conteos de fotos desactualizados cuando un
-        // servicio suma fotos (ej. desenganche) después de haberse cacheado la lista.
-        const data = await ensureAdminServicios(scope, { withPhotoCounts: true, force: true });
+        const data = await ensureAdminServicios(scope, { withPhotoCounts: true, maxAge: 30_000 });
         if (!cancelled) {
           setServices(data.servicios);
           if (data.photoCounts) {
@@ -366,6 +387,10 @@ export const HistorialPage: React.FC = () => {
       const matchesDateFrom = !dateFrom || (dia !== null && dia >= dateFrom);
       const matchesDateTo = !dateTo || (dia !== null && dia <= dateTo);
 
+      const hora = horaServicio(s);
+      const matchesHoraFrom = !horaFrom || (hora !== null && hora >= horaFrom);
+      const matchesHoraTo = !horaTo || (hora !== null && hora <= horaTo);
+
       return (
         matchesSearch &&
         matchesStatus &&
@@ -373,13 +398,15 @@ export const HistorialPage: React.FC = () => {
         matchesDupla &&
         matchesCorralon &&
         matchesDateFrom &&
-        matchesDateTo
+        matchesDateTo &&
+        matchesHoraFrom &&
+        matchesHoraTo
       );
     });
 
   const filteredAll = useMemo(
     () => applyFilters(services),
-    [services, searchQuery, statusFilter, tipoFilter, duplaFilter, corralonFilter, dateFrom, dateTo, gruasCatalog, corralonesCatalog]
+    [services, searchQuery, statusFilter, tipoFilter, duplaFilter, corralonFilter, dateFrom, dateTo, horaFrom, horaTo, gruasCatalog, corralonesCatalog]
   );
 
   const tabCounts = useMemo(
@@ -468,6 +495,15 @@ export const HistorialPage: React.FC = () => {
   };
 
   useEffect(() => {
+    if (estadoParam || periodoParam) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("estado");
+      next.delete("periodo");
+      setSearchParams(next, { replace: true });
+    }
+  }, []);
+
+  useEffect(() => {
     const servicioId = searchParams.get("servicio")?.trim();
     if (!servicioId) {
       servicioParamHandledRef.current = false;
@@ -483,6 +519,8 @@ export const HistorialPage: React.FC = () => {
 
     const next = new URLSearchParams(searchParams);
     next.delete("servicio");
+    next.delete("estado");
+    next.delete("periodo");
     setSearchParams(next, { replace: true });
   }, [fetching, services, searchParams, setSearchParams]);
 
@@ -670,6 +708,29 @@ export const HistorialPage: React.FC = () => {
         return { ...ev, fotos };
       })
     );
+  };
+
+  const handleRotarFoto = async (eventoId: string, fotoIndex: number, foto: Foto) => {
+    if (!selectedService || !puedeGestionar) return;
+    const key = `${eventoId}-${fotoIndex}`;
+    setRotandoFoto(key);
+    try {
+      await rotarFoto({ servicioId: selectedService.id, eventoId, fotoIndex });
+      const fileId = driveFileIdDeFoto(foto);
+      if (fileId) {
+        setFotosRotadas((prev) => ({ ...prev, [fileId]: Date.now() }));
+        setPreviewUrls((prev) => {
+          const next = { ...prev };
+          delete next[fileId];
+          return next;
+        });
+      }
+      invalidateEventosServicio(selectedService.id);
+    } catch (err) {
+      console.error("Error al rotar foto:", err);
+    } finally {
+      setRotandoFoto(null);
+    }
   };
 
   const handleAnularActa = async () => {
@@ -904,6 +965,12 @@ export const HistorialPage: React.FC = () => {
               onChange={(from, to) => {
                 setDateFrom(from);
                 setDateTo(to);
+              }}
+              horaFrom={horaFrom}
+              horaTo={horaTo}
+              onHoraChange={(hf, ht) => {
+                setHoraFrom(hf);
+                setHoraTo(ht);
               }}
               className="w-full sm:w-60 shrink-0"
             />
@@ -1407,19 +1474,35 @@ export const HistorialPage: React.FC = () => {
                               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 pt-2">
                                 {evento.fotos.map((img, idx) => {
                                   const fileId = driveFileIdDeFoto(img);
-                                  const src = (fileId && previewUrls[fileId]) || urlFotoPreview(img);
+                                  const cacheBust = fileId && fotosRotadas[fileId];
+                                  const src = cacheBust
+                                    ? `${urlFotoPreview(img)}&v=${cacheBust}`
+                                    : (fileId && previewUrls[fileId]) || urlFotoPreview(img);
                                   const eventoId = evento.id;
+                                  const rotKey = `${eventoId}-${idx}`;
                                   return (
                                   <div key={idx} className="border border-brand-seashell rounded-lg p-1.5 bg-brand-bg text-center">
-                                    <a href={urlFotoDrive(img)} target="_blank" rel="noopener noreferrer">
-                                      <img 
-                                        src={src}
-                                        alt={img.etiqueta} 
-                                        className="rounded w-full aspect-video object-cover bg-black"
-                                        referrerPolicy="no-referrer"
-                                        loading="lazy"
-                                      />
-                                    </a>
+                                    <div className="relative">
+                                      <a href={urlFotoDrive(img)} target="_blank" rel="noopener noreferrer">
+                                        <img
+                                          src={src}
+                                          alt={img.etiqueta}
+                                          className="rounded w-full aspect-video object-cover bg-black"
+                                          referrerPolicy="no-referrer"
+                                          loading="lazy"
+                                        />
+                                      </a>
+                                      {puedeGestionar && eventoId && (
+                                        <button
+                                          onClick={() => handleRotarFoto(eventoId, idx, img)}
+                                          disabled={rotandoFoto === rotKey}
+                                          className="absolute bottom-1.5 right-1.5 w-7 h-7 p-1.5 rounded-full bg-brand-orange/80 hover:bg-brand-orange text-white backdrop-blur-sm shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                                          title="Rotar foto 90°"
+                                        >
+                                          <RotateCw className={`w-full h-full ${rotandoFoto === rotKey ? "animate-spin" : ""}`} />
+                                        </button>
+                                      )}
+                                    </div>
                                     <p className="text-[9px] font-bold text-gray-750 mt-1 uppercase">
                                       {etiquetaFotoLegible(img.etiqueta)}
                                     </p>

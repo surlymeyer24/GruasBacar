@@ -22,6 +22,7 @@ export const Navbar: React.FC = () => {
   if (!userData) return null;
 
   const isAdmin = esAdmin(userData.roles ?? []);
+  const isSupervisor = userData.roles?.includes("SUPERVISOR") ?? false;
   const isSupervisorOnly = esSoloSupervisor(userData.roles);
   const isVisorOnly = esSoloVisor(userData.roles);
   const homePath = rutaInicioPorRoles(userData.roles);
@@ -182,6 +183,22 @@ export const Navbar: React.FC = () => {
                   className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
                 >
                   Dashboard Admin
+                </Link>
+                {isSupervisor && (
+                  <Link
+                    to="/supervisor-dashboard"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                  >
+                    Dashboard Supervisor
+                  </Link>
+                )}
+                <Link
+                  to="/supervisor/nueva-acta"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="text-center py-2.5 text-sm font-medium border border-brand-cornflower/20 text-white bg-white/10 hover:bg-white/15 rounded-xl transition-colors"
+                >
+                  Cargar acta manual
                 </Link>
                 <Link
                   to="/admin"

@@ -9,21 +9,13 @@
  * Uso:
  *   npm run migrate-uids              # simulación (dry-run)
  *   npm run migrate-uids -- --apply     # ejecutar migración
- *   npm run migrate-uids:emulator -- --apply
  *   npm run migrate-uids -- --apply --email=admin@bacar.com
  */
-import { readFileSync, existsSync } from 'fs';
 import { randomBytes } from 'crypto';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import { initProdAdmin } from './lib/initFirebaseAdmin.mjs';
 import { buildUsuarioUid, normalizeRoles } from '../shared/dist/index.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-
-const useEmulator = process.argv.includes('--emulator');
+const { db, auth } = initProdAdmin(process.argv, { scriptName: 'migrar-uids-usuarios.mjs' });
 const dryRun = !process.argv.includes('--apply');
 const emailFilter = process.argv.find((a) => a.startsWith('--email='))?.split('=')[1]?.toLowerCase();
 
@@ -32,23 +24,6 @@ const PASSWORDS_CONOCIDAS = {
   'admin@bacar.com': 'Admin123!',
   'chofer@bacar.com': 'Chofer123!',
 };
-
-if (useEmulator) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-  admin.initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID ?? 'gruasbacar' });
-} else {
-  const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
-  if (!existsSync(keyPath)) {
-    console.error('No se encontró functions/src/auth/ServiceAccountKey.json');
-    process.exit(1);
-  }
-  const serviceAccount = JSON.parse(readFileSync(keyPath, 'utf8'));
-  admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-}
-
-const db = admin.firestore();
-const auth = admin.auth();
 
 async function listAllAuthUsers() {
   const users = [];
@@ -267,8 +242,7 @@ async function migrateOneUser(authUser) {
 }
 
 async function main() {
-  const destino = useEmulator ? 'emuladores locales' : 'gruasbacar (producción)';
-  console.log(`Migración de UIDs de usuarios (${destino})`);
+  console.log('Migración de UIDs de usuarios (gruasbacar / producción)');
   console.log(dryRun ? 'MODO: simulación (agregá --apply para ejecutar)\n' : 'MODO: APLICAR CAMBIOS\n');
 
   const authUsers = await listAllAuthUsers();

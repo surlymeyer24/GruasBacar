@@ -10,10 +10,13 @@ import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { requireProdFlag } from './lib/initFirebaseAdmin.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const admin = require('firebase-admin');
+
+requireProdFlag(process.argv, 'restablecer-claves.mjs');
 
 const dryRun = !process.argv.includes('--apply');
 const emailFilter = process.argv.find((a) => a.startsWith('--email='))?.split('=')[1]?.toLowerCase();

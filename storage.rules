@@ -1,12 +1,37 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    function usuarioAutenticado() {
+      return firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        usuarioAutenticado().rol == 'ADMIN' ||
+        usuarioAutenticado().rol == 'SUPERADMIN' ||
+        ('roles' in usuarioAutenticado() &&
+          usuarioAutenticado().roles.hasAny(['ADMIN', 'SUPERADMIN']))
+      );
+    }
+
     match /servicios/{servicioId}/{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
         && firestore.get(/databases/(default)/documents/servicios/$(servicioId)).data.creadoPor == request.auth.uid
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+    }
+
+    match /polizas/{uid}/{allPaths=**} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && request.auth.uid == uid
+        && request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches(
+          'application/pdf|image/jpeg|image/png|image/webp'
+        );
+      allow delete: if isAdmin() && request.auth.uid == uid;
     }
   }
 }

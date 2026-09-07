@@ -7,7 +7,9 @@ export interface AdminDashboardStats {
   actasEnEnganche: number;
   actasEnTraslado: number;
   actasFinalizadas: number;
+  actasHoy: number;
   actasEsteMes: number;
+  hoyLabel: string;
   mesActualLabel: string;
   gruasActivas: number;
   gruasEnOperacion: number;
@@ -15,22 +17,37 @@ export interface AdminDashboardStats {
   usuariosEnTurno: Usuario[];
 }
 
-function inicioMesArgentina(): { timestamp: Timestamp; label: string } {
+function periodosArgentina(): {
+  inicioHoy: Timestamp;
+  finHoy: Timestamp;
+  inicioMes: Timestamp;
+  hoyLabel: string;
+  mesActualLabel: string;
+} {
   const now = new Date();
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Argentina/Buenos_Aires',
     year: 'numeric',
     month: '2-digit',
+    day: '2-digit',
   }).formatToParts(now);
   const year = parts.find(p => p.type === 'year')!.value;
   const month = parts.find(p => p.type === 'month')!.value;
-  const timestamp = Timestamp.fromDate(new Date(`${year}-${month}-01T00:00:00-03:00`));
-  const label = new Intl.DateTimeFormat('es-AR', {
+  const day = parts.find(p => p.type === 'day')!.value;
+  const inicioHoy = Timestamp.fromDate(new Date(`${year}-${month}-${day}T00:00:00-03:00`));
+  const finHoy = Timestamp.fromMillis(inicioHoy.toMillis() + 24 * 60 * 60 * 1000);
+  const inicioMes = Timestamp.fromDate(new Date(`${year}-${month}-01T00:00:00-03:00`));
+  const hoyLabel = new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    day: 'numeric',
+    month: 'long',
+  }).format(now);
+  const mesActualLabel = new Intl.DateTimeFormat('es-AR', {
     timeZone: 'America/Argentina/Buenos_Aires',
     month: 'long',
     year: 'numeric',
   }).format(now);
-  return { timestamp, label };
+  return { inicioHoy, finHoy, inicioMes, hoyLabel, mesActualLabel };
 }
 
 function enrichGruaDescripcion(u: Usuario, gruasCatalog: Grua[]): void {
@@ -46,7 +63,7 @@ function enrichGruaDescripcion(u: Usuario, gruasCatalog: Grua[]): void {
 
 export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
   const serviciosCol = collection(db, 'servicios');
-  const { timestamp: inicioMes, label: mesActualLabel } = inicioMesArgentina();
+  const { inicioHoy, finHoy, inicioMes, hoyLabel, mesActualLabel } = periodosArgentina();
 
   const hoy = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Argentina/Buenos_Aires',
@@ -60,6 +77,8 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
     enTrasladoSnap,
     desenganchadosCount,
     desenganchadosTestCount,
+    hoyCount,
+    hoyTestCount,
     esteMesCount,
     esteMesTestCount,
     gruasSnap,
@@ -71,6 +90,17 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
     getCountFromServer(query(serviciosCol, where('estado', '==', 'DESENGANCHADO'))),
     getCountFromServer(
       query(serviciosCol, where('estado', '==', 'DESENGANCHADO'), where('esTest', '==', true))
+    ),
+    getCountFromServer(
+      query(serviciosCol, where('creadoEn', '>=', inicioHoy), where('creadoEn', '<', finHoy))
+    ),
+    getCountFromServer(
+      query(
+        serviciosCol,
+        where('creadoEn', '>=', inicioHoy),
+        where('creadoEn', '<', finHoy),
+        where('esTest', '==', true)
+      )
     ),
     getCountFromServer(query(serviciosCol, where('creadoEn', '>=', inicioMes))),
     getCountFromServer(
@@ -99,6 +129,9 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
   const actasFinalizadas = esEntornoTest
     ? desenganchadosCount.data().count
     : Math.max(0, desenganchadosCount.data().count - desenganchadosTestCount.data().count);
+  const actasHoy = esEntornoTest
+    ? hoyCount.data().count
+    : Math.max(0, hoyCount.data().count - hoyTestCount.data().count);
   const actasEsteMes = esEntornoTest
     ? esteMesCount.data().count
     : Math.max(0, esteMesCount.data().count - esteMesTestCount.data().count);
@@ -157,7 +190,9 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
     actasEnEnganche,
     actasEnTraslado,
     actasFinalizadas,
+    actasHoy,
     actasEsteMes,
+    hoyLabel,
     mesActualLabel,
     gruasActivas: gruasSnap.size,
     gruasEnOperacion: gruasEnOperacion.size,

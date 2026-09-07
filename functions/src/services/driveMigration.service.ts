@@ -4,6 +4,7 @@ import {
   buildCarpetaServicio,
   fechaCarpetaDrive,
 } from '../utils/validators';
+import { driveHabilitadoEnEmulador, enEmulador } from '../utils/entorno';
 
 function db() {
   return admin.firestore();
@@ -198,6 +199,12 @@ export async function migrarCarpetasDrive(
   rootFolderId: string,
   dryRun: boolean
 ): Promise<MigrationResult> {
+  if (enEmulador() && !driveHabilitadoEnEmulador()) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Migración de Drive deshabilitada en emulador (no se toca el Drive de producción).'
+    );
+  }
   const folderId = rootFolderId.trim();
   if (!folderId) {
     throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
@@ -247,7 +254,7 @@ export async function migrarCarpetasDrive(
 
     const fechaStr = fechaCarpetaDrive(fechaServicio);
     const correctParentId = await ensureFolderPath(
-      drive, folderId, rootFolderName.trim().toLowerCase(), [fechaStr, carpetaServicio]
+      drive, folderId, rootFolderName.trim().toLowerCase(), ['Gruas', fechaStr, carpetaServicio]
     );
 
     // Obtener parents actuales en batch

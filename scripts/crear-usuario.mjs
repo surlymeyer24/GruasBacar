@@ -1,16 +1,9 @@
 /**
- * Crea un usuario de prueba en los emuladores.
- * Uso: node scripts/crear-usuario.mjs --emulator --email eng2@bacar.com --nombre "Pedro Ruiz" --rol ENGANCHADOR --legajo ENG002 --password Eng123!
+ * Crea un usuario de prueba en los emuladores (nunca producción).
+ * Uso: node scripts/crear-usuario.mjs --email eng2@bacar.com --nombre "Pedro Ruiz" --rol ENGANCHADOR --legajo ENG002 --password Eng123!
  */
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { existsSync, readFileSync } from 'fs';
-import { createRequire } from 'module';
+import { initEmulatorAdmin } from './lib/initFirebaseAdmin.mjs';
 import { buildUsuarioUid } from '../shared/dist/index.js';
-
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -18,7 +11,6 @@ const flag = (name) => {
   return i >= 0 ? args[i + 1] : null;
 };
 
-const useEmulator = args.includes('--emulator');
 const email = flag('email');
 const nombre = flag('nombre');
 const rol = flag('rol') || 'ENGANCHADOR';
@@ -26,26 +18,11 @@ const legajo = flag('legajo') || null;
 const password = flag('password') || 'Test123!';
 
 if (!email || !nombre) {
-  console.log('Uso: node scripts/crear-usuario.mjs --emulator --email X --nombre "Y" [--rol ROL] [--legajo L] [--password P]');
+  console.log('Uso: node scripts/crear-usuario.mjs --email X --nombre "Y" [--rol ROL] [--legajo L] [--password P]');
   process.exit(1);
 }
 
-if (useEmulator) {
-  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8081';
-  process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:9099';
-  admin.initializeApp({ projectId: 'gruasbacar' });
-} else {
-  const keyPath = join(__dirname, '../functions/src/auth/ServiceAccountKey.json');
-  if (!existsSync(keyPath)) {
-    console.error('No se encontró ServiceAccountKey.json');
-    process.exit(1);
-  }
-  const sa = JSON.parse(readFileSync(keyPath, 'utf8'));
-  admin.initializeApp({ credential: admin.credential.cert(sa) });
-}
-
-const db = admin.firestore();
-const auth = admin.auth();
+const { admin, db, auth } = initEmulatorAdmin(process.argv);
 
 const roles = [rol];
 const uid = buildUsuarioUid({ nombre, roles, legajo });

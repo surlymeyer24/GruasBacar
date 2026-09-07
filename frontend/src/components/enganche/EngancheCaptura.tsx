@@ -92,10 +92,12 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
     [turno.duplaId]
   );
 
-  const crearServicioAnticipado = async () => {
+  const crearServicioAnticipado = async (requierePatente = false) => {
     if (creandoServicioRef.current || activeServicioIdRef.current || submittingRef.current) return;
-    const patErr = validatePatenteText(patente);
-    if (patErr) return;
+    if (requierePatente) {
+      const patErr = validatePatenteText(patente);
+      if (patErr) return;
+    }
 
     creandoServicioRef.current = true;
     setCreandoServicio(true);
@@ -108,10 +110,11 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         } catch { /* GPS opcional */ }
       }
 
-      const normalizedPatente = normalizarPatenteInput(patente);
+      const patenteValida = !validatePatenteText(patente);
+      const normalizedPatente = patenteValida ? normalizarPatenteInput(patente) : undefined;
       const res = await servicioService.iniciarEnganche(
         {
-          patente: normalizedPatente,
+          ...(normalizedPatente ? { patente: normalizedPatente } : {}),
           ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
           grua: turno.gruaPatente,
           gruaPatente: turno.gruaPatente,
@@ -126,7 +129,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
       );
       activeServicioIdRef.current = res.servicioId;
       setActiveServicioId(res.servicioId);
-      onServiceCreated(res.servicioId, normalizedPatente);
+      onServiceCreated(res.servicioId, normalizedPatente ?? "");
     } catch (err) {
       if (!esErrorDeRed(err)) {
         setErrorText(
@@ -138,6 +141,10 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
       setCreandoServicio(false);
     }
   };
+
+  const handlePrimeraFoto = useCallback(() => {
+    crearServicioAnticipado();
+  }, [patente, geoCoords]);
 
   const handleFotosListas = useCallback((listas: boolean) => {
     if (listas) crearServicioAnticipado();
@@ -240,10 +247,11 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
       }
 
       if (!sId) {
-        const normalizedPatente = normalizarPatenteInput(patente);
+        const patenteValida = !validatePatenteText(patente);
+        const normalizedPatente = patenteValida ? normalizarPatenteInput(patente) : undefined;
         const res = await servicioService.iniciarEnganche(
           {
-            patente: normalizedPatente,
+            ...(normalizedPatente ? { patente: normalizedPatente } : {}),
             ...(descripcionVehiculo.trim() ? { descripcionVehiculo: descripcionVehiculo.trim() } : {}),
             grua: turno.gruaPatente,
             gruaPatente: turno.gruaPatente,
@@ -259,7 +267,17 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         sId = res.servicioId;
         activeServicioIdRef.current = sId;
         setActiveServicioId(sId);
-        onServiceCreated(sId, normalizedPatente);
+        onServiceCreated(sId, normalizedPatente ?? "");
+      } else {
+        const patenteValida = !validatePatenteText(patente);
+        if (patenteValida) {
+          const normalizedPatente = normalizarPatenteInput(patente);
+          try {
+            await servicioService.actualizarPatente(sId, normalizedPatente);
+          } catch {
+            // no bloquear el flujo si falla la actualización de patente
+          }
+        }
       }
 
       const geoEnganche = result.geoExif ?? activeGeo;
@@ -419,6 +437,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         backLabel={backLabel}
         onConfirm={handleConfirmFotos}
         onFotosListas={handleFotosListas}
+        onPrimeraFoto={handlePrimeraFoto}
         maxExtras={5}
       />
     </div>

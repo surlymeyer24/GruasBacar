@@ -34,6 +34,14 @@
 
 ---
 
+## Scripts Admin SDK contra la base real
+
+- **Pasa cuando:** Un script de `scripts/` corre contra Firestore real aunque “estés en local”.
+- **Causa real:** El Admin SDK usa `ServiceAccountKey.json` y habla con el proyecto `gruasbacar` si no se setean `FIRESTORE_EMULATOR_HOST` / `FIREBASE_AUTH_EMULATOR_HOST`. Un script de vaciar BD (`vaciar-bd.mjs` / `emu:clean`) ignoraba el destino y llegó a vaciar producción.
+- **Solución:** Ese script ya no existe. Scripts de emulador (`initEmulatorAdmin`) rechazan `--prod` y no cargan la service account. Scripts de prod (`initProdAdmin`) rechazan `--emulator` y abortan si hay variables de emulador. El seed es solo copia prod → emulador (`npm run seed`). El frontend de `npm run dev` no conecta a prod. Functions en emulador abortan si faltan hosts locales y no escriben Drive ni mandan FCM.
+
+---
+
 ## El campo `rol` y el campo `roles` coexisten en documentos de usuario
 
 - **Pasa cuando:** Leés un documento de `usuarios/` y tiene `rol: "CHOFER"` (string) y `roles: ["ENGANCHADOR"]` (array), o solo tiene uno de los dos.

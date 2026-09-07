@@ -4,7 +4,10 @@ import { ChevronDown, LucideIcon } from "lucide-react";
 
 export interface CustomSelectOption {
   value: string;
+  /** Texto plano para accesibilidad y fallback. */
   label: string;
+  /** Contenido visual opcional (reemplaza label en la UI). */
+  content?: React.ReactNode;
 }
 
 export interface CustomSelectGroup {
@@ -46,6 +49,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const allOptions = groups ? groups.flatMap((g) => g.options) : options;
   const selectedOption = allOptions.find((o) => o.value === value);
   const label = selectedOption?.label ?? placeholder ?? allOptions[0]?.label ?? "";
+  const selectedContent = selectedOption?.content ?? label;
   const hasValue = Boolean(selectedOption);
   const isSm = size === "sm";
   const isFilter = size === "filter";
@@ -116,7 +120,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             onChange(option.value);
             setOpen(false);
           }}
-          className={`w-full text-left transition-colors ${
+          className={`w-full flex items-center justify-between gap-2 transition-colors ${
             isSm
               ? "px-3 py-2 text-xs"
               : isFilter
@@ -128,7 +132,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
               : "text-brand-purply hover:bg-brand-bg"
           }`}
         >
-          {option.label}
+          {option.content ?? option.label}
         </button>
       </li>
     );
@@ -166,7 +170,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"
-        className={`w-full flex items-center bg-brand-bg border transition-all text-left ${
+        className={`w-full flex items-center gap-2 bg-brand-bg border transition-all text-left ${
           disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
         } ${
           isSm
@@ -180,7 +184,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
             : "border-brand-seashell hover:border-brand-pale/50"
         }`}
       >
-        <span className="truncate">{label}</span>
+        <span className="truncate flex-1 min-w-0">{selectedContent}</span>
       </button>
       {Icon && (
         <Icon

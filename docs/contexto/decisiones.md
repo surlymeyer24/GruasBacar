@@ -302,3 +302,16 @@
 - **Descartado:**
   - **try/catch manual en cada function** — Repetitivo y fácil de olvidar en functions nuevas.
 - **Estado:** Vigente. Toda Cloud Function nueva debe usar el wrapper.
+
+---
+
+## Ago 2026 · Emulador aislado de producción
+
+- **Decisión:** El trabajo local usa emuladores (Auth, Firestore, Storage, Functions) sin escribir el proyecto real. El seed único es copiar producción → emulador (`npm run seed`). Un script Admin SDK no elige destino: `initEmulatorAdmin` o `initProdAdmin`, nunca ambos.
+- **Por qué:** El mismo `projectId` (`gruasbacar`) no aísla nada si el Admin SDK no apunta a `127.0.0.1`. Un script de vaciar BD con flag a prod fue el camino que borró producción. Un seed sintético a prod no hace falta: el volumen real sirve para probar en local.
+- **Descartado:**
+  - **Un segundo proyecto Firebase** — Más costo y secrets. El emulador ya es otra base si los hosts están forzados.
+  - **`test-gruasbacar` como sandbox** — Comparte Firestore/Auth con producción (`esTest` solo oculta actas en listados).
+  - **`seed:prod`, scripts duales y `vaciar-bd`** — Un flag mal cableado vuelve a tocar la nube. No hay comando para vaciar la base.
+- **Estado:** Vigente. Fail-closed: frontend DEV exige emuladores (no hay `dev:live`); no existe script de vaciar BD; scripts de prod abortan si hay variables de emulador; Functions en emulador abortan si faltan hosts locales y bloquean Drive/FCM.
+

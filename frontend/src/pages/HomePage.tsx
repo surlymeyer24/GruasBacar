@@ -15,12 +15,14 @@ import {
 import { isMock, db } from "../firebase";
 import { doc, getDoc, collection, query, where, getDocs, limit } from "firebase/firestore";
 import { getMockServices } from "../data/mockData";
-import { Servicio, servicioActivoVigente, rutaFlujoOperadorPorEstado, ServicioActivoResumen, displayPatente } from "@gruasbacar/shared";
+import { Servicio, servicioActivoVigente, rutaFlujoOperadorPorEstado, ServicioActivoResumen, displayPatente, parseFirestoreLikeDate } from "@gruasbacar/shared";
 import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
 import { asignacionDiariaVigente } from "../utils/asignacionDiaria";
 import { ConfiguracionDiaModal } from "../components/operador/ConfiguracionDiaModal";
+import { ConfirmDialog } from "../components/shared/ConfirmDialog";
 import { esOperador, labelTipoFlota, duplaEnganchadorDeAsignacion, primerNombre, asignacionCoincideConUsuario } from "@gruasbacar/shared";
+import { obtenerUltimaAnulacionAutomatica, deshacerAnulacionAutomatica } from "../services/servicio.service";
 
 
 function servicioDesdeResumen(resumen: ServicioActivoResumen | null | undefined): Servicio | null {
@@ -46,6 +48,31 @@ export const HomePage: React.FC = () => {
   const turnoCoincideConUsuario = turnoHoy ? asignacionCoincideConUsuario(turnoHoy, userData) : false;
   const authReady = !sessionLoading && !profileLoading;
   const [gruaDescResuelta, setGruaDescResuelta] = useState<string | null>(null);
+  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
+  const [servicioAutoAnulado, setServicioAutoAnulado] = useState<Servicio | null>(null);
+  const [deshaciendo, setDeshaciendo] = useState(false);
+
+  useEffect(() => {
+    if (activeService || !isEnganchador || !userData?.uid) {
+      setServicioAutoAnulado(null);
+      return;
+    }
+    let cancelled = false;
+    obtenerUltimaAnulacionAutomatica(userData.uid).then((s) => {
+      if (!cancelled) setServicioAutoAnulado(s);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeService, isEnganchador, userData?.uid]);
+
+  useEffect(() => {
+    if (!servicioAutoAnulado) return;
+    const anuladoEn = parseFirestoreLikeDate(servicioAutoAnulado.anuladoEn);
+    if (!anuladoEn) return;
+    const remaining = 10 * 60 * 1000 - (Date.now() - anuladoEn.getTime());
+    if (remaining <= 0) { setServicioAutoAnulado(null); return; }
+    const timer = setTimeout(() => setServicioAutoAnulado(null), remaining);
+    return () => clearTimeout(timer);
+  }, [servicioAutoAnulado]);
 
   useEffect(() => {
     if (!turnoHoy?.gruaPatente || turnoHoy.gruaDescripcion || isMock || !db) {
@@ -75,13 +102,29 @@ export const HomePage: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  const TIMEOUT_ENGANCHE_MS = 7 * 60 * 1000;
+  useEffect(() => {
+    if (!activeService || activeService.estado !== "ENGANCHADO") {
+      setShowTimeoutModal(false);
+      return;
+    }
+    const creadoEn = parseFirestoreLikeDate(activeService.creadoEn);
+    if (!creadoEn) return;
+    const elapsed = Date.now() - creadoEn.getTime();
+    if (elapsed >= TIMEOUT_ENGANCHE_MS) {
+      setShowTimeoutModal(true);
+    } else {
+      const timer = setTimeout(() => setShowTimeoutModal(true), TIMEOUT_ENGANCHE_MS - elapsed);
+      return () => clearTimeout(timer);
+    }
+  }, [activeService]);
+
   useEffect(() => {
     if (!authReady || !userData) return;
 
     const fromResumen = servicioDesdeResumen(userData.servicioActivoResumen);
     if (fromResumen) {
       setActiveService(fromResumen);
-      return;
     }
 
     if (!userData.servicioActivoId) {
@@ -141,8 +184,27 @@ export const HomePage: React.FC = () => {
           setShowConfigDia(false);
         }}
       />
+      <ConfirmDialog
+        isOpen={showTimeoutModal}
+        onClose={async () => {
+          try {
+            await updateServicioActivo(null);
+            setActiveService(null);
+          } catch (e) {
+            console.error(e);
+            window.alert("No se pudo anular el enganche. Intentá de nuevo o contactá al administrador.");
+          }
+        }}
+        onConfirm={() => setShowTimeoutModal(false)}
+        title="Enganche abierto"
+        message={<>Tu enganche de <span className="font-mono font-bold text-brand-cta">{displayPatente(activeService?.patente, activeService?.descripcionVehiculo)}</span> lleva más de 10 minutos. ¿Querés seguir con el servicio o anularlo?</>}
+        confirmText="Sí, seguir"
+        cancelText="Anular enganche"
+        cancelDanger
+        blocking
+      />
       <div className="space-y-6">
-        
+
         {/* Header Hero card */}
         <div className="relative py-6 px-6 bg-brand-purply text-white rounded-2xl shadow-xl border border-brand-cornflower/30 border-l-4 border-l-brand-cta">
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4 overflow-visible">
@@ -320,6 +382,35 @@ export const HomePage: React.FC = () => {
                     Liberar Grúa
                   </button>
                 </div>
+              </div>
+            )}
+
+            {servicioAutoAnulado && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-900">
+                <p>
+                  Tu enganche de{" "}
+                  <span className="font-bold font-mono">{displayPatente(servicioAutoAnulado.patente, servicioAutoAnulado.descripcionVehiculo)}</span>{" "}
+                  fue anulado por inactividad.{" "}
+                  <button
+                    type="button"
+                    disabled={deshaciendo}
+                    onClick={async () => {
+                      setDeshaciendo(true);
+                      try {
+                        await deshacerAnulacionAutomatica(servicioAutoAnulado.id!);
+                        setServicioAutoAnulado(null);
+                      } catch (e: any) {
+                        const msg = e?.message || "No se pudo deshacer la anulación.";
+                        window.alert(msg);
+                      } finally {
+                        setDeshaciendo(false);
+                      }
+                    }}
+                    className="text-brand-cta underline font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    {deshaciendo ? "Deshaciendo…" : "Deshacer"}
+                  </button>
+                </p>
               </div>
             )}
 

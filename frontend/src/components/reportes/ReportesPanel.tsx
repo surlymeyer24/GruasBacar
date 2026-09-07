@@ -80,6 +80,7 @@ export const ReportesPanel: React.FC = () => {
     limpiarFiltros,
     kpis,
     aggregations,
+    analisisTramos,
     totalServicios,
   } = useReportesData();
 
@@ -229,7 +230,7 @@ export const ReportesPanel: React.FC = () => {
       </div>
 
       <Suspense fallback={<LoadingSpinner message="Cargando gráficos..." />}>
-        <ReportesCharts kpis={kpis} aggregations={aggregations} generated={generated} />
+        <ReportesCharts kpis={kpis} aggregations={aggregations} analisisTramos={analisisTramos} generated={generated} />
       </Suspense>
     </div>
   );

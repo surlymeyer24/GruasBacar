@@ -275,7 +275,7 @@ Solo en flujos con `prefetchUpload` (enganche/desenganche operador). **Actas man
 npm run emulators
 ```
 
-Requiere `VITE_USE_EMULATORS=true`. Storage + Functions deben correr juntos para que el trigger funcione. Drive en dev puede omitirse con `FOTOS_OPCIONALES_DEV=true` en functions.
+Emulador UI en `http://localhost:4000`. Functions en `http://localhost:5001`. Drive en emulador está bloqueado (fotos opcionales). No se escribe en la carpeta de Drive de producción.
 
 ---
 

@@ -8,14 +8,18 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as servicioService from './services/servicio.service';
 import * as carnetService from './services/carnet.service';
 import * as itvService from './services/itv.service';
+import * as polizaService from './services/poliza.service';
+import * as servicioTimeoutService from './services/servicioTimeout.service';
 import * as usuarioService from './services/usuario.service';
 import * as mapsService from './services/maps.service';
 import { verificarAuth, verificarAdmin, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
 import { withHttpsErrorHandling } from './utils/callableHandler';
+import { assertAislamientoEmulador } from './utils/entorno';
 
 const googleDriveFolderId = defineSecret('GOOGLE_DRIVE_FOLDER_ID');
 
 admin.initializeApp();
+assertAislamientoEmulador();
 
 setGlobalOptions({
   region: 'us-central1',
@@ -59,6 +63,12 @@ export const iniciarEnganche = onCall(callableWithDrive, withHttpsErrorHandling(
     ctx.uid,
     googleDriveFolderId.value()
   );
+}));
+
+export const actualizarPatenteServicio = onCall(callable, withHttpsErrorHandling('actualizarPatenteServicio', async (request) => {
+  const ctx = await verificarOperador(request.auth);
+  await servicioService.actualizarPatenteServicio(request.data?.servicioId, request.data?.patente, ctx.uid);
+  return { ok: true };
 }));
 
 export const registrarEventoEnganche = onCall(callableWithDrive, withHttpsErrorHandling('registrarEventoEnganche', async (request) => {
@@ -154,6 +164,12 @@ export const agregarComentarioFoto = onCall(callable, withHttpsErrorHandling('ag
   return { comentario };
 }));
 
+export const rotarFoto = onCall(callableWithDrive, withHttpsErrorHandling('rotarFoto', async (request) => {
+  await verificarGestionActas(request.auth);
+  await servicioService.rotarFoto(request.data ?? {}, request.auth!.uid);
+  return { ok: true };
+}));
+
 export const crearActaManual = onCall(callableWithDrive, withHttpsErrorHandling('crearActaManual', async (request) => {
   const ctx = await verificarGestionActas(request.auth);
   return servicioService.crearActaManual(
@@ -211,6 +227,16 @@ export const solicitarReconfiguracionTurno = onCall(callable, withHttpsErrorHand
   const userDoc = await admin.firestore().collection('usuarios').doc(ctx.uid).get();
   const legajo = userDoc.data()?.legajo as string | undefined;
   return usuarioService.solicitarReconfiguracionTurno(ctx.uid, request.data ?? {}, {
+    nombre: ctx.nombre,
+    legajo,
+  });
+}));
+
+export const solicitarCambioGrua = onCall(callable, withHttpsErrorHandling('solicitarCambioGrua', async (request) => {
+  const ctx = await verificarOperador(request.auth);
+  const userDoc = await admin.firestore().collection('usuarios').doc(ctx.uid).get();
+  const legajo = userDoc.data()?.legajo as string | undefined;
+  return usuarioService.solicitarCambioGrua(ctx.uid, request.data ?? {}, {
     nombre: ctx.nombre,
     legajo,
   });
@@ -364,6 +390,74 @@ export const verificarITVVencimiento = onSchedule(
     await itvService.verificarVencimientosITV();
   }
 );
+
+// ── Pólizas de seguro ────────────────────────────────────────
+
+export const crearPoliza = onCall(callable, withHttpsErrorHandling('crearPoliza', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  return polizaService.crearPoliza(request.data ?? {}, ctx);
+}));
+
+export const listarPolizas = onCall(callable, withHttpsErrorHandling('listarPolizas', async (request) => {
+  await verificarAdmin(request.auth);
+  return polizaService.listarPolizas();
+}));
+
+export const desactivarPoliza = onCall(callable, withHttpsErrorHandling('desactivarPoliza', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  await polizaService.desactivarPoliza(request.data?.polizaId, ctx.uid);
+  return { ok: true };
+}));
+
+export const verificarPolizasVencimiento = onSchedule(
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await polizaService.verificarVencimientosPolizas();
+  }
+);
+
+// ── Timeout enganches ───────────────────────────────────────
+
+export const verificarTimeoutEnganches = onSchedule(
+  { schedule: 'every 3 minutes', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await servicioTimeoutService.verificarTimeoutEnganches();
+  }
+);
+
+export const backupFirestoreDiario = onSchedule(
+  {
+    schedule: 'every day 03:00',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    region: 'us-central1',
+    secrets: [googleDriveFolderId],
+    timeoutSeconds: 540,
+    memory: '1GiB',
+  },
+  async () => {
+    const backup = await import('./services/firestoreBackup.service');
+    await backup.ejecutarBackupFirestoreConAlerta(googleDriveFolderId.value());
+  }
+);
+
+export const ejecutarBackupFirestore = onCall(
+  { ...callable, secrets: [googleDriveFolderId], timeoutSeconds: 540, memory: '1GiB' },
+  withHttpsErrorHandling('ejecutarBackupFirestore', async (request) => {
+    await verificarAdmin(request.auth);
+    const backup = await import('./services/firestoreBackup.service');
+    return backup.ejecutarBackupFirestoreConAlerta(googleDriveFolderId.value());
+  })
+);
+
+export const deshacerAnulacionAutomatica = onCall(callable, withHttpsErrorHandling('deshacerAnulacionAutomatica', async (request) => {
+  const ctx = await verificarAuth(request.auth);
+  const servicioId = request.data?.servicioId;
+  if (!servicioId || typeof servicioId !== 'string') {
+    throw new HttpsError('invalid-argument', 'servicioId es requerido.');
+  }
+  await servicioService.deshacerAnulacionAutomaticaServicio(servicioId, ctx.uid);
+  return { ok: true };
+}));
 
 /** Migración one-shot: mueve fotos a la carpeta correcta según fecha del servicio (solo admin, dry-run por defecto). */
 export const migrarCarpetasDrive = onCall(

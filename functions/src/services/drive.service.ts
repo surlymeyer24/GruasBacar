@@ -5,6 +5,7 @@ import {
   buildCarpetaServicio,
   fechaCarpetaDrive,
 } from '../utils/validators';
+import { driveHabilitadoEnEmulador, enEmulador } from '../utils/entorno';
 
 const DRIVE_SCOPES = [
   'https://www.googleapis.com/auth/drive',
@@ -44,7 +45,18 @@ async function loadGoogleApis(): Promise<GoogleApisModule> {
   return googleApisPromise;
 }
 
+function assertDriveNoTocaProduccion(): void {
+  if (enEmulador() && !driveHabilitadoEnEmulador()) {
+    throw new Error(
+      'Drive bloqueado en emulador para no escribir en la carpeta de producción. ' +
+        'Las fotos son opcionales en local. Para probar Drive, definí DRIVE_EN_EMULADOR=true ' +
+        'y un GOOGLE_DRIVE_FOLDER_ID de una carpeta de prueba (nunca la de prod).'
+    );
+  }
+}
+
 async function getDriveClient(): Promise<DriveClient> {
+  assertDriveNoTocaProduccion();
   const { google } = await loadGoogleApis();
   const auth = new google.auth.GoogleAuth({ scopes: DRIVE_SCOPES });
   return google.drive({ version: 'v3', auth });
@@ -134,9 +146,6 @@ async function assertRootFolderAccess(drive: DriveClient, folderId: string): Pro
     const folder = await getFolderMetadata(drive, folderId);
     if (folder.mimeType !== 'application/vnd.google-apps.folder') {
       throw new HttpsError('invalid-argument', 'El ID configurado no corresponde a una carpeta de Google Drive.');
-    }
-    if (!folder.driveId) {
-      throw new HttpsError('failed-precondition', sharedDriveRequiredMessage(saEmail));
     }
   } catch (err) {
     if (err instanceof HttpsError) throw err;
@@ -328,8 +337,9 @@ export async function prepararCarpetasServicio(
   const carpetaServicio = buildCarpetaServicio(legajo, patente, numeroInfraccion, fecha);
 
   const drive = await getDriveClient();
-  const fechaFolderId = await ensureFolderPath(drive, folderId, [fechaStr]);
-  const carpetaId = await ensureFolderPath(drive, folderId, [fechaStr, carpetaServicio]);
+  // Bajo Gruas/ (o directo en raíz si GOOGLE_DRIVE_FOLDER_ID ya es la carpeta Gruas).
+  const fechaFolderId = await ensureFolderPath(drive, folderId, ['Gruas', fechaStr]);
+  const carpetaId = await ensureFolderPath(drive, folderId, ['Gruas', fechaStr, carpetaServicio]);
   return { fechaFolderId, carpetaId };
 }
 
@@ -549,6 +559,26 @@ export async function obtenerUrlsPreviewFotos(
   return result;
 }
 
+/** Descarga la imagen de Drive, la rota 90° CW con sharp, y la re-sube al mismo fileId. */
+export async function rotarFotoEnDrive(driveFileId: string): Promise<void> {
+  const drive = await getDriveClient();
+
+  const res = await drive.files.get(
+    { fileId: driveFileId, alt: 'media', supportsAllDrives: true },
+    { responseType: 'arraybuffer' }
+  );
+  const original = Buffer.from(res.data as ArrayBuffer);
+
+  const sharp = (await import('sharp')).default;
+  const rotated = await sharp(original).rotate(90).jpeg({ quality: 92 }).toBuffer();
+
+  await drive.files.update({
+    fileId: driveFileId,
+    media: { mimeType: 'image/jpeg', body: Readable.from(rotated) },
+    supportsAllDrives: true,
+  });
+}
+
 const MAX_FOTOS_PDF = 30;
 const MAX_BYTES_FOTO_PDF = 4 * 1024 * 1024;
 
@@ -639,4 +669,125 @@ export async function verificarAccesoDrive(folderId: string): Promise<VerificarD
       driveErrorMessage(err, normalizedId, serviceAccountEmail)
     );
   }
+}
+
+export interface SubirArchivoDriveResult {
+  driveFileId: string;
+  url: string;
+  folderId: string;
+}
+
+/** Sube un archivo privado (sin enlace público). No usar para fotos operativas. */
+export async function subirArchivoPrivadoDrive(
+  rootFolderId: string,
+  relativePath: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<SubirArchivoDriveResult> {
+  const folderId = rootFolderId.trim();
+  if (!folderId) {
+    throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
+  }
+
+  const parts = relativePath.split('/').filter(Boolean);
+  const fileName = parts.pop();
+  if (!fileName) {
+    throw new HttpsError('invalid-argument', 'Ruta de archivo inválida.');
+  }
+
+  const drive = await getDriveClient();
+  const parentId =
+    parts.length > 0 ? await ensureFolderPath(drive, folderId, parts) : folderId;
+
+  const existingFileId = await findFileInFolder(drive, parentId, fileName);
+  if (existingFileId) {
+    const updated = await drive.files.update({
+      fileId: existingFileId,
+      media: { mimeType, body: Readable.from(buffer) },
+      fields: 'id, webViewLink',
+      supportsAllDrives: true,
+    });
+    const fileId = updated.data.id ?? existingFileId;
+    return {
+      driveFileId: fileId,
+      url: updated.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`,
+      folderId: parentId,
+    };
+  }
+
+  const created = await drive.files.create({
+    requestBody: { name: fileName, parents: [parentId] },
+    media: { mimeType, body: Readable.from(buffer) },
+    fields: 'id, webViewLink',
+    supportsAllDrives: true,
+  });
+
+  if (!created.data.id) {
+    throw new HttpsError('internal', 'Drive no devolvió el ID del archivo subido.');
+  }
+
+  return {
+    driveFileId: created.data.id,
+    url: created.data.webViewLink ?? `https://drive.google.com/file/d/${created.data.id}/view`,
+    folderId: parentId,
+  };
+}
+
+async function listChildFolders(
+  drive: DriveClient,
+  parentId: string
+): Promise<Array<{ id: string; name: string }>> {
+  const folders: Array<{ id: string; name: string }> = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'nextPageToken, files(id, name)',
+      pageSize: 100,
+      pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    for (const file of res.data.files ?? []) {
+      if (file.id && file.name) folders.push({ id: file.id, name: file.name });
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return folders;
+}
+
+/**
+ * Mueve a papelera las carpetas `YYYY-MM-DD` más viejas que `diasRetencion`
+ * dentro de `folderSegments` (p. ej. Backups).
+ */
+export async function purgarCarpetasFechaDrive(
+  rootFolderId: string,
+  folderSegments: string[],
+  diasRetencion: number
+): Promise<{ purged: string[] }> {
+  const folderId = rootFolderId.trim();
+  if (!folderId) {
+    throw new HttpsError('failed-precondition', 'GOOGLE_DRIVE_FOLDER_ID no está configurado.');
+  }
+
+  const drive = await getDriveClient();
+  const parentId = await ensureFolderPath(drive, folderId, folderSegments);
+  const children = await listChildFolders(drive, parentId);
+  const cutoff = Date.now() - diasRetencion * 24 * 60 * 60 * 1000;
+  const purged: string[] = [];
+
+  for (const child of children) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(child.name)) continue;
+    const folderDate = Date.parse(`${child.name}T00:00:00-03:00`);
+    if (Number.isNaN(folderDate) || folderDate >= cutoff) continue;
+
+    await drive.files.update({
+      fileId: child.id,
+      requestBody: { trashed: true },
+      supportsAllDrives: true,
+    });
+    purged.push(child.name);
+  }
+
+  return { purged };
 }

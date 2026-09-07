@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { EtiquetaFoto } from '@gruasbacar/shared';
-import { buildRutaFoto, buildCarpetaServicio, fechaCarpetaDrive, fotosOpcionalesEnDev } from '../utils/validators';
+import { buildRutaFoto, buildCarpetaServicio, fotosOpcionalesEnDev } from '../utils/validators';
 
 const db = admin.firestore;
 
@@ -187,9 +187,8 @@ export async function procesarFotoDesdeStorage(
     const driveFechaFolderId = servicio.driveFechaFolderId as string | undefined;
     const driveCarpetaId = servicio.driveCarpetaId as string | undefined;
     if (driveFechaFolderId && driveCarpetaId) {
-      const fechaStr = fechaCarpetaDrive(servicio.creadoEn);
       const carpetaServicio = buildCarpetaServicio(legajo, patente, numeroInfraccion, servicio.creadoEn);
-      drive.seedFolderCache(driveFolderId, fechaStr, driveFechaFolderId);
+      // Solo seed carpeta-servicio bajo la fecha (fechaFolder ya está bajo Gruas/).
       drive.seedFolderCache(driveFechaFolderId, carpetaServicio, driveCarpetaId);
     }
 
