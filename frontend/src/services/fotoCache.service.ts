@@ -1,4 +1,5 @@
 import { EtiquetaFoto } from "@gruasbacar/shared";
+import { logger } from "../utils/logger";
 
 const DB_NAME = "gruasbacar_fotos";
 const STORE_NAME = "borrador";
@@ -109,7 +110,7 @@ export async function guardarBorradorFotos(
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
-    console.warn("[fotoCache] No se pudo guardar borrador en IDB", err);
+    logger.warn("foto-cache", "No se pudo guardar el borrador en IndexedDB", err);
   }
 }
 
@@ -128,7 +129,7 @@ export async function cargarBorradorFotos(key: string): Promise<FotoCacheBorrado
       idbEntry = raw;
     }
   } catch (err) {
-    console.warn("[fotoCache] No se pudo cargar borrador de IDB", err);
+    logger.warn("foto-cache", "No se pudo cargar el borrador de IndexedDB", err);
   }
 
   if (lsEntry && idbEntry) {
@@ -147,7 +148,7 @@ export async function limpiarBorradorFotos(key: string): Promise<void> {
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
-    console.warn("[fotoCache] No se pudo limpiar borrador", err);
+    logger.warn("foto-cache", "No se pudo limpiar el borrador", err);
   }
 }
 

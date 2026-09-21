@@ -2,6 +2,7 @@ import { getMessaging, isSupported, getToken, onMessage } from 'firebase/messagi
 import type { MessagePayload } from 'firebase/messaging';
 import { httpsCallable } from 'firebase/functions';
 import { app, functions, isMock } from '../firebase';
+import { logger } from '../utils/logger';
 
 const FCM_TOKEN_KEY = 'gruasbacar_fcm_token';
 
@@ -33,7 +34,7 @@ export async function registrarFcmToken(): Promise<string | null> {
 
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
   if (!vapidKey) {
-    console.warn('[FCM] VITE_FIREBASE_VAPID_KEY no configurada');
+    logger.warn('fcm', 'VITE_FIREBASE_VAPID_KEY no configurada');
     return null;
   }
 
@@ -57,7 +58,7 @@ export async function eliminarFcmToken(): Promise<void> {
   if (!token) return;
 
   const fn = httpsCallable<{ token: string }, { ok: boolean }>(functions, 'eliminarFcmToken');
-  await fn({ token }).catch(console.warn);
+  await fn({ token }).catch((err) => logger.warn('fcm', 'No se pudo eliminar el token push', err));
   sessionStorage.removeItem(FCM_TOKEN_KEY);
 }
 

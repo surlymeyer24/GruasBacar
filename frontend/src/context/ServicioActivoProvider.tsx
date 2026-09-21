@@ -5,6 +5,7 @@ import { db, isMock } from "../firebase";
 import { getMockServices } from "../data/mockData";
 import { useAuth } from "../hooks/useAuth";
 import { ServicioActivoContext } from "./servicio-activo-context";
+import { logger } from "../utils/logger";
 
 function servicioDesdeResumen(resumen: ServicioActivoResumen): Servicio {
   return {
@@ -63,7 +64,7 @@ export const ServicioActivoProvider: React.FC<{ children: React.ReactNode }> = (
           setLoading(false);
         },
         (err) => {
-          console.error("Error listening to active service:", err);
+          logger.error("servicio", "Error escuchando el servicio activo", err);
           setError(err);
           setLoading(false);
         }

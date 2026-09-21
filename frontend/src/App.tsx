@@ -30,6 +30,7 @@ const ReportesPage = lazy(() => import("./pages/ReportesPage"));
 const AdminPage = lazy(() => import("./pages/AdminPage"));
 const TurnosPage = lazy(() => import("./pages/TurnosPage"));
 const DocumentacionPage = lazy(() => import("./pages/DocumentacionPage"));
+const DebugLogPage = lazy(() => import("./pages/DebugLogPage"));
 
 function RouteFallback() {
   return <LoadingSpinner fullScreen message="Cargando..." />;
@@ -183,6 +184,17 @@ export default function App() {
               <ProtectedRoute>
                 <RoleGuard allowedRole="ADMIN">
                   <DocumentacionPage />
+                </RoleGuard>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/debug"
+            element={
+              <ProtectedRoute>
+                <RoleGuard allowedRole="SUPERADMIN">
+                  <DebugLogPage />
                 </RoleGuard>
               </ProtectedRoute>
             }

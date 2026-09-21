@@ -214,6 +214,15 @@ export const Navbar: React.FC = () => {
                 >
                   Reportes
                 </Link>
+                {esSuperAdmin(userData.roles) && (
+                  <Link
+                    to="/debug"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-center py-2.5 text-sm font-medium border border-amber-500/30 text-amber-300 bg-amber-500/10 hover:bg-amber-500/15 rounded-xl transition-colors"
+                  >
+                    Diagnóstico
+                  </Link>
+                )}
               </>
             )}
             {isSupervisorOnly && (

@@ -17,6 +17,7 @@ import {
 } from "@gruasbacar/shared";
 import { db, functions, isMock } from "../firebase";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
+import { logger } from "../utils/logger";
 
 const NOTIFICACIONES_LIMIT = 50;
 
@@ -46,7 +47,7 @@ export function escucharNotificaciones(
       onData(items);
     },
     (err) => {
-      console.error("Error escuchando notificaciones:", err);
+      logger.error("notificaciones", "Error escuchando notificaciones", err);
       onError?.(err);
     }
   );
