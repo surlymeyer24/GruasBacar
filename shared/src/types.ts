@@ -581,6 +581,9 @@ export interface AsignacionDiaria {
   inicioEn?: string;
 }
 
+/** Tipo de evento registrado en la colección `turnos/`. */
+export type TipoEventoTurno = 'ASIGNACION' | 'FUERA_DE_SERVICIO' | 'REACTIVACION';
+
 /** Registro histórico de una asignación de turno (colección `turnos/`). */
 export interface RegistroTurno {
   operadorUid: string;
@@ -605,6 +608,7 @@ export interface RegistroTurno {
   gruaFueraDeServicioPatente?: string;
   categoriaFueraDeServicio?: MotivoFueraDeServicio;
   gruaDeshabilitada?: boolean;
+  tipoEvento?: TipoEventoTurno;
 }
 
 export const DURACION_TURNO_MS = 8 * 60 * 60 * 1000;
@@ -830,6 +834,17 @@ export interface CrearActaManualPayload {
 export interface SolicitarCambioGruaPayload {
   gruaPatente: string;
   tipoFlota: TipoFlota;
+  motivo?: string;
+}
+
+export interface GestionarGruaFueraDeServicioPayload {
+  patente: string;
+  categoria: MotivoFueraDeServicio;
+  motivo?: string;
+}
+
+export interface ReactivarGruaPayload {
+  gruaDocId: string;
   motivo?: string;
 }
 

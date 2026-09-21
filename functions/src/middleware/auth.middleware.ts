@@ -46,13 +46,18 @@ export async function verificarAdmin(authData: { uid: string } | undefined): Pro
   return ctx;
 }
 
-/** Editar o anular actas: administrador o supervisor. */
-export async function verificarGestionActas(authData: { uid: string } | undefined): Promise<AuthContext> {
+/** ADMIN, SUPERADMIN o SUPERVISOR (cambios de turno mid-turno: dupla/tipo). */
+export async function verificarAdminOSupervisor(authData: { uid: string } | undefined): Promise<AuthContext> {
   const ctx = await verificarAuth(authData);
   if (!esAdmin(ctx.roles) && !esSupervisor(ctx.roles)) {
     throw new HttpsError('permission-denied', 'Se requiere rol de administrador o supervisor.');
   }
   return ctx;
+}
+
+/** Editar o anular actas: administrador o supervisor. */
+export async function verificarGestionActas(authData: { uid: string } | undefined): Promise<AuthContext> {
+  return verificarAdminOSupervisor(authData);
 }
 
 export async function verificarEnganchador(authData: { uid: string } | undefined): Promise<AuthContext> {

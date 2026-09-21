@@ -11,8 +11,9 @@ import * as itvService from './services/itv.service';
 import * as polizaService from './services/poliza.service';
 import * as servicioTimeoutService from './services/servicioTimeout.service';
 import * as usuarioService from './services/usuario.service';
+import * as gruaService from './services/grua.service';
 import * as mapsService from './services/maps.service';
-import { verificarAuth, verificarAdmin, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
+import { verificarAuth, verificarAdmin, verificarAdminOSupervisor, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
 import { withHttpsErrorHandling } from './utils/callableHandler';
 import { assertAislamientoEmulador } from './utils/entorno';
 
@@ -218,7 +219,7 @@ export const guardarAsignacionDiaria = onCall(callable, withHttpsErrorHandling('
 }));
 
 export const asignarTurnoOperador = onCall(callable, withHttpsErrorHandling('asignarTurnoOperador', async (request) => {
-  const ctx = await verificarAdmin(request.auth);
+  const ctx = await verificarAdminOSupervisor(request.auth);
   return usuarioService.asignarTurnoOperador(request.data ?? {}, ctx);
 }));
 
@@ -240,6 +241,18 @@ export const solicitarCambioGrua = onCall(callable, withHttpsErrorHandling('soli
     nombre: ctx.nombre,
     legajo,
   });
+}));
+
+export const gestionarGruaFueraDeServicio = onCall(callable, withHttpsErrorHandling('gestionarGruaFueraDeServicio', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  await gruaService.gestionarGruaFueraDeServicioHandler(request.data ?? {}, ctx);
+  return { ok: true };
+}));
+
+export const reactivarGruaEnServicio = onCall(callable, withHttpsErrorHandling('reactivarGruaEnServicio', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  await gruaService.reactivarGruaHandler(request.data ?? {}, ctx);
+  return { ok: true };
 }));
 
 export const marcarNotificacionLeida = onCall(callable, withHttpsErrorHandling('marcarNotificacionLeida', async (request) => {
