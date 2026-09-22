@@ -613,6 +613,10 @@ export async function iniciarTraslado(servicioIdRaw: unknown, uid: string): Prom
   const usuarioRef = db().collection('usuarios').doc(choferUid);
 
   await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    if (freshSnap.data()?.estado !== 'ENGANCHADO') {
+      throw new HttpsError('failed-precondition', 'El servicio ya no está en estado ENGANCHADO.');
+    }
     tx.update(servicioRef, { estado: 'EN_TRASLADO' as EstadoServicio });
     tx.set(servicioRef.collection('eventos').doc(), {
       tipo: 'TRASLADO',
@@ -663,6 +667,10 @@ export async function registrarLlegadaCorralon(
   }
 
   await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    if (freshSnap.data()?.estado !== 'EN_TRASLADO') {
+      throw new HttpsError('failed-precondition', 'El servicio ya no está en traslado.');
+    }
     tx.update(servicioRef, {
       corralon: corralonValidado.corralonNombre,
       corralonId: corralonValidado.corralonId,
@@ -745,6 +753,10 @@ export async function confirmarDesenganche(
 
   const usuarioRef = db().collection('usuarios').doc(uid);
   await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    if (freshSnap.data()?.estado !== 'EN_TRASLADO') {
+      throw new HttpsError('failed-precondition', 'El servicio ya no está en traslado.');
+    }
     tx.update(servicioRef, {
       estado: 'DESENGANCHADO' as EstadoServicio,
       finalizadoEn: FieldValue.serverTimestamp(),
@@ -793,10 +805,15 @@ export async function anularServicio(
 
   const choferUid = servicio.creadoPor as string;
   const usuarioRef = db().collection('usuarios').doc(choferUid);
-  const versionCount = (servicio.versionCount as number | undefined) ?? 0;
-  const cambios = cambiosAnulacion(servicio.estado as EstadoServicio, motivo);
 
   await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    const fresh = freshSnap.data()!;
+    if (!estadosAnulables.includes(fresh.estado as EstadoServicio)) {
+      throw new HttpsError('failed-precondition', 'Este servicio no se puede anular.');
+    }
+    const versionCount = (fresh.versionCount as number | undefined) ?? 0;
+    const cambios = cambiosAnulacion(fresh.estado as EstadoServicio, motivo);
     tx.update(servicioRef, {
       estado: 'ANULADO' as EstadoServicio,
       motivoAnulacion: motivo ?? null,
@@ -1212,39 +1229,42 @@ export async function liberarServicioActivoSiHuerfano(uid: string): Promise<{ li
     return { liberado: true };
   }
 
+  const usuarioData = usuarioSnap.data()!;
+  const editor: EditorContext = {
+    uid,
+    nombre: usuarioData.nombre ?? 'Operador',
+    roles: normalizeRoles(usuarioData.roles ?? usuarioData.rol),
+  };
+  const motivo = 'Liberado por el operador';
   const servicioRef = db().collection('servicios').doc(servicioActivoId);
-  const servicioSnap = await servicioRef.get();
-  if (servicioSnap.exists) {
+
+  let anulado = false;
+  await db().runTransaction(async (tx) => {
+    const servicioSnap = await tx.get(servicioRef);
+    if (!servicioSnap.exists) {
+      tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
+      return;
+    }
     const servicio = servicioSnap.data()!;
     const estado = servicio.estado as EstadoServicio | undefined;
-    if (estado && estado !== 'DESENGANCHADO' && estado !== 'ANULADO') {
-      const usuarioData = usuarioSnap.data()!;
-      const editor: EditorContext = {
-        uid,
-        nombre: usuarioData.nombre ?? 'Operador',
-        roles: normalizeRoles(usuarioData.roles ?? usuarioData.rol),
-      };
-      const motivo = 'Liberado por el operador';
-      const versionCount = (servicio.versionCount as number | undefined) ?? 0;
-      const cambios = cambiosAnulacion(estado, motivo);
-
-      await db().runTransaction(async (tx) => {
-        tx.update(servicioRef, {
-          estado: 'ANULADO' as EstadoServicio,
-          motivoAnulacion: motivo,
-          anuladoPor: uid,
-          anuladoEn: FieldValue.serverTimestamp(),
-        });
-        tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
-        registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
-      });
-
-      return { liberado: true, anulado: true };
+    if (!estado || estado === 'DESENGANCHADO' || estado === 'ANULADO') {
+      tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
+      return;
     }
-  }
+    const versionCount = (servicio.versionCount as number | undefined) ?? 0;
+    const cambios = cambiosAnulacion(estado, motivo);
+    tx.update(servicioRef, {
+      estado: 'ANULADO' as EstadoServicio,
+      motivoAnulacion: motivo,
+      anuladoPor: uid,
+      anuladoEn: FieldValue.serverTimestamp(),
+    });
+    tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
+    registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
+    anulado = true;
+  });
 
-  await usuarioRef.update(LIMPIAR_SERVICIO_ACTIVO_USUARIO);
-  return { liberado: true };
+  return { liberado: true, anulado: anulado || undefined };
 }
 
 export async function anularServicioAutomaticamente(servicioId: string): Promise<boolean> {
@@ -1257,12 +1277,16 @@ export async function anularServicioAutomaticamente(servicioId: string): Promise
 
   const choferUid = servicio.creadoPor as string;
   const usuarioRef = db().collection('usuarios').doc(choferUid);
-  const versionCount = (servicio.versionCount as number | undefined) ?? 0;
   const motivo = 'Anulado automáticamente por inactividad';
-  const cambios = cambiosAnulacion(servicio.estado as EstadoServicio, motivo);
   const editor: EditorContext = { uid: 'SISTEMA', nombre: 'Sistema', roles: [] };
 
+  let anulado = false;
   await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    const fresh = freshSnap.data()!;
+    if (fresh.estado !== 'ENGANCHADO') return;
+    const versionCount = (fresh.versionCount as number | undefined) ?? 0;
+    const cambios = cambiosAnulacion(fresh.estado as EstadoServicio, motivo);
     tx.update(servicioRef, {
       estado: 'ANULADO' as EstadoServicio,
       motivoAnulacion: motivo,
@@ -1272,9 +1296,44 @@ export async function anularServicioAutomaticamente(servicioId: string): Promise
     });
     tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
     registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
+    anulado = true;
   });
 
-  return true;
+  return anulado;
+}
+
+export async function anularTrasladoAutomaticamente(servicioId: string): Promise<boolean> {
+  const servicioRef = db().collection('servicios').doc(servicioId);
+  const servicioSnap = await servicioRef.get();
+  if (!servicioSnap.exists) return false;
+
+  const servicio = servicioSnap.data()!;
+  if (servicio.estado !== 'EN_TRASLADO') return false;
+
+  const choferUid = servicio.creadoPor as string;
+  const usuarioRef = db().collection('usuarios').doc(choferUid);
+  const motivo = 'Anulado automáticamente por traslado inactivo';
+  const editor: EditorContext = { uid: 'SISTEMA', nombre: 'Sistema', roles: [] };
+
+  let anulado = false;
+  await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    const fresh = freshSnap.data()!;
+    if (fresh.estado !== 'EN_TRASLADO') return;
+    const versionCount = (fresh.versionCount as number | undefined) ?? 0;
+    const cambios = cambiosAnulacion(fresh.estado as EstadoServicio, motivo);
+    tx.update(servicioRef, {
+      estado: 'ANULADO' as EstadoServicio,
+      motivoAnulacion: motivo,
+      anuladoPor: 'SISTEMA',
+      anuladoEn: FieldValue.serverTimestamp(),
+    });
+    tx.update(usuarioRef, LIMPIAR_SERVICIO_ACTIVO_USUARIO);
+    registrarVersionActa(tx, servicioRef, versionCount, editor, 'ANULACION', cambios, motivo);
+    anulado = true;
+  });
+
+  return anulado;
 }
 
 const TIMEOUT_DESHACER_MS = 10 * 60 * 1000;
@@ -1316,7 +1375,6 @@ export async function deshacerAnulacionAutomaticaServicio(
     throw new HttpsError('failed-precondition', 'Ya tenés un servicio activo. No se puede restaurar.');
   }
 
-  const versionCount = (servicio.versionCount as number | undefined) ?? 0;
   const usuarioData = usuarioSnap.data()!;
   const editor: EditorContext = {
     uid,
@@ -1325,6 +1383,16 @@ export async function deshacerAnulacionAutomaticaServicio(
   };
 
   await db().runTransaction(async (tx) => {
+    const freshSnap = await tx.get(servicioRef);
+    const fresh = freshSnap.data()!;
+    if (fresh.estado !== 'ANULADO' || fresh.anulacionAutomatica !== true) {
+      throw new HttpsError('failed-precondition', 'El servicio ya no se puede restaurar.');
+    }
+    const freshUsuarioSnap = await tx.get(usuarioRef);
+    if (freshUsuarioSnap.data()?.servicioActivoId) {
+      throw new HttpsError('failed-precondition', 'Ya tenés un servicio activo. No se puede restaurar.');
+    }
+    const freshVersionCount = (fresh.versionCount as number | undefined) ?? 0;
     tx.update(servicioRef, {
       estado: 'ENGANCHADO' as EstadoServicio,
       motivoAnulacion: null,
@@ -1336,12 +1404,12 @@ export async function deshacerAnulacionAutomaticaServicio(
       servicioActivoId: servicioId,
       servicioActivoResumen: buildServicioActivoResumen(servicioId, {
         estado: 'ENGANCHADO',
-        patente: servicio.patente as string,
-        numeroInfraccion: servicio.numeroInfraccion as string | undefined,
-        descripcionVehiculo: servicio.descripcionVehiculo as string | undefined,
-        esTest: servicio.esTest as boolean | undefined,
+        patente: fresh.patente as string,
+        numeroInfraccion: fresh.numeroInfraccion as string | undefined,
+        descripcionVehiculo: fresh.descripcionVehiculo as string | undefined,
+        esTest: fresh.esTest as boolean | undefined,
       }),
     });
-    registrarVersionActa(tx, servicioRef, versionCount, editor, 'RESTAURACION', cambiosRestauracion(), 'Deshizo anulación automática');
+    registrarVersionActa(tx, servicioRef, freshVersionCount, editor, 'RESTAURACION', cambiosRestauracion(), 'Deshizo anulación automática');
   });
 }

@@ -425,6 +425,13 @@ export const verificarTimeoutEnganches = onSchedule(
   }
 );
 
+export const verificarTimeoutTraslados = onSchedule(
+  { schedule: 'every 10 minutes', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await servicioTimeoutService.verificarTimeoutTraslados();
+  }
+);
+
 export const backupFirestoreDiario = onSchedule(
   {
     schedule: 'every day 03:00',
