@@ -301,7 +301,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
     preselected.current = false;
     setMostrarTodasGruas(false);
     setConfirmCrossOperacion(false);
-    setTipoOperacion(normalizeTipoFlota(initialAsignacion?.tipoFlota));
+    setTipoOperacion(tipoReferencia);
     setGruaPatente(initialAsignacion?.gruaPatente ?? "");
     setChoferKey("");
     setEnganchadorKey("");
@@ -329,11 +329,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
     load();
   }, [isOpen, initialAsignacion]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setTipoOperacion(tipoReferencia);
-  }, [isOpen, tipoReferencia]);
 
   useEffect(() => {
     if (!isOpen || loadingCatalog) return;
@@ -535,11 +530,16 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                     <button
                       key={opt.value}
                       type="button"
-                      disabled
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border cursor-not-allowed opacity-80 ${
+                      disabled={saving}
+                      onClick={() => {
+                        setError(null);
+                        setTipoOperacion(opt.value);
+                        setMostrarTodasGruas(false);
+                      }}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                         tipoOperacion === opt.value
                           ? "bg-brand-cta text-white border-brand-cta"
-                          : "bg-brand-bg text-brand-purply border-brand-seashell"
+                          : "bg-brand-bg text-brand-purply border-brand-seashell hover:border-brand-cta/50"
                       }`}
                     >
                       {opt.label}
