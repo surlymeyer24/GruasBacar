@@ -144,6 +144,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   const [choferKey, setChoferKey] = useState("");
   const [enganchadorKey, setEnganchadorKey] = useState("");
   const preselected = useRef(false);
+  const formInit = useRef(false);
 
   const gruasFiltradas = useMemo(
     () => gruas.filter((g) => normalizeTipoFlota(g.tipo) === tipoOperacion),
@@ -289,7 +290,12 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   const tieneServicioActivo = !!userData?.servicioActivoId;
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      formInit.current = false;
+      return;
+    }
+    if (formInit.current) return;
+    formInit.current = true;
 
     setError(null);
     preselected.current = false;
