@@ -39,6 +39,8 @@ export interface AsignarTurnoOperadorPayload {
   gestionCrossTipo?: GestionCambioCrossTipo;
   /** Marcar la notificación del admin como leída al confirmar. */
   notificacionId?: string;
+  /** Motivo del cambio mid-turno (requerido desde Control de Turno). */
+  motivoCambio?: string;
 }
 
 export interface SolicitarReconfiguracionTurnoPayload {

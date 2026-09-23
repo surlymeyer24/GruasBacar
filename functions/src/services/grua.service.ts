@@ -3,10 +3,14 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import {
   FueraDeServicioGrua,
+  GestionarGruaFueraDeServicioPayload,
   MotivoFueraDeServicio,
+  ReactivarGruaPayload,
+  esMotivoFueraDeServicio,
   normalizeTipoFlota,
   patenteDesdeGruaId,
 } from '@gruasbacar/shared';
+import { validarString, validarStringOpcional } from '../utils/validators';
 
 const db = admin.firestore;
 
@@ -21,7 +25,7 @@ export async function assertGruaSinServicioActivo(patente: string): Promise<void
     if (grua && patenteDesdeGruaId(grua) === patente) {
       throw new HttpsError(
         'failed-precondition',
-        `La grúa ${patente} tiene un servicio activo. Cerralo antes de desactivarla.`
+        `La grúa ${patente} tiene un servicio activo. Reasigná el operador antes de sacarla de servicio.`
       );
     }
   }
@@ -105,4 +109,99 @@ export async function reactivarGrua(docId: string): Promise<void> {
     activa: true,
     fueraDeServicio: FieldValue.delete(),
   });
+}
+
+function fechaArgentina(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+export async function gestionarGruaFueraDeServicioHandler(
+  data: GestionarGruaFueraDeServicioPayload,
+  adminCtx: { uid: string; nombre: string },
+): Promise<void> {
+  const patente = validarString(data.patente, 'patente', 20);
+  const categoriaRaw = validarString(data.categoria, 'categoria', 20);
+  if (!esMotivoFueraDeServicio(categoriaRaw)) {
+    throw new HttpsError('invalid-argument', 'Categoría de fuera de servicio inválida.');
+  }
+  const categoria: MotivoFueraDeServicio = categoriaRaw;
+  const motivo = validarStringOpcional(data.motivo, 'motivo', 300);
+  if (categoria === 'OTRO' && !motivo) {
+    throw new HttpsError('invalid-argument', 'Indicá el motivo cuando la categoría es "Otro".');
+  }
+
+  const snapshot = buildFueraDeServicioSnapshot(categoria, adminCtx, { motivo });
+  await desactivarGruaFueraDeServicio(patente, snapshot);
+
+  const docSnap = await db().collection('gruas').where('patente', '==', patente).limit(1).get();
+  const gruaDesc = docSnap.empty ? undefined : (docSnap.docs[0].data().descripcion as string | undefined);
+
+  try {
+    await db().collection('turnos').add({
+      operadorUid: '',
+      operadorNombre: '',
+      fecha: fechaArgentina(),
+      gruaPatente: patente,
+      ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
+      duplaId: '',
+      duplaChofer: '',
+      duplaEnganchador: '',
+      tipoFlota: normalizeTipoFlota(docSnap.empty ? undefined : (docSnap.docs[0].data().tipo as string | undefined)),
+      origenAsignacion: 'admin' as const,
+      asignadoPorUid: adminCtx.uid,
+      asignadoPorNombre: adminCtx.nombre,
+      creadoEn: new Date().toISOString(),
+      tipoEvento: 'FUERA_DE_SERVICIO' as const,
+      gruaFueraDeServicioPatente: patente,
+      categoriaFueraDeServicio: categoria,
+      ...(motivo ? { motivoCambio: motivo } : {}),
+      gruaDeshabilitada: true,
+    });
+  } catch (_) { /* fire-and-forget audit */ }
+}
+
+export async function reactivarGruaHandler(
+  data: ReactivarGruaPayload,
+  adminCtx: { uid: string; nombre: string },
+): Promise<void> {
+  const gruaDocId = validarString(data.gruaDocId, 'gruaDocId', 40);
+  const motivo = validarStringOpcional(data.motivo, 'motivo', 300);
+
+  const ref = db().collection('gruas').doc(gruaDocId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError('not-found', 'Grúa no encontrada.');
+  }
+
+  const gruaData = snap.data()!;
+  const patente = gruaData.patente as string;
+  const descripcion = gruaData.descripcion as string | undefined;
+
+  await reactivarGrua(gruaDocId);
+
+  try {
+    await db().collection('turnos').add({
+      operadorUid: '',
+      operadorNombre: '',
+      fecha: fechaArgentina(),
+      gruaPatente: patente,
+      ...(descripcion ? { gruaDescripcion: descripcion } : {}),
+      duplaId: '',
+      duplaChofer: '',
+      duplaEnganchador: '',
+      tipoFlota: normalizeTipoFlota(gruaData.tipo as string | undefined),
+      origenAsignacion: 'admin' as const,
+      asignadoPorUid: adminCtx.uid,
+      asignadoPorNombre: adminCtx.nombre,
+      creadoEn: new Date().toISOString(),
+      tipoEvento: 'REACTIVACION' as const,
+      gruaFueraDeServicioPatente: patente,
+      ...(motivo ? { motivoCambio: motivo } : {}),
+    });
+  } catch (_) { /* fire-and-forget audit */ }
 }

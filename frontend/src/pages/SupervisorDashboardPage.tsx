@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
-import { Truck, Link2, Route, CheckCircle2, CalendarDays, CalendarCheck } from "lucide-react";
+import { Truck, Link2, Route, CheckCircle2, CalendarDays, CalendarCheck, Radio } from "lucide-react";
 import { isMock } from "../firebase";
-import { Grua, duplaEnganchadorDeAsignacion, displayPatente, labelTipoFlota } from "@gruasbacar/shared";
-import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
+import { duplaEnganchadorDeAsignacion, displayPatente, labelTipoFlota, esSupervisor } from "@gruasbacar/shared";
+import { obtenerEstadisticasAdmin, AdminDashboardStats, EMPTY_ADMIN_STATS } from "../services/adminStats.service";
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
-import { gruaService } from "../services/grua.service";
 import { resolverDescripcionGrua, resolverPatenteGrua } from "../utils/gruaDisplay";
+import { ControlTurnoModal } from "../components/admin/ControlTurnoModal";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 export const SupervisorDashboardPage: React.FC = () => {
   const { userData, sessionLoading, profileLoading } = useAuth();
@@ -17,8 +18,12 @@ export const SupervisorDashboardPage: React.FC = () => {
 
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [gruasCatalog, setGruasCatalog] = useState<Grua[]>([]);
   const [now, setNow] = useState(() => new Date());
+  const [showControlTurno, setShowControlTurno] = useState(false);
+
+  const refreshEnabled = !authPending && !isMock;
+  const puedeControlTurno = userData ? esSupervisor(userData.roles) : false;
+  const gruasCatalog = stats?.gruasCatalog ?? [];
 
   const etiquetaGrua = (gruaId: string) => {
     const desc = resolverDescripcionGrua(gruaId, gruasCatalog);
@@ -26,53 +31,36 @@ export const SupervisorDashboardPage: React.FC = () => {
     return { desc, pat, mostrarPatente: desc !== pat && pat !== "—" };
   };
 
+  const refreshStats = useCallback(async () => {
+    const data = await obtenerEstadisticasAdmin();
+    setStats(data);
+  }, []);
+
+  const { lastRefresh, refreshNow } = useAutoRefresh(refreshStats, 45_000, refreshEnabled);
+
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    if (authPending || isMock) return;
+    if (!refreshEnabled) return;
 
     let cancelled = false;
     setLoadingStats(true);
-    obtenerEstadisticasAdmin()
-      .then((data) => {
-        if (!cancelled) setStats(data);
-      })
+    refreshNow()
       .catch((err) => {
         console.error("Error cargando estadísticas de supervisión:", err);
-        if (!cancelled) {
-          setStats({
-            actasEnEnganche: 0,
-            actasEnTraslado: 0,
-            actasFinalizadas: 0,
-            actasHoy: 0,
-            actasEsteMes: 0,
-            hoyLabel: "",
-            mesActualLabel: "",
-            gruasActivas: 0,
-            gruasEnOperacion: 0,
-            serviciosActivos: [],
-            usuariosEnTurno: [],
-          });
-        }
+        if (!cancelled) setStats(EMPTY_ADMIN_STATS);
       })
       .finally(() => {
         if (!cancelled) setLoadingStats(false);
       });
 
-    gruaService
-      .getAllGruas()
-      .then((gruas) => {
-        if (!cancelled) setGruasCatalog(gruas);
-      })
-      .catch((err) => console.error("Error cargando catálogo de grúas:", err));
-
     return () => {
       cancelled = true;
     };
-  }, [authPending, isMock]);
+  }, [refreshEnabled, refreshNow]);
 
   if (authPending) {
     return <LoadingSpinner fullScreen message="Cargando panel de supervisión..." />;
@@ -209,6 +197,17 @@ export const SupervisorDashboardPage: React.FC = () => {
             </div>
           </div>
 
+          {puedeControlTurno && (
+            <button
+              type="button"
+              onClick={() => setShowControlTurno(true)}
+              className="w-full py-4 text-base font-extrabold rounded-2xl bg-brand-cta text-white shadow-md shadow-brand-cta/20 hover:bg-brand-cta-hover transition-all cursor-pointer flex items-center justify-center gap-3"
+            >
+              <Radio className="w-5 h-5" />
+              Control de Turno
+            </button>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="p-5 bg-white rounded-2xl border border-brand-seashell shadow-sm overflow-hidden flex flex-col max-h-96">
               <div className="flex items-center gap-2 mb-4 shrink-0">
@@ -300,6 +299,17 @@ export const SupervisorDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {puedeControlTurno && (
+        <ControlTurnoModal
+          isOpen={showControlTurno}
+          onClose={() => setShowControlTurno(false)}
+          stats={stats ?? EMPTY_ADMIN_STATS}
+          onDataChanged={() => { void refreshNow(); }}
+          lastRefresh={lastRefresh}
+          permisos={{ puedeReasignarGrua: false, puedeSacarOOS: false }}
+        />
+      )}
     </Layout>
   );
 };

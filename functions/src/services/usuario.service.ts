@@ -13,6 +13,7 @@ import {
   GestionCambioCrossTipo,
   MotivoFueraDeServicio,
   esOperador,
+  esAdmin,
   esSuperAdmin,
   normalizeRoles,
   normalizeTipoFlota,
@@ -489,7 +490,7 @@ function parseGestionCrossTipo(
 
 export async function asignarTurnoOperador(
   data: AsignarTurnoOperadorPayload,
-  adminCtx: { uid: string; nombre: string }
+  adminCtx: { uid: string; nombre: string; roles?: RolUsuario[] }
 ): Promise<AsignacionDiaria> {
   const operadorUid = data.operadorUid?.trim();
   if (!operadorUid) {
@@ -561,6 +562,26 @@ export async function asignarTurnoOperador(
   const teniaTurnoHoy =
     prevAsignacion?.fecha === hoy && turnoSigueVigente(prevAsignacion);
 
+  if (!esAdmin(adminCtx.roles ?? [])) {
+    if (data.gestionCrossTipo) {
+      throw new HttpsError(
+        'permission-denied',
+        'Solo un administrador puede gestionar grúas fuera de servicio.'
+      );
+    }
+    if (
+      teniaTurnoHoy &&
+      prevAsignacion &&
+      normalizeTipoFlota(prevAsignacion.tipoFlota) === normalizeTipoFlota(asignacion.tipoFlota) &&
+      prevAsignacion.gruaPatente.trim() !== gruaPatente
+    ) {
+      throw new HttpsError(
+        'permission-denied',
+        'El supervisor no puede reasignar grúa. Pedile a un administrador.'
+      );
+    }
+  }
+
   const asignacionDiaria: AsignacionDiaria = {
     ...asignacion,
     fecha: asignacion.fecha?.trim() || hoy,
@@ -616,9 +637,10 @@ export async function asignarTurnoOperador(
     asignadoPorUid: adminCtx.uid,
     asignadoPorNombre: adminCtx.nombre,
     creadoEn: new Date().toISOString(),
+    tipoEvento: 'ASIGNACION',
     ...(gruaCambio ? { gruaAnterior: prevAsignacion!.gruaPatente } : {}),
     ...(gruaCambio ? { cambioTipo: tipoCambio ? 'CROSS_TIPO' as const : 'MISMO_TIPO' as const } : {}),
-    ...(gestionParsed.motivo ? { motivoCambio: gestionParsed.motivo } : {}),
+    ...((gestionParsed.motivo || data.motivoCambio?.trim()) ? { motivoCambio: gestionParsed.motivo || data.motivoCambio!.trim() } : {}),
     ...(gestionParsed.gruaOos ? { gruaFueraDeServicioPatente: gestionParsed.gruaOos } : {}),
     ...(gestionParsed.categoria ? { categoriaFueraDeServicio: gestionParsed.categoria } : {}),
     ...(gestionParsed.deshabilitar ? { gruaDeshabilitada: true } : {}),
