@@ -24,6 +24,7 @@ import {
   normalizeTipoFlota,
   labelTipoFlota,
   labelMotivoFueraDeServicio,
+  labelRolUsuario,
   enganchadorDeDupla,
   AsignarTurnoOperadorPayload,
 } from "@gruasbacar/shared";
@@ -60,6 +61,20 @@ interface Props {
 const DUPLA_MANUAL = "__manual__";
 
 // ── Helpers ────────────────────────────────────────────────
+
+function inicialesNombre(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/);
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase();
+  return nombre.slice(0, 2).toUpperCase();
+}
+
+function rolesLabel(roles: string[]): string {
+  return roles.map((r) => labelRolUsuario(r)).join(", ");
+}
+
+function idGrua(a: { gruaPrefijo?: string; gruaPatente: string }): string {
+  return a.gruaPrefijo?.trim() || a.gruaPatente;
+}
 
 function tiempoDesde(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -263,10 +278,14 @@ export const ControlTurnoModal: React.FC<Props> = ({
       );
       if (filtered.length === 0)
         return [{ value: "", label: "Sin grúas disponibles de este tipo" }];
-      return filtered.map((g) => ({
-        value: g.patente,
-        label: `${g.descripcion?.trim() ? `${g.descripcion.trim()} — ` : ""}${g.patente}`,
-      }));
+      return filtered.map((g) => {
+        const id = g.prefijo?.trim() || g.patente;
+        const desc = g.descripcion?.trim();
+        return {
+          value: g.patente,
+          label: desc ? `${desc} (${id})` : id,
+        };
+      });
     },
     [catalogoGruas, patentesOcupadas],
   );
@@ -318,7 +337,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
       };
 
       requestConfirm(
-        `Reasignar grúa de ${usuario.nombre} a ${formGrua}${formMarcarOos ? ` y sacar ${a.gruaPatente} de servicio` : ""}?`,
+        `Reasignar grúa de ${usuario.nombre} a ${formGrua}${formMarcarOos ? ` y sacar ${idGrua(a)} de servicio` : ""}?`,
         () => asignarTurnoOperador(payload).then(() => {}),
       );
     },
@@ -399,7 +418,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
       };
 
       requestConfirm(
-        `Cambiar tipo de ${usuario.nombre} a ${labelTipoFlota(formTipo)}${formMarcarOos ? ` y sacar ${a.gruaPatente} de servicio` : ""}?`,
+        `Cambiar tipo de ${usuario.nombre} a ${labelTipoFlota(formTipo)}${formMarcarOos ? ` y sacar ${idGrua(a)} de servicio` : ""}?`,
         () => asignarTurnoOperador(payload).then(() => {}),
       );
     },
@@ -414,7 +433,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
       if (!motivo) { setActionError("Indicá el motivo."); return; }
 
       requestConfirm(
-        `Sacar grúa ${a.gruaPatente} (${a.gruaDescripcion || ""}) de servicio?`,
+        `Sacar grúa ${idGrua(a)} (${a.gruaDescripcion || ""}) de servicio?`,
         () =>
           gestionarGruaFueraDeServicio({
             patente: a.gruaPatente,
@@ -463,8 +482,11 @@ export const ControlTurnoModal: React.FC<Props> = ({
                 <Radio className="w-5 h-5 text-brand-cta" />
               </div>
               <div>
-                <h2 id="control-turno-title" className="text-brand-purply font-extrabold text-lg tracking-tight">
+                <h2 id="control-turno-title" className="text-brand-purply font-extrabold text-lg tracking-tight flex items-center gap-2">
                   Control de Turno
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-brand-cta/10 text-brand-cta uppercase tracking-wider">
+                    Centro Operativo
+                  </span>
                 </h2>
                 <p className="text-[11px] text-brand-pale font-medium">
                   {labelLastRefresh(lastRefresh, nowMs)}
@@ -492,28 +514,46 @@ export const ControlTurnoModal: React.FC<Props> = ({
           </div>
 
           {/* Tabs */}
-          <div className="shrink-0 px-5 sm:px-6 pt-3 flex gap-2">
+          <div className="shrink-0 px-5 sm:px-6 pt-3 flex gap-1 border-b border-brand-seashell">
             <button
               type="button"
               onClick={() => setTab("operadores")}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors cursor-pointer border-b-2 -mb-px ${
                 tab === "operadores"
-                  ? "bg-brand-cta text-white shadow-md shadow-brand-cta/20"
-                  : "bg-brand-bg text-brand-pale hover:text-brand-purply"
+                  ? "border-brand-cta text-brand-cta"
+                  : "border-transparent text-brand-pale hover:text-brand-purply"
               }`}
             >
-              Operadores en Turno ({usuariosEnTurno.length})
+              <Users className="w-4 h-4" />
+              Operadores en Turno
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                tab === "operadores"
+                  ? "bg-brand-cta text-white"
+                  : "bg-brand-seashell text-brand-pale"
+              }`}>
+                {usuariosEnTurno.length}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => setTab("oos")}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold transition-colors cursor-pointer border-b-2 -mb-px ${
                 tab === "oos"
-                  ? "bg-brand-cta text-white shadow-md shadow-brand-cta/20"
-                  : "bg-brand-bg text-brand-pale hover:text-brand-purply"
+                  ? "border-brand-cta text-brand-cta"
+                  : "border-transparent text-brand-pale hover:text-brand-purply"
               }`}
             >
-              Grúas F/S ({gruasFueraDeServicio.length})
+              <AlertTriangle className="w-4 h-4" />
+              Grúas Fuera de Servicio
+              {gruasFueraDeServicio.length > 0 && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${
+                  tab === "oos"
+                    ? "bg-brand-cta text-white"
+                    : "bg-red-100 text-red-600"
+                }`}>
+                  {gruasFueraDeServicio.length}
+                </span>
+              )}
             </button>
           </div>
 
@@ -545,56 +585,92 @@ export const ControlTurnoModal: React.FC<Props> = ({
                     >
                       {/* Card header */}
                       <div className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <p className="text-brand-purply font-extrabold text-base">
-                            {u.nombre}
-                          </p>
-                          {servActivo && (
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-brand-purply/10 flex items-center justify-center shrink-0">
+                              <span className="text-sm font-extrabold text-brand-purply">
+                                {inicialesNombre(u.nombre)}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-brand-purply font-extrabold text-base">
+                                  {u.nombre}
+                                </p>
+                                {u.legajo && (
+                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-brand-bg border border-brand-seashell text-brand-pale">
+                                    Leg: {u.legajo}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-brand-pale">
+                                Rol: {rolesLabel(u.roles)}
+                              </p>
+                            </div>
+                          </div>
+                          {a && (
                             <span
-                              className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
-                                servActivo.estado === "ENGANCHADO"
-                                  ? "bg-amber-100 text-amber-700"
-                                  : "bg-blue-100 text-blue-700"
+                              className={`text-[9px] font-bold px-2.5 py-1 rounded-full shrink-0 ${
+                                normalizeTipoFlota(a.tipoFlota) === "TRANSITO"
+                                  ? "bg-indigo-100 text-indigo-700"
+                                  : "bg-emerald-100 text-emerald-700"
                               }`}
                             >
-                              {servActivo.estado === "ENGANCHADO"
-                                ? "En enganche"
-                                : "En traslado"}
+                              {labelTipoFlota(a.tipoFlota)}
                             </span>
                           )}
                         </div>
 
                         {a && (
-                          <div className="space-y-1 text-sm text-brand-pale">
-                            <div className="flex items-center gap-2">
-                              <Truck className="w-3.5 h-3.5 shrink-0" />
-                              <span className="font-medium">
-                                {a.gruaDescripcion
-                                  ? `${a.gruaDescripcion} (${a.gruaPatente})`
-                                  : a.gruaPatente}
-                              </span>
-                              <span
-                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                                  normalizeTipoFlota(a.tipoFlota) === "TRANSITO"
-                                    ? "bg-indigo-100 text-indigo-700"
-                                    : "bg-emerald-100 text-emerald-700"
-                                }`}
-                              >
-                                {labelTipoFlota(a.tipoFlota)}
-                              </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="bg-white rounded-lg border border-brand-seashell p-3">
+                              <p className="text-[10px] font-bold text-brand-cta uppercase tracking-wider mb-1">
+                                Grúa Asignada
+                              </p>
+                              <p className="text-sm font-extrabold text-brand-purply font-mono">
+                                {a.gruaPrefijo || a.gruaPatente}
+                              </p>
+                              {a.gruaDescripcion && (
+                                <p className="text-[11px] text-brand-pale mt-0.5">
+                                  {a.gruaDescripcion}
+                                </p>
+                              )}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="w-3.5 h-3.5 shrink-0" />
-                              <span>
-                                {a.duplaChofer} / {a.duplaEnganchador}
-                              </span>
+                            <div className="bg-white rounded-lg border border-brand-seashell p-3">
+                              <p className="text-[10px] font-bold text-brand-cta uppercase tracking-wider mb-1">
+                                Dupla en Turno
+                              </p>
+                              <p className="text-xs text-brand-purply">
+                                <span className="font-bold">Chofer:</span> {a.duplaChofer}
+                              </p>
+                              <p className="text-xs text-brand-purply">
+                                <span className="font-bold">Enganchador:</span> {a.duplaEnganchador}
+                              </p>
                             </div>
-                            {a.inicioEn && (
-                              <div className="flex items-center gap-2 text-xs">
-                                <Clock className="w-3 h-3 shrink-0" />
-                                <span>Turno iniciado hace {tiempoDesde(a.inicioEn)}</span>
-                              </div>
-                            )}
+                            <div className="bg-white rounded-lg border border-brand-seashell p-3">
+                              <p className="text-[10px] font-bold text-brand-cta uppercase tracking-wider mb-1">
+                                Servicio en Curso
+                              </p>
+                              {servActivo ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                    servActivo.estado === "ENGANCHADO" ? "bg-emerald-500" : "bg-blue-500"
+                                  }`} />
+                                  <span className="text-xs font-bold text-brand-purply">
+                                    {servActivo.estado === "ENGANCHADO" ? "En Enganche" : "En Traslado"}
+                                  </span>
+                                  {servActivo.numeroInfraccion && (
+                                    <span className="text-[10px] font-mono text-brand-pale">
+                                      #{servActivo.numeroInfraccion}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-brand-pale italic">
+                                  Sin servicio activo en calle
+                                </p>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -659,7 +735,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
                                       onChange={(e) => setFormMarcarOos(e.target.checked)}
                                       className="rounded"
                                     />
-                                    Marcar grúa anterior ({a.gruaPatente}) como fuera de servicio
+                                    Marcar grúa anterior ({idGrua(a)}) como fuera de servicio
                                   </label>
                                   {formMarcarOos && (
                                     <div className="grid grid-cols-2 gap-2">
@@ -779,7 +855,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
                                       onChange={(e) => setFormMarcarOos(e.target.checked)}
                                       className="rounded"
                                     />
-                                    Marcar grúa anterior ({a.gruaPatente}) como fuera de servicio
+                                    Marcar grúa anterior ({idGrua(a)}) como fuera de servicio
                                   </label>
                                   {formMarcarOos && (
                                     <div className="grid grid-cols-2 gap-2">
@@ -808,7 +884,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
                           {expandedAction === "oos" && (
                             <>
                               <p className="text-xs text-brand-pale">
-                                Sacar <strong>{a.gruaDescripcion || a.gruaPatente}</strong> ({a.gruaPatente}) de servicio
+                                Sacar <strong>{a.gruaDescripcion || idGrua(a)}</strong> ({idGrua(a)}) de servicio
                               </p>
                               {servActivo && (
                                 <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -910,59 +986,78 @@ export const ControlTurnoModal: React.FC<Props> = ({
                       key={g.id}
                       className="bg-brand-bg rounded-xl border border-brand-seashell p-4"
                     >
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start justify-between mb-3">
                         <div>
-                          <p className="text-brand-purply font-extrabold text-base">
-                            {g.descripcion || g.patente}
-                          </p>
-                          <p className="text-xs text-brand-pale font-mono">{g.patente}</p>
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="text-sm font-extrabold text-brand-purply font-mono bg-white border border-brand-seashell px-2 py-0.5 rounded">
+                              {g.prefijo?.trim() || g.patente}
+                            </span>
+                            {oos && (
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 uppercase">
+                                {labelMotivoFueraDeServicio(oos.categoria)}
+                              </span>
+                            )}
+                            <span
+                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                normalizeTipoFlota(g.tipo) === "TRANSITO"
+                                  ? "bg-indigo-100 text-indigo-700"
+                                  : "bg-emerald-100 text-emerald-700"
+                              }`}
+                            >
+                              {labelTipoFlota(g.tipo)}
+                            </span>
+                          </div>
+                          {g.descripcion && (
+                            <p className="text-xs text-brand-pale">{g.descripcion}</p>
+                          )}
                         </div>
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                            normalizeTipoFlota(g.tipo) === "TRANSITO"
-                              ? "bg-indigo-100 text-indigo-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
-                        >
-                          {labelTipoFlota(g.tipo)}
-                        </span>
+                        {permisos.puedeSacarOOS && (
+                          <button
+                            type="button"
+                            onClick={() => handleReactivar(g.docId || g.id, g.patente)}
+                            disabled={saving}
+                            className="py-2 px-4 bg-emerald-600 text-white rounded-xl text-xs font-extrabold shadow-md hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Reactivar Grúa
+                          </button>
+                        )}
                       </div>
 
                       {oos && (
-                        <div className="space-y-1 text-xs text-brand-pale mb-3">
-                          <p>
-                            <strong>Categoría:</strong>{" "}
-                            {labelMotivoFueraDeServicio(oos.categoria)}
-                          </p>
+                        <div className="space-y-1 text-xs text-brand-pale">
                           {oos.motivo && (
-                            <p>
-                              <strong>Motivo:</strong> {oos.motivo}
-                            </p>
+                            <div className="bg-white rounded-lg border border-brand-seashell px-3 py-2">
+                              <span className="font-bold">Motivo:</span> {oos.motivo}
+                            </div>
                           )}
                           <p>
-                            <strong>Desde:</strong>{" "}
-                            {new Date(oos.desde).toLocaleDateString("es-AR")} —{" "}
-                            {oos.desactivadaPorNombre}
+                            Desde: {new Date(oos.desde).toLocaleDateString("es-AR", { day: "numeric", month: "numeric", year: "numeric" })}, {new Date(oos.desde).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                            {oos.desactivadaPorNombre && (
+                              <> &nbsp;&nbsp;Por: <strong>{oos.desactivadaPorNombre}</strong></>
+                            )}
                           </p>
                         </div>
-                      )}
-
-                      {permisos.puedeSacarOOS && (
-                        <button
-                          type="button"
-                          onClick={() => handleReactivar(g.docId || g.id, g.patente)}
-                          disabled={saving}
-                          className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-extrabold shadow-md hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                          Reactivar
-                        </button>
                       )}
                     </div>
                   );
                 })}
               </>
             )}
+          </div>
+
+          {/* Footer */}
+          <div className="shrink-0 px-5 sm:px-6 py-3 border-t border-brand-seashell flex items-center justify-between">
+            <p className="text-[11px] text-brand-pale">
+              Acciones operativas con registro de auditoría en tiempo real.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs font-bold text-brand-pale hover:text-brand-purply transition-colors cursor-pointer"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       </div>

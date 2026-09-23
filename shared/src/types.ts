@@ -428,6 +428,8 @@ export interface Grua {
   id: string;
   patente: string;
   descripcion: string;
+  /** Identificador operativo visible (ej: "T-16", "G-01"). Se muestra en lugar de la patente. */
+  prefijo?: string;
   activa: boolean;
   /** Default legacy: TRANSITO */
   tipo?: TipoFlota;
@@ -566,6 +568,8 @@ export interface AsignacionDiaria {
   fecha: string; // YYYY-MM-DD (zona Argentina)
   gruaPatente: string;
   gruaDescripcion?: string;
+  /** Prefijo operativo de la grúa (ej: "T-16"). Cache del catálogo al asignar turno. */
+  gruaPrefijo?: string;
   duplaId: string;
   duplaChofer: string;
   duplaEnganchador: string;
@@ -866,6 +870,7 @@ export interface RegistroITV {
 export interface GruaPoliza {
   id: string;
   patente: string;
+  prefijo?: string;
   descripcion?: string;
 }
 

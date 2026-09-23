@@ -66,8 +66,9 @@ function apellidoKey(nombre: string): string {
 }
 
 function gruaLabel(g: GruaDoc): string {
+  const id = g.prefijo?.trim() || g.patente;
   const desc = g.descripcion?.trim();
-  return desc ? `${desc} — ${g.patente}` : g.patente;
+  return desc ? `${desc} (${id})` : id;
 }
 
 function resolveGrua(gruas: GruaDoc[], gruaId?: string): GruaDoc | undefined {
@@ -161,7 +162,7 @@ export const AdminDuplasPanel: React.FC<AdminDuplasPanelProps> = ({
       if (!duplaSearch.trim()) return true;
       const codigo = codigoInternoVisible(d.id, d.docId) ?? "";
       const grua = resolveGrua(gruas, d.gruaId);
-      const gruaText = grua ? `${grua.patente} ${grua.descripcion ?? ""}` : "";
+      const gruaText = grua ? `${grua.prefijo?.trim() || grua.patente} ${grua.descripcion ?? ""}` : "";
       return (
         matchesSearch(d.chofer, duplaSearch) ||
         matchesSearch(enganchadorDeDupla(d), duplaSearch) ||

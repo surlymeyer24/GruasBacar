@@ -107,10 +107,10 @@ interface AdminTurnosHistorialPanelProps {
 }
 
 function resolverGruaLabel(patente: string | undefined, descripcion: string | undefined, gruas: GruaDoc[]): { desc: string; pat: string } {
-  const pat = patente || "—";
-  if (descripcion?.trim()) return { desc: descripcion.trim(), pat };
   const grua = gruas.find((g) => g.patente === patente);
-  return { desc: grua?.descripcion?.trim() || "", pat };
+  const id = grua?.prefijo?.trim() || patente || "—";
+  if (descripcion?.trim()) return { desc: descripcion.trim(), pat: id };
+  return { desc: grua?.descripcion?.trim() || "", pat: id };
 }
 
 const AdminTurnosHistorialPanel: React.FC<AdminTurnosHistorialPanelProps> = ({ gruas }) => {

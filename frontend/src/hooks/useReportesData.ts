@@ -20,6 +20,7 @@ import {
 } from "../services/adminServicios.cache";
 import { resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
+import { logger } from "../utils/logger";
 import {
   DEFAULT_REPORTES_FILTERS,
   ReportesFilterState,
@@ -168,7 +169,7 @@ export function useReportesData() {
           if (!cancelled) setServices(data.servicios);
         }
       } catch (err) {
-        console.error("Error cargando datos de reportes:", err);
+        logger.error("reportes", "Error cargando datos de reportes", err);
         if (!cancelled && !snapshot?.servicios) setServices([]);
       } finally {
         if (!cancelled) setLoading(false);

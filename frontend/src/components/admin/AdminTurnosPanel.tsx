@@ -52,8 +52,10 @@ const DUPLA_MANUAL = "__manual__";
 
 function gruaLabelPorPatente(gruas: GruaDoc[], patente: string): string {
   const g = gruas.find((gr) => gr.patente === patente);
-  if (!g || !g.descripcion?.trim()) return patente;
-  return `${g.descripcion.trim()} — ${patente}`;
+  if (!g) return patente;
+  const id = g.prefijo?.trim() || patente;
+  const desc = g.descripcion?.trim();
+  return desc ? `${desc} (${id})` : id;
 }
 
 function matchesSearch(text: string, query: string): boolean {
@@ -127,6 +129,7 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
       return (
         matchesSearch(u.nombre, turnoSearch) ||
         matchesSearch(a.gruaPatente, turnoSearch) ||
+        matchesSearch(a.gruaPrefijo ?? "", turnoSearch) ||
         matchesSearch(gruaText, turnoSearch) ||
         matchesSearch(a.duplaChofer, turnoSearch) ||
         matchesSearch(a.duplaEnganchador, turnoSearch)
@@ -203,7 +206,7 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
         ? [{ value: "", label: "Sin grúas de este tipo" }]
         : gruasFiltradas.map((g) => ({
             value: g.patente,
-            label: `${g.descripcion?.trim() ? `${g.descripcion.trim()} — ` : ""}${g.patente}`,
+            label: `${g.descripcion?.trim() ? `${g.descripcion.trim()} (` : ""}${g.prefijo?.trim() || g.patente}${g.descripcion?.trim() ? ")" : ""}`,
           })),
     [gruasFiltradas]
   );
@@ -300,12 +303,15 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
     const legajoEnganchador = duplaCatalogo?.legajoEnganchador
       || enganchadores.find((e) => e.nombre === editEnganchador.trim())?.legajo;
 
-    const gruaDesc = gruas.find((g) => g.patente === editGruaPatente.trim())?.descripcion?.trim();
+    const gruaCatalog = gruas.find((g) => g.patente === editGruaPatente.trim());
+    const gruaDesc = gruaCatalog?.descripcion?.trim();
+    const gruaPref = gruaCatalog?.prefijo?.trim();
     const updated: AsignacionDiaria = isCreating
       ? {
           fecha: hoy,
           gruaPatente: editGruaPatente.trim(),
           ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
+          ...(gruaPref ? { gruaPrefijo: gruaPref } : {}),
           duplaId,
           duplaChofer: editChofer.trim(),
           duplaEnganchador: editEnganchador.trim(),
@@ -318,6 +324,7 @@ export const AdminTurnosPanel: React.FC<AdminTurnosPanelProps> = ({
           ...selectedUser!.asignacionDiaria!,
           gruaPatente: editGruaPatente.trim(),
           ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
+          ...(gruaPref ? { gruaPrefijo: gruaPref } : {}),
           duplaId,
           duplaChofer: editChofer.trim(),
           duplaEnganchador: editEnganchador.trim(),

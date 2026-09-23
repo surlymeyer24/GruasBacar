@@ -232,10 +232,11 @@ export const NuevaActaManualPage: React.FC = () => {
               <CustomSelect
                 value={grua}
                 onChange={setGrua}
-                options={gruas.map((g) => ({
-                  value: g.patente,
-                  label: g.descripcion?.trim() ? `${g.descripcion} — ${g.patente}` : g.patente,
-                }))}
+                options={gruas.map((g) => {
+                  const id = g.prefijo?.trim() || g.patente;
+                  const desc = g.descripcion?.trim();
+                  return { value: g.patente, label: desc ? `${desc} (${id})` : id };
+                })}
                 placeholder="Seleccioná grúa"
                 icon={Truck}
                 ariaLabel="Grúa"

@@ -122,6 +122,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Incidentes agregados del frontend. Solo Cloud Functions puede escribirlos
+    // y el panel SUPERADMIN los obtiene mediante un callable autenticado.
+    match /erroresCliente/{errorId} {
+      allow read, write: if false;
+    }
+
+    // Ventanas internas para rate limiting del callable de diagnóstico.
+    match /erroresClienteRateLimit/{rateId} {
+      allow read, write: if false;
+    }
+
     match /notificaciones/{notifId} {
       allow read: if isAuthenticated() && resource.data.destinatarioUid == request.auth.uid;
       allow create: if false;

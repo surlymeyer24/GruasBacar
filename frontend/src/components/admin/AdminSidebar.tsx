@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Settings, History, LayoutDashboard, Menu, FilePlus, BarChart3, LayoutGrid, FileText } from "lucide-react";
+import { Home, Settings, History, LayoutDashboard, Menu, FilePlus, BarChart3, LayoutGrid, FileText, Bug } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { esAdmin, esSuperAdmin, esOperador, esSoloSupervisor, esSoloVisor } from "@gruasbacar/shared";
 
@@ -105,6 +105,12 @@ export const AdminSidebar: React.FC = () => {
               <BarChart3 className="w-4 h-4 shrink-0" />
               {!collapsed && <span className="truncate">Reportes</span>}
             </NavLink>
+            {isSuperAdmin && (
+              <NavLink to="/debug" className={linkClass} title={collapsed ? "Diagnóstico" : undefined}>
+                <Bug className="w-4 h-4 shrink-0" />
+                {!collapsed && <span className="truncate">Diagnóstico</span>}
+              </NavLink>
+            )}
           </div>
         )}
 

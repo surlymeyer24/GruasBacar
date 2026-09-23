@@ -30,7 +30,7 @@ import { isMock, db } from "../firebase";
 import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { CORRALONES } from "../data/mockData";
 import { Servicio, EstadoServicio, Evento, Foto, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla, esPatenteSinNumero, normalizarPatenteInput } from "@gruasbacar/shared";
-import { resolverPatenteGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
+import { resolverPatenteGrua, resolverPrefijoGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
 import { gruaService } from "../services/grua.service";
 import { corralonService } from "../services/corralon.service";
@@ -366,7 +366,8 @@ export const HistorialPage: React.FC = () => {
         s.patente.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (s.numeroInfraccion ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.grua.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase());
+        patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        resolverPrefijoGrua(s.grua, gruasCatalog).toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesStatus = statusFilter === "ALL" || s.estado === statusFilter;
 
@@ -1277,7 +1278,7 @@ export const HistorialPage: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <span className="text-gray-400 block mb-0.5">Grúa Patente</span>
+                    <span className="text-gray-400 block mb-0.5">Grúa</span>
                     {editingActa ? (
                       <CustomSelect
                         value={editGrua}
@@ -1285,7 +1286,9 @@ export const HistorialPage: React.FC = () => {
                         options={[
                           ...gruasCatalog.map((g) => ({
                             value: g.patente,
-                            label: `${g.descripcion ? `${g.descripcion} — ` : ""}${g.patente}`,
+                            label: g.descripcion
+                              ? `${g.descripcion} (${g.prefijo?.trim() || g.patente})`
+                              : (g.prefijo?.trim() || g.patente),
                           })),
                           ...(!gruasCatalog.some((g) => g.patente === editGrua) && editGrua
                             ? [{ value: editGrua, label: editGrua }]

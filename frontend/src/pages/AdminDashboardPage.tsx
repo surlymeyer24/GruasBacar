@@ -22,7 +22,7 @@ import { obtenerEstadisticasAdmin, AdminDashboardStats, EMPTY_ADMIN_STATS } from
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
 import { asignacionDiariaVigente, configDiaFueOmitidaHoy, limpiarConfigDiaOmitidaHoy, marcarConfigDiaOmitidaHoy } from "../utils/asignacionDiaria";
 import { ConfiguracionDiaModal } from "../components/operador/ConfiguracionDiaModal";
-import { resolverDescripcionGrua, resolverPatenteGrua } from "../utils/gruaDisplay";
+import { resolverDescripcionGrua, resolverPrefijoGrua } from "../utils/gruaDisplay";
 import { ControlTurnoModal } from "../components/admin/ControlTurnoModal";
 import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
@@ -46,7 +46,7 @@ export const AdminDashboardPage: React.FC = () => {
 
   const etiquetaGrua = (gruaId: string) => {
     const desc = resolverDescripcionGrua(gruaId, gruasCatalog);
-    const pat = resolverPatenteGrua(gruaId, gruasCatalog);
+    const pat = resolverPrefijoGrua(gruaId, gruasCatalog);
     return { desc, pat, mostrarPatente: desc !== pat && pat !== "—" };
   };
 
@@ -279,7 +279,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div key={u.uid ?? `turno-${idx}`} className="p-3 bg-brand-bg rounded-xl border border-brand-seashell hover:border-brand-cta/30 transition-colors">
                         <p className="font-sans text-sm font-bold text-brand-purply">{u.nombre}</p>
                         {u.asignacionDiaria ? (
-                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPatente}</span>{u.asignacionDiaria.gruaDescripcion && u.asignacionDiaria.gruaPatente ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPatente})</span> : null}{u.asignacionDiaria.tipoFlota ? <span className="ml-1.5 bg-brand-bg px-1.5 py-0.5 rounded text-[9px] font-medium text-brand-purply border border-brand-seashell">{labelTipoFlota(u.asignacionDiaria.tipoFlota)}</span> : null} • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
+                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPrefijo || u.asignacionDiaria.gruaPatente}</span>{u.asignacionDiaria.gruaDescripcion ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPrefijo || u.asignacionDiaria.gruaPatente})</span> : null}{u.asignacionDiaria.tipoFlota ? <span className="ml-1.5 bg-brand-bg px-1.5 py-0.5 rounded text-[9px] font-medium text-brand-purply border border-brand-seashell">{labelTipoFlota(u.asignacionDiaria.tipoFlota)}</span> : null} • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
                         ) : (
                           <p className="text-[10px] text-brand-pale mt-0.5">Servicio activo pero sin turno asignado</p>
                         )}

@@ -531,6 +531,7 @@ const ITVTab: React.FC = () => {
       const q = search.trim().toLowerCase();
       return (
         r.gruaPatente.toLowerCase().includes(q) ||
+        (gruas.find((g) => g.patente === r.gruaPatente)?.prefijo ?? "").toLowerCase().includes(q) ||
         String(r.numero).padStart(6, "0").includes(q)
       );
     });
@@ -670,10 +671,11 @@ const ITVTab: React.FC = () => {
               <CustomSelect
                 value={selectedGruaId}
                 onChange={(val) => handleSelectGrua(val)}
-                options={gruas.map((g) => ({
-                  value: g.id,
-                  label: g.descripcion?.trim() ? `${g.descripcion} — ${g.patente}` : g.patente,
-                }))}
+                options={gruas.map((g) => {
+                  const id = g.prefijo?.trim() || g.patente;
+                  const desc = g.descripcion?.trim();
+                  return { value: g.id, label: desc ? `${desc} (${id})` : id };
+                })}
                 placeholder="Seleccionar grúa..."
                 icon={Truck}
                 size="sm"
@@ -769,7 +771,7 @@ const ITVTab: React.FC = () => {
                   >
                     {editing ? (
                       <div className="p-4 space-y-3">
-                        <p className="text-sm font-bold text-gray-900">{gruas.find((g) => g.patente === r.gruaPatente)?.descripcion || r.gruaPatente}</p>
+                        <p className="text-sm font-bold text-gray-900">{(() => { const gr = gruas.find((g) => g.patente === r.gruaPatente); return gr?.descripcion || gr?.prefijo || r.gruaPatente; })()}</p>
                         <div>
                           <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
                             Fecha de vencimiento
@@ -850,11 +852,9 @@ const ITVTab: React.FC = () => {
 
                         <p className="font-bold text-sm text-gray-900 leading-snug flex items-center gap-2">
                           <Truck className="w-4 h-4 text-brand-cta shrink-0" />
-                          {gruas.find((g) => g.patente === r.gruaPatente)?.descripcion || r.gruaPatente}
+                          {(() => { const gr = gruas.find((g) => g.patente === r.gruaPatente); return gr?.descripcion || gr?.prefijo || r.gruaPatente; })()}
                         </p>
-                        {gruas.find((g) => g.patente === r.gruaPatente)?.descripcion && (
-                          <p className="font-mono text-[10px] text-brand-pale ml-6">{r.gruaPatente}</p>
-                        )}
+                        {(() => { const gr = gruas.find((g) => g.patente === r.gruaPatente); return gr?.descripcion ? <p className="font-mono text-[10px] text-brand-pale ml-6">{gr.prefijo || r.gruaPatente}</p> : null; })()}
 
                         <div className="mt-3 space-y-1.5">
                           <div className="flex items-center gap-2 text-xs text-brand-pale">

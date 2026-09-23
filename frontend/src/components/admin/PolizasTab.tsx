@@ -143,6 +143,7 @@ const PolizasTab: React.FC = () => {
         poliza.gruas.some(
           (grua) =>
             grua.patente.toLowerCase().includes(q) ||
+            (grua.prefijo ?? "").toLowerCase().includes(q) ||
             (grua.descripcion ?? "").toLowerCase().includes(q)
         )
       );
@@ -417,9 +418,9 @@ const PolizasTab: React.FC = () => {
                     />
                     <Truck className="w-4 h-4 text-brand-pale shrink-0" />
                     <span className="text-xs font-semibold text-gray-700">
-                      {grua.descripcion?.trim() || grua.patente}
+                      {grua.descripcion?.trim() || grua.prefijo?.trim() || grua.patente}
                       {grua.descripcion?.trim() && (
-                        <span className="ml-1 font-mono text-brand-pale">{grua.patente}</span>
+                        <span className="ml-1 font-mono text-brand-pale">{grua.prefijo?.trim() || grua.patente}</span>
                       )}
                     </span>
                   </label>
@@ -562,7 +563,7 @@ const PolizasTab: React.FC = () => {
                             title={grua.descripcion}
                           >
                             <Truck className="w-3 h-3" />
-                            {grua.patente}
+                            {grua.prefijo?.trim() || grua.patente}
                           </span>
                         ))}
                       </div>

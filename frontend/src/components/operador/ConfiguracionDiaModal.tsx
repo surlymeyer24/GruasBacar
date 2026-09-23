@@ -319,9 +319,11 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         ? [{ value: "", label: "Sin grúas de este tipo" }]
         : gruasFiltradas.map((g) => {
             const enUso = gruasOcupadas.has(g.patente);
+            const id = g.prefijo?.trim() || g.patente;
+            const desc = g.descripcion?.trim();
             const label = enUso
-              ? `${g.descripcion?.trim() || g.patente} · ${g.patente} (EN USO)`
-              : `${g.descripcion?.trim() || g.patente} · ${g.patente}`;
+              ? `${desc ? `${desc} (${id})` : id} (EN USO)`
+              : desc ? `${desc} (${id})` : id;
             return { value: g.patente, label };
           }),
     [gruasFiltradas, gruasOcupadas]
@@ -477,7 +479,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                 <div className="p-3 bg-blue-50 text-blue-800 text-xs rounded-xl border border-blue-200/50 flex items-start gap-2">
                   <Info className="w-4 h-4 shrink-0 mt-0.5" />
                   <span>
-                    Tenés un servicio activo con grúa <strong>{turnoVigente.gruaPatente}</strong>.
+                    Tenés un servicio activo con grúa <strong>{turnoVigente.gruaPrefijo || turnoVigente.gruaPatente}</strong>.
                     El cambio aplica al próximo servicio.
                   </span>
                 </div>

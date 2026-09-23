@@ -280,7 +280,7 @@ export const SupervisorDashboardPage: React.FC = () => {
                         <p className="text-[10px] text-brand-pale mt-0.5">
                           Grúa:{" "}
                           <span className="font-bold text-brand-purply/80">
-                            {u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPatente}{u.asignacionDiaria.gruaDescripcion && u.asignacionDiaria.gruaPatente ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPatente})</span> : null}
+                            {u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPrefijo || u.asignacionDiaria.gruaPatente}{u.asignacionDiaria.gruaDescripcion ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPrefijo || u.asignacionDiaria.gruaPatente})</span> : null}
                           </span>{" "}
                           {u.asignacionDiaria.tipoFlota ? <span className="bg-brand-bg px-1.5 py-0.5 rounded text-[9px] font-medium text-brand-purply border border-brand-seashell">{labelTipoFlota(u.asignacionDiaria.tipoFlota)}</span> : null}{" "}
                           • D: {u.asignacionDiaria.duplaChofer} +{" "}

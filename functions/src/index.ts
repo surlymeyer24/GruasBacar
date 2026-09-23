@@ -13,6 +13,7 @@ import * as servicioTimeoutService from './services/servicioTimeout.service';
 import * as usuarioService from './services/usuario.service';
 import * as gruaService from './services/grua.service';
 import * as mapsService from './services/maps.service';
+import * as clientErrorService from './services/clientError.service';
 import { verificarAuth, verificarAdmin, verificarAdminOSupervisor, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
 import { withHttpsErrorHandling } from './utils/callableHandler';
 import { assertAislamientoEmulador } from './utils/entorno';
@@ -280,6 +281,21 @@ export const marcarTodasNotificacionesLeidas = onCall(callable, withHttpsErrorHa
   return { ok: true, count };
 }));
 
+// ── Diagnóstico de errores del frontend ─────────────────────
+
+export const reportarErrorCliente = onCall(callable, withHttpsErrorHandling('reportarErrorCliente', async (request) => {
+  const ctx = await verificarAuth(request.auth);
+  return clientErrorService.reportClientError(request.data, ctx);
+}));
+
+export const listarErroresCliente = onCall(callable, withHttpsErrorHandling('listarErroresCliente', async (request) => {
+  const ctx = await verificarAuth(request.auth);
+  if (!ctx.roles.includes('SUPERADMIN')) {
+    throw new HttpsError('permission-denied', 'Se requiere rol SUPERADMIN.');
+  }
+  return clientErrorService.listClientErrors(request.data?.limit);
+}));
+
 /** Prueba acceso a Google Drive (solo admin). Crea un .txt de verificación en la carpeta configurada. */
 export const verificarDrive = onCall(
   { ...callable, secrets: [googleDriveFolderId] },
@@ -442,6 +458,13 @@ export const verificarTimeoutTraslados = onSchedule(
   { schedule: 'every 10 minutes', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
   async () => {
     await servicioTimeoutService.verificarTimeoutTraslados();
+  }
+);
+
+export const limpiarErroresClienteExpirados = onSchedule(
+  { schedule: 'every day 04:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await clientErrorService.cleanupExpiredClientErrors();
   }
 );
 

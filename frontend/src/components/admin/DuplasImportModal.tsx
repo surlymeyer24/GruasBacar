@@ -81,8 +81,9 @@ function gruasParaTipo(gruas: GruaDoc[], tipo: TipoFlota): GruaDoc[] {
 }
 
 function gruaLabel(g: GruaDoc): string {
+  const id = g.prefijo?.trim() || g.patente;
   const desc = g.descripcion?.trim();
-  return desc ? `${desc} — ${g.patente}` : g.patente;
+  return desc ? `${desc} (${id})` : id;
 }
 
 function parsedToImportRow(

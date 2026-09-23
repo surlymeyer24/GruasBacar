@@ -361,9 +361,14 @@ export async function guardarAsignacionDiaria(
     if (!legajoEnganchador) legajoEnganchador = (duplaData.legajoEnganchador as string | undefined)?.trim();
   }
 
+  const gruaDescripcion = (gruaData.descripcion as string | undefined)?.trim();
+  const gruaPrefijo = (gruaData.prefijo as string | undefined)?.trim();
+
   const asignacionDiaria: AsignacionDiaria = {
     fecha: fechaHoyArgentina(),
     gruaPatente,
+    ...(gruaDescripcion ? { gruaDescripcion } : {}),
+    ...(gruaPrefijo ? { gruaPrefijo } : {}),
     duplaId: duplaId || '',
     duplaChofer,
     duplaEnganchador,

@@ -292,10 +292,10 @@ export const HomePage: React.FC = () => {
                       <div className="min-w-0">
                         <p className="text-[9px] font-bold text-brand-pale uppercase tracking-widest">Grúa</p>
                         <p className="text-xs font-extrabold text-brand-purply truncate mt-0.5">
-                          {turnoHoy.gruaDescripcion || gruaDescResuelta || turnoHoy.gruaPatente}
+                          {turnoHoy.gruaDescripcion || gruaDescResuelta || turnoHoy.gruaPrefijo || turnoHoy.gruaPatente}
                         </p>
-                        {(turnoHoy.gruaDescripcion || gruaDescResuelta) && turnoHoy.gruaPatente && (
-                          <p className="font-mono text-[10px] text-brand-pale tracking-wider truncate">{turnoHoy.gruaPatente}</p>
+                        {(turnoHoy.gruaDescripcion || gruaDescResuelta) && (turnoHoy.gruaPrefijo || turnoHoy.gruaPatente) && (
+                          <p className="font-mono text-[10px] text-brand-pale tracking-wider truncate">{turnoHoy.gruaPrefijo || turnoHoy.gruaPatente}</p>
                         )}
                       </div>
                     </div>
