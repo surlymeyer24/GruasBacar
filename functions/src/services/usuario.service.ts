@@ -402,6 +402,8 @@ export async function guardarAsignacionDiaria(
     ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
     fecha: asignacionDiaria.fecha,
     gruaPatente,
+    ...(gruaDescripcion ? { gruaDescripcion } : {}),
+    ...(gruaPrefijo ? { gruaPrefijo } : {}),
     duplaId: asignacionDiaria.duplaId,
     duplaChofer,
     duplaEnganchador,
@@ -552,7 +554,9 @@ export async function asignarTurnoOperador(
     throw new HttpsError('not-found', 'La grúa seleccionada no está habilitada.');
   }
 
-  const gruaDescripcion = (gruaSnap.docs[0].data().descripcion as string | undefined)?.trim() || '';
+  const gruaData = gruaSnap.docs[0].data();
+  const gruaDescripcion = (gruaData.descripcion as string | undefined)?.trim() || '';
+  const gruaPrefijo = (gruaData.prefijo as string | undefined)?.trim();
 
   const duplaId = asignacion.duplaId?.trim();
   if (duplaId) {
@@ -592,6 +596,7 @@ export async function asignarTurnoOperador(
     fecha: asignacion.fecha?.trim() || hoy,
     gruaPatente,
     ...(gruaDescripcion ? { gruaDescripcion } : {}),
+    ...(gruaPrefijo ? { gruaPrefijo } : {}),
     duplaChofer: asignacion.duplaChofer.trim(),
     duplaEnganchador: asignacion.duplaEnganchador.trim(),
     inicioEn: asignacion.inicioEn || new Date().toISOString(),
@@ -632,6 +637,7 @@ export async function asignarTurnoOperador(
     fecha: asignacionDiaria.fecha,
     gruaPatente,
     ...(gruaDescripcion ? { gruaDescripcion } : {}),
+    ...(gruaPrefijo ? { gruaPrefijo } : {}),
     duplaId: duplaId || '',
     duplaChofer: asignacionDiaria.duplaChofer,
     duplaEnganchador: asignacionDiaria.duplaEnganchador,

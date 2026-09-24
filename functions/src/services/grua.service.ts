@@ -139,7 +139,9 @@ export async function gestionarGruaFueraDeServicioHandler(
   await desactivarGruaFueraDeServicio(patente, snapshot);
 
   const docSnap = await db().collection('gruas').where('patente', '==', patente).limit(1).get();
-  const gruaDesc = docSnap.empty ? undefined : (docSnap.docs[0].data().descripcion as string | undefined);
+  const gruaDoc = docSnap.empty ? undefined : docSnap.docs[0].data();
+  const gruaDesc = gruaDoc?.descripcion as string | undefined;
+  const gruaPref = (gruaDoc?.prefijo as string | undefined)?.trim();
 
   try {
     await db().collection('turnos').add({
@@ -148,6 +150,7 @@ export async function gestionarGruaFueraDeServicioHandler(
       fecha: fechaArgentina(),
       gruaPatente: patente,
       ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
+      ...(gruaPref ? { gruaPrefijo: gruaPref } : {}),
       duplaId: '',
       duplaChofer: '',
       duplaEnganchador: '',
@@ -181,6 +184,7 @@ export async function reactivarGruaHandler(
   const gruaData = snap.data()!;
   const patente = gruaData.patente as string;
   const descripcion = gruaData.descripcion as string | undefined;
+  const prefijo = (gruaData.prefijo as string | undefined)?.trim();
 
   await reactivarGrua(gruaDocId);
 
@@ -191,6 +195,7 @@ export async function reactivarGruaHandler(
       fecha: fechaArgentina(),
       gruaPatente: patente,
       ...(descripcion ? { gruaDescripcion: descripcion } : {}),
+      ...(prefijo ? { gruaPrefijo: prefijo } : {}),
       duplaId: '',
       duplaChofer: '',
       duplaEnganchador: '',
