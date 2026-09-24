@@ -16,7 +16,6 @@ import {
   CrearActaManualPayload,
   Foto,
   EtiquetaFoto,
-  esAdmin,
   esOperador,
   normalizeRoles,
   normalizeTipoFlota,
@@ -206,20 +205,21 @@ export async function iniciarEnganche(
   const grua = await validarGruaExiste(gruaId);
   const tipoFlota = grua.tipoFlota;
 
-  const serviciosConGrua = await db().collection('servicios')
-    .where('grua', '==', gruaId)
-    .where('estado', 'in', ['ENGANCHADO', 'EN_TRASLADO'])
-    .limit(1)
-    .get();
-  if (!serviciosConGrua.empty) {
-    if (!esAdmin(rolesUsuario)) {
-      throw new HttpsError(
-        'failed-precondition',
-        `La grúa ${gruaId} ya tiene un servicio activo. Contactá al administrador si necesitás usarla.`
-      );
-    }
-    console.warn(`[iniciarEnganche] Admin ${uid} forzó enganche con grúa ${gruaId} que ya tiene servicio activo.`);
-  }
+  // TODO: habilitar enganche con grúa ocupada en el futuro
+  // const serviciosConGrua = await db().collection('servicios')
+  //   .where('grua', '==', gruaId)
+  //   .where('estado', 'in', ['ENGANCHADO', 'EN_TRASLADO'])
+  //   .limit(1)
+  //   .get();
+  // if (!serviciosConGrua.empty) {
+  //   if (!esAdmin(rolesUsuario)) {
+  //     throw new HttpsError(
+  //       'failed-precondition',
+  //       `La grúa ${gruaId} ya tiene un servicio activo.`
+  //     );
+  //   }
+  //   console.warn(`[iniciarEnganche] Admin ${uid} forzó enganche con grúa ${gruaId} que ya tiene servicio activo.`);
+  // }
 
   const servicioRef = db().collection('servicios').doc(identificadorCompuesto);
   const existente = await servicioRef.get();
