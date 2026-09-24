@@ -3,6 +3,7 @@ import {
   X,
   RefreshCw,
   Truck,
+  User,
   Users,
   ArrowLeftRight,
   AlertTriangle,
@@ -26,6 +27,8 @@ import {
   labelMotivoFueraDeServicio,
   labelRolUsuario,
   enganchadorDeDupla,
+  legajoKey,
+  nombresCoinciden,
   AsignarTurnoOperadorPayload,
 } from "@gruasbacar/shared";
 import { gruaService } from "../../services/grua.service";
@@ -94,6 +97,47 @@ function labelLastRefresh(date: Date | null | undefined, nowMs: number): string 
   return `Actualizado hace ${m} min`;
 }
 
+interface Operador {
+  nombre: string;
+  legajo: string;
+}
+
+function opKey(op: Operador): string {
+  return op.legajo || op.nombre.trim().toLowerCase();
+}
+
+function extractOperadores(duplas: Dupla[], rol: "chofer" | "enganchador"): Operador[] {
+  const seen = new Set<string>();
+  const result: Operador[] = [];
+  for (const d of duplas) {
+    const nombre = rol === "chofer" ? d.chofer : enganchadorDeDupla(d);
+    const legajo = rol === "chofer" ? d.legajoChofer ?? "" : d.legajoEnganchador ?? "";
+    if (!nombre.trim()) continue;
+    const key = opKey({ nombre, legajo });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push({ nombre: nombre.trim(), legajo: legajo.trim() });
+  }
+  return result;
+}
+
+function findDuplaMatch(
+  duplas: Dupla[],
+  chofer: Operador | undefined,
+  enganchador: Operador | undefined,
+): Dupla | undefined {
+  if (!chofer || !enganchador) return undefined;
+  return duplas.find((d) => {
+    const choferOk = chofer.legajo
+      ? legajoKey(d.legajoChofer) === legajoKey(chofer.legajo)
+      : nombresCoinciden(d.chofer, chofer.nombre);
+    const engOk = enganchador.legajo
+      ? legajoKey(d.legajoEnganchador) === legajoKey(enganchador.legajo)
+      : nombresCoinciden(enganchadorDeDupla(d), enganchador.nombre);
+    return choferOk && engOk;
+  });
+}
+
 function servicioActivoDeUsuario(
   usuario: Usuario,
   servicios: Servicio[],
@@ -131,8 +175,8 @@ export const ControlTurnoModal: React.FC<Props> = ({
   // Form state
   const [formGrua, setFormGrua] = useState("");
   const [formDuplaId, setFormDuplaId] = useState(DUPLA_MANUAL);
-  const [formChofer, setFormChofer] = useState("");
-  const [formEnganchador, setFormEnganchador] = useState("");
+  const [formChoferKey, setFormChoferKey] = useState("");
+  const [formEnganchadorKey, setFormEnganchadorKey] = useState("");
   const [formTipo, setFormTipo] = useState<TipoFlota>("TRANSITO");
   const [formMotivo, setFormMotivo] = useState("");
   const [formCategoriaOos, setFormCategoriaOos] = useState<MotivoFueraDeServicio | "">("");
@@ -170,8 +214,8 @@ export const ControlTurnoModal: React.FC<Props> = ({
   const resetForm = useCallback(() => {
     setFormGrua("");
     setFormDuplaId(DUPLA_MANUAL);
-    setFormChofer("");
-    setFormEnganchador("");
+    setFormChoferKey("");
+    setFormEnganchadorKey("");
     setFormTipo("TRANSITO");
     setFormMotivo("");
     setFormCategoriaOos("");
@@ -208,9 +252,10 @@ export const ControlTurnoModal: React.FC<Props> = ({
         setFormTipo(normalizeTipoFlota(a.tipoFlota));
       } else if (action === "dupla") {
         setFormTipo(normalizeTipoFlota(a.tipoFlota));
-        setFormDuplaId(DUPLA_MANUAL);
-        setFormChofer(a.duplaChofer);
-        setFormEnganchador(a.duplaEnganchador);
+        const duplaActual = a.duplaId ? duplas.find((d) => d.id === a.duplaId) : undefined;
+        setFormDuplaId(duplaActual ? duplaActual.id : DUPLA_MANUAL);
+        setFormChoferKey(opKey({ nombre: a.duplaChofer, legajo: a.legajoChofer ?? "" }));
+        setFormEnganchadorKey(opKey({ nombre: a.duplaEnganchador, legajo: a.legajoEnganchador ?? "" }));
       } else if (action === "tipo") {
         const nuevoTipo: TipoFlota =
           normalizeTipoFlota(a.tipoFlota) === "TRANSITO" ? "TRANSPORTE" : "TRANSITO";
@@ -297,13 +342,46 @@ export const ControlTurnoModal: React.FC<Props> = ({
 
   const duplaOptions: CustomSelectOption[] = useMemo(
     () => [
-      { value: DUPLA_MANUAL, label: "Chofer y enganchador manual" },
+      { value: DUPLA_MANUAL, label: "Seleccionar chofer y enganchador" },
       ...duplasFiltradas.map((d) => ({
         value: d.id,
         label: `${d.chofer} + ${enganchadorDeDupla(d)}`,
       })),
     ],
     [duplasFiltradas],
+  );
+
+  const choferes = useMemo(() => extractOperadores(duplasFiltradas, "chofer"), [duplasFiltradas]);
+  const enganchadores = useMemo(() => extractOperadores(duplasFiltradas, "enganchador"), [duplasFiltradas]);
+
+  const selectedChofer = choferes.find((c) => opKey(c) === formChoferKey);
+  const selectedEnganchador = enganchadores.find((e) => opKey(e) === formEnganchadorKey);
+
+  const duplaAutoMatch = useMemo(
+    () => findDuplaMatch(duplasFiltradas, selectedChofer, selectedEnganchador),
+    [duplasFiltradas, selectedChofer, selectedEnganchador],
+  );
+
+  const choferOptions: CustomSelectOption[] = useMemo(
+    () =>
+      choferes.length === 0
+        ? [{ value: "", label: "Sin choferes disponibles" }]
+        : choferes.map((c) => ({
+            value: opKey(c),
+            label: c.nombre + (c.legajo ? ` (${c.legajo})` : ""),
+          })),
+    [choferes],
+  );
+
+  const enganchadorOptions: CustomSelectOption[] = useMemo(
+    () =>
+      enganchadores.length === 0
+        ? [{ value: "", label: "Sin enganchadores disponibles" }]
+        : enganchadores.map((e) => ({
+            value: opKey(e),
+            label: e.nombre + (e.legajo ? ` (${e.legajo})` : ""),
+          })),
+    [enganchadores],
   );
 
   // ── Action handlers ──
@@ -348,9 +426,11 @@ export const ControlTurnoModal: React.FC<Props> = ({
     (usuario: Usuario) => {
       const a = usuario.asignacionDiaria!;
       const motivo = formMotivo.trim();
-      let chofer = formChofer.trim();
-      let enganchador = formEnganchador.trim();
+      let chofer = "";
+      let enganchador = "";
       let duplaId = formDuplaId;
+      let legChofer: string | undefined;
+      let legEnganchador: string | undefined;
 
       if (formDuplaId !== DUPLA_MANUAL) {
         const d = duplas.find((x) => x.id === formDuplaId);
@@ -358,10 +438,16 @@ export const ControlTurnoModal: React.FC<Props> = ({
           chofer = d.chofer;
           enganchador = enganchadorDeDupla(d);
           duplaId = d.id;
+          legChofer = d.legajoChofer;
+          legEnganchador = d.legajoEnganchador;
         }
+      } else {
+        if (selectedChofer) { chofer = selectedChofer.nombre; legChofer = selectedChofer.legajo || undefined; }
+        if (selectedEnganchador) { enganchador = selectedEnganchador.nombre; legEnganchador = selectedEnganchador.legajo || undefined; }
+        if (duplaAutoMatch) duplaId = duplaAutoMatch.id;
       }
 
-      if (!chofer || !enganchador) { setActionError("Completá chofer y enganchador."); return; }
+      if (!chofer || !enganchador) { setActionError("Seleccioná chofer y enganchador."); return; }
       if (!motivo) { setActionError("Indicá el motivo del cambio."); return; }
 
       const payload: AsignarTurnoOperadorPayload = {
@@ -371,6 +457,8 @@ export const ControlTurnoModal: React.FC<Props> = ({
           duplaId: duplaId === DUPLA_MANUAL ? "" : duplaId,
           duplaChofer: chofer,
           duplaEnganchador: enganchador,
+          legajoChofer: legChofer,
+          legajoEnganchador: legEnganchador,
           fecha: fechaHoyArgentina(),
         },
         motivoCambio: motivo,
@@ -381,7 +469,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
         () => asignarTurnoOperador(payload).then(() => {}),
       );
     },
-    [formDuplaId, formChofer, formEnganchador, formMotivo, duplas, requestConfirm],
+    [formDuplaId, selectedChofer, selectedEnganchador, duplaAutoMatch, formMotivo, duplas, requestConfirm],
   );
 
   const handleCambiarTipo = useCallback(
@@ -473,7 +561,7 @@ export const ControlTurnoModal: React.FC<Props> = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="control-turno-title"
-          className="bg-white w-full max-w-3xl max-h-[95vh] rounded-2xl shadow-2xl border border-brand-seashell z-10 flex flex-col animate-in fade-in zoom-in-95 duration-150"
+          className="bg-white w-full max-w-6xl max-h-[95vh] rounded-2xl shadow-2xl border border-brand-seashell z-10 flex flex-col animate-in fade-in zoom-in-95 duration-150"
         >
           {/* Header */}
           <div className="shrink-0 px-5 pt-5 pb-3 sm:px-6 sm:pt-6 flex items-center justify-between border-b border-brand-seashell">
@@ -773,8 +861,8 @@ export const ControlTurnoModal: React.FC<Props> = ({
                                   if (val !== DUPLA_MANUAL) {
                                     const d = duplas.find((x) => x.id === val);
                                     if (d) {
-                                      setFormChofer(d.chofer);
-                                      setFormEnganchador(enganchadorDeDupla(d));
+                                      setFormChoferKey(opKey({ nombre: d.chofer, legajo: d.legajoChofer ?? "" }));
+                                      setFormEnganchadorKey(opKey({ nombre: enganchadorDeDupla(d), legajo: d.legajoEnganchador ?? "" }));
                                     }
                                   }
                                 }}
@@ -784,26 +872,34 @@ export const ControlTurnoModal: React.FC<Props> = ({
                               />
                               {formDuplaId === DUPLA_MANUAL && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  <div>
-                                    <label className="block text-xs font-bold text-brand-purply mb-1">
+                                  <div className="space-y-1">
+                                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-brand-pale uppercase tracking-wider">
+                                      <User className="w-3.5 h-3.5" />
                                       Chofer
                                     </label>
-                                    <input
-                                      type="text"
-                                      value={formChofer}
-                                      onChange={(e) => setFormChofer(e.target.value)}
-                                      className="w-full px-3 py-2 rounded-lg border border-brand-seashell text-sm focus:outline-none focus:ring-2 focus:ring-brand-cta/30"
+                                    <CustomSelect
+                                      value={formChoferKey}
+                                      onChange={setFormChoferKey}
+                                      options={choferOptions}
+                                      placeholder="Seleccioná chofer"
+                                      icon={User}
+                                      ariaLabel="Chofer"
+                                      size="sm"
                                     />
                                   </div>
-                                  <div>
-                                    <label className="block text-xs font-bold text-brand-purply mb-1">
+                                  <div className="space-y-1">
+                                    <label className="flex items-center gap-1.5 text-[10px] font-bold text-brand-pale uppercase tracking-wider">
+                                      <Users className="w-3.5 h-3.5" />
                                       Enganchador
                                     </label>
-                                    <input
-                                      type="text"
-                                      value={formEnganchador}
-                                      onChange={(e) => setFormEnganchador(e.target.value)}
-                                      className="w-full px-3 py-2 rounded-lg border border-brand-seashell text-sm focus:outline-none focus:ring-2 focus:ring-brand-cta/30"
+                                    <CustomSelect
+                                      value={formEnganchadorKey}
+                                      onChange={setFormEnganchadorKey}
+                                      options={enganchadorOptions}
+                                      placeholder="Seleccioná enganchador"
+                                      icon={Users}
+                                      ariaLabel="Enganchador"
+                                      size="sm"
                                     />
                                   </div>
                                 </div>

@@ -147,7 +147,7 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
-    const prefijoTrimmed = gruaPrefijo.trim() || undefined;
+    const prefijoTrimmed = gruaPrefijo.trim().toUpperCase() || undefined;
     const newGrua: GruaDoc = {
       id: newGruaId,
       patente,
@@ -390,7 +390,7 @@ export const AdminPage: React.FC = () => {
     setSavingState(true);
     setPageError(null);
     try {
-      const prefijoVal = editGruaPrefijo.trim() || undefined;
+      const prefijoVal = editGruaPrefijo.trim().toUpperCase() || undefined;
       const updates: Record<string, any> = {
         patente: editGruaPatente.toUpperCase().trim(),
         descripcion: editGruaDesc.trim(),
