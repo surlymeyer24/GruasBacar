@@ -25,7 +25,7 @@ function tiempoRelativo(creadaEn: unknown): string {
 }
 
 function esSolicitudGestionable(notif: Notificacion): boolean {
-  return notif.tipo === "SOLICITUD_CAMBIO_GRUA" || notif.tipo === "SOLICITUD_RECONFIG_TURNO";
+  return notif.tipo === "SOLICITUD_RECONFIG_TURNO";
 }
 
 function rutaAccion(notif: Notificacion): string | null {
@@ -47,7 +47,9 @@ function rutaAccion(notif: Notificacion): string | null {
 }
 
 export const NotificationBell: React.FC = () => {
-  const { notificaciones, noLeidas, marcarLeida, marcarTodasLeidas } = useNotifications();
+  const { notificaciones, marcarLeida, marcarTodasLeidas } = useNotifications();
+  const visibles = notificaciones.filter((n) => n.tipo !== "SOLICITUD_CAMBIO_GRUA");
+  const noLeidas = visibles.filter((n) => !n.leida).length;
   const { userData } = useAuth();
   const isAdmin = esAdmin(userData?.roles ?? []);
   const [abierto, setAbierto] = useState(false);
@@ -123,13 +125,13 @@ export const NotificationBell: React.FC = () => {
           </div>
 
           <div className="max-h-80 overflow-y-auto">
-            {notificaciones.length === 0 ? (
+            {visibles.length === 0 ? (
               <p className="px-4 py-6 text-xs text-center text-brand-pale">
                 No tenés notificaciones
               </p>
             ) : (
               <ul className="divide-y divide-brand-seashell/60">
-                {notificaciones.map((notif) => (
+                {visibles.map((notif) => (
                   <li key={notif.id}>
                     <button
                       type="button"
@@ -159,11 +161,11 @@ export const NotificationBell: React.FC = () => {
             )}
           </div>
 
-          {(notificaciones.some((n) => n.tipo === "SOLICITUD_RECONFIG_TURNO") ||
-            notificaciones.some((n) => n.tipo === "FOTO_SUBIDA_ERROR") ||
-            notificaciones.some((n) => n.tipo === "CARNET_POR_VENCER_30D" || n.tipo === "CARNET_POR_VENCER_15D" || n.tipo === "CARNET_POR_VENCER_7D")) && (
+          {(visibles.some((n) => n.tipo === "SOLICITUD_RECONFIG_TURNO") ||
+            visibles.some((n) => n.tipo === "FOTO_SUBIDA_ERROR") ||
+            visibles.some((n) => n.tipo === "CARNET_POR_VENCER_30D" || n.tipo === "CARNET_POR_VENCER_15D" || n.tipo === "CARNET_POR_VENCER_7D")) && (
             <div className="border-t border-brand-seashell px-3 py-2 bg-brand-seashell/20 flex flex-wrap gap-3">
-              {notificaciones.some((n) => n.tipo === "SOLICITUD_RECONFIG_TURNO") && (
+              {visibles.some((n) => n.tipo === "SOLICITUD_RECONFIG_TURNO") && (
                 <Link
                   to={RUTA_NOTIF_TURNOS}
                   onClick={() => setAbierto(false)}
@@ -172,7 +174,7 @@ export const NotificationBell: React.FC = () => {
                   Ir a Turnos
                 </Link>
               )}
-              {notificaciones.some((n) => n.tipo === "FOTO_SUBIDA_ERROR") && (
+              {visibles.some((n) => n.tipo === "FOTO_SUBIDA_ERROR") && (
                 <Link
                   to={RUTA_NOTIF_HISTORIAL}
                   onClick={() => setAbierto(false)}
@@ -181,7 +183,7 @@ export const NotificationBell: React.FC = () => {
                   Ir a Historial
                 </Link>
               )}
-              {notificaciones.some((n) => n.tipo === "CARNET_POR_VENCER_30D" || n.tipo === "CARNET_POR_VENCER_15D" || n.tipo === "CARNET_POR_VENCER_7D") && (
+              {visibles.some((n) => n.tipo === "CARNET_POR_VENCER_30D" || n.tipo === "CARNET_POR_VENCER_15D" || n.tipo === "CARNET_POR_VENCER_7D") && (
                 <Link
                   to="/documentacion"
                   onClick={() => setAbierto(false)}

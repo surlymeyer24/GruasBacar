@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import Layout from "../components/shared/Layout";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
 import AdminListFilters from "../components/admin/AdminListFilters";
+import { contarPorVencimiento, DocumentacionKpis, FiltroVencimiento } from "../components/admin/DocumentacionKpis";
 import PolizasTab from "../components/admin/PolizasTab";
 import { CustomSelect } from "../components/shared/CustomSelect";
 import { CustomDatePicker } from "../components/shared/CustomDatePicker";
@@ -231,7 +232,14 @@ const CarnetsTab: React.FC<{
     }
   };
 
-  const activosCount = carnets.filter((c) => c.activo).length;
+  const activos = carnets.filter((c) => c.activo);
+  const activosCount = activos.length;
+  const conteos = useMemo(
+    () => contarPorVencimiento(activos.map((c) => calcularEstadoCarnet(c.fechaVencimiento))),
+    [carnets]
+  );
+
+  const seleccionarKpi = (filtro: FiltroVencimiento) => setEstadoFilter(filtro);
 
   if (loading) {
     return <LoadingSpinner message="Cargando carnets..." />;
@@ -317,6 +325,8 @@ const CarnetsTab: React.FC<{
           </form>
         </div>
       )}
+
+      <DocumentacionKpis conteos={conteos} activo={estadoFilter} onSelect={seleccionarKpi} />
 
       <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
         <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50 rounded-t-2xl">
@@ -631,7 +641,12 @@ const ITVTab: React.FC = () => {
     }
   };
 
-  const activosCount = registros.filter((r) => r.activo).length;
+  const activos = registros.filter((r) => r.activo);
+  const activosCount = activos.length;
+  const conteos = useMemo(
+    () => contarPorVencimiento(activos.map((r) => calcularEstadoITV(r.fechaVencimiento))),
+    [registros]
+  );
 
   if (loading) {
     return <LoadingSpinner message="Cargando registros ITV..." />;
@@ -717,6 +732,8 @@ const ITVTab: React.FC = () => {
           </form>
         </div>
       )}
+
+      <DocumentacionKpis conteos={conteos} activo={estadoFilter} onSelect={setEstadoFilter} />
 
       <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
         <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50 rounded-t-2xl">

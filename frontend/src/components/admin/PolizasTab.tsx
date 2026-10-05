@@ -20,6 +20,7 @@ import {
   diasParaVencimiento,
 } from "@gruasbacar/shared";
 import AdminListFilters from "./AdminListFilters";
+import { contarPorVencimiento, DocumentacionKpis, FiltroVencimiento } from "./DocumentacionKpis";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { CustomDatePicker } from "../shared/CustomDatePicker";
 import LoadingSpinner from "../shared/LoadingSpinner";
@@ -115,6 +116,11 @@ const PolizasTab: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const conteos = useMemo(() => {
+    const activas = polizas.filter((p) => p.activo);
+    return contarPorVencimiento(activas.map((p) => calcularEstadoPoliza(p.fechaVencimiento)));
+  }, [polizas]);
 
   const filtered = useMemo(() => {
     return polizas.filter((poliza) => {
@@ -441,6 +447,12 @@ const PolizasTab: React.FC = () => {
           </form>
         </div>
       )}
+
+      <DocumentacionKpis
+        conteos={conteos}
+        activo={status}
+        onSelect={(filtro: FiltroVencimiento) => setStatus(filtro)}
+      />
 
       <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
         <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50 rounded-t-2xl">

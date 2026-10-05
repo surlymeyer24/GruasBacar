@@ -17,7 +17,6 @@ import {
   esSuperAdmin,
   normalizeRoles,
   normalizeTipoFlota,
-  labelTipoFlota,
   buildUsuarioUid,
   asignacionCoincideConUsuario,
   turnoSigueVigente,
@@ -422,38 +421,6 @@ export async function guardarAsignacionDiaria(
   db().collection('turnos').add(registroTurno).catch((err) =>
     logger.error('Error registrando turno en historial', err),
   );
-
-  if (tipoCambio) {
-    const operadorNombre = (userData.nombre as string) ?? '';
-    const legajoTxt = userData.legajo ? ` (leg. ${userData.legajo})` : '';
-    const tipoAnterior = tipoReferencia!;
-    const gruaAnteriorPatente = teniaTurnoHoy
-      ? prevAsignacion!.gruaPatente
-      : (gruaReferenciaPatente ?? '');
-    const gruaDesc = (gruaData.descripcion as string | undefined)?.trim() || '';
-
-    notificationService.notificarAdmins({
-      tipo: 'SOLICITUD_CAMBIO_GRUA',
-      titulo: `Cambio de grúa cross-tipo — ${operadorNombre}`,
-      cuerpo:
-        `${operadorNombre}${legajoTxt} cambió de grúa ${gruaAnteriorPatente || '—'} (${labelTipoFlota(tipoAnterior)}) ` +
-        `a ${gruaDesc ? `${gruaDesc} — ` : ''}${gruaPatente} (${labelTipoFlota(gruaTipo)}). ` +
-        `Verificá que esté correcto o modificalo desde la notificación.`,
-      origenUid: uid,
-      claveDedup: `cambio_grua_auto:${uid}:${gruaPatente}:${tipoAnterior}`,
-      datos: {
-        operadorUid: uid,
-        operadorNombre,
-        ...(userData.legajo ? { operadorLegajo: userData.legajo as string } : {}),
-        gruaActualPatente: gruaAnteriorPatente,
-        tipoFlotaActual: tipoAnterior,
-        gruaSolicitadaPatente: gruaPatente,
-        ...(gruaDesc ? { gruaSolicitadaDescripcion: gruaDesc } : {}),
-        tipoFlotaSolicitado: gruaTipo,
-        accionRuta: RUTA_NOTIF_TURNOS,
-      },
-    }).catch((err) => logger.error('Error notificando cambio cross-tipo a admins', err));
-  }
 
   return asignacionDiaria;
 }

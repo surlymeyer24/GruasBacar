@@ -362,12 +362,20 @@ export const HistorialPage: React.FC = () => {
 
   const applyFilters = (list: Servicio[]) =>
     list.filter((s) => {
+      const q = searchQuery.trim().toLowerCase();
+      const chofer = (s.dupla?.chofer ?? "").toLowerCase();
+      const enganchador = (enganchadorDeDuplaServicio(s.dupla) ?? "").toLowerCase();
       const matchesSearch =
-        s.patente.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.numeroInfraccion ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.grua.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase()) ||
-        resolverPrefijoGrua(s.grua, gruasCatalog).toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        s.patente.toLowerCase().includes(q) ||
+        (s.numeroInfraccion ?? "").toLowerCase().includes(q) ||
+        s.grua.toLowerCase().includes(q) ||
+        patenteGruaDe(s).toLowerCase().includes(q) ||
+        resolverPrefijoGrua(s.grua, gruasCatalog).toLowerCase().includes(q) ||
+        chofer.includes(q) ||
+        enganchador.includes(q) ||
+        (s.dupla?.legajoChofer ?? "").toLowerCase().includes(q) ||
+        (s.dupla?.legajoEnganchador ?? "").toLowerCase().includes(q);
 
       const matchesStatus = statusFilter === "ALL" || s.estado === statusFilter;
 
@@ -915,7 +923,7 @@ export const HistorialPage: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por Patente, Acta o Grúa..."
+                placeholder="Buscar por patente, acta, grúa, chofer o enganchador..."
                 className="w-full pl-7 pr-3 py-2 bg-brand-bg border border-gray-250 rounded-xl text-[13px] leading-tight font-mono text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-cta/25 focus:border-brand-cta/40 transition-shadow"
               />
             </div>
