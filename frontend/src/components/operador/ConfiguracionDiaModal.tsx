@@ -589,11 +589,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                     Ver solo grúas de {labelTipoFlota(tipoOperacion)}
                   </button>
                 )}
-                {gruaPatente && gruasOcupadas.has(gruaPatente) && (
-                  <p className="text-[11px] text-amber-700 mt-1">
-                    Esta grúa tiene un servicio activo. Si la seleccionás, no podrás crear un enganche hasta que se libere.
-                  </p>
-                )}
               </div>
 
               <div className="space-y-1">
