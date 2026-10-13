@@ -6,7 +6,7 @@ import {
   esAdmin,
   normalizeRoles,
 } from '@gruasbacar/shared';
-import { enviarEmail, obtenerEmailsAdminsActivos, construirEmailGenerico } from './email.service';
+import { enviarEmail, obtenerDestinatariosVencimientos, construirEmailGenerico } from './email.service';
 import { enEmulador } from '../utils/entorno';
 
 const db = () => admin.firestore();
@@ -31,7 +31,7 @@ const TIPOS_CON_PUSH = new Set<TipoNotificacion>([
   'ENGANCHE_TIMEOUT_ANULADO',
 ]);
 
-// Tipos que además envían email a los admins.
+// Tipos que además envían email (solo vencimientos de documentación).
 const TIPOS_CON_EMAIL = new Set<TipoNotificacion>([
   'CARNET_POR_VENCER_30D',
   'CARNET_POR_VENCER_15D',
@@ -41,9 +41,6 @@ const TIPOS_CON_EMAIL = new Set<TipoNotificacion>([
   'POLIZA_POR_VENCER_30D',
   'POLIZA_POR_VENCER_15D',
   'POLIZA_POR_VENCER_7D',
-  'SOLICITUD_RECONFIG_TURNO',
-  'SOLICITUD_CAMBIO_GRUA',
-  'FOTO_SUBIDA_ERROR',
 ]);
 
 export interface EmailContent {
@@ -139,8 +136,7 @@ export async function notificarAdmins(
       subject: `[BACAR] ${input.titulo}`,
       html: construirEmailGenerico(input.titulo, input.cuerpo),
     };
-    const admins = await obtenerEmailsAdminsActivos();
-    const emails = admins.map((a) => a.email);
+    const emails = await obtenerDestinatariosVencimientos();
     if (emails.length > 0) {
       enviarEmail({
         to: emails,

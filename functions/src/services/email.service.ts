@@ -1,9 +1,28 @@
 import * as admin from 'firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import * as nodemailer from 'nodemailer';
 
 const db = () => admin.firestore();
 
 const MAIL_COLLECTION = 'mail';
+
+let transporter: nodemailer.Transporter | null = null;
+
+function getTransporter(): nodemailer.Transporter {
+  if (transporter) return transporter;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASSWORD;
+  if (!user || !pass) {
+    throw new Error('SMTP_USER o SMTP_PASSWORD no configurados. Ejecutar: firebase functions:secrets:set SMTP_USER / SMTP_PASSWORD');
+  }
+  transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: { user, pass },
+  });
+  return transporter;
+}
 
 export interface EmailDestinatario {
   email: string;
@@ -30,15 +49,51 @@ export async function enviarEmail(input: EnviarEmailInput): Promise<string | nul
     if (!existente.empty) return null;
   }
 
+  const transport = getTransporter();
+  await transport.sendMail({
+    from: `"Grúas Bacar" <${process.env.SMTP_USER}>`,
+    to: to.join(', '),
+    subject,
+    html,
+  });
+
   const ref = db().collection(MAIL_COLLECTION).doc();
   await ref.set({
     to,
-    message: { subject, html },
+    message: { subject },
     claveDedup: claveDedup ?? null,
     creadoEn: FieldValue.serverTimestamp(),
+    estado: 'enviado',
   });
 
   return ref.id;
+}
+
+export async function obtenerDestinatariosVencimientos(): Promise<string[]> {
+  const configSnap = await db().collection('configuracion').doc('notificaciones').get();
+  const config = configSnap.exists ? configSnap.data() : undefined;
+
+  const emailsExtra: string[] = Array.isArray(config?.emailsExtra)
+    ? config.emailsExtra.filter((e: unknown) => typeof e === 'string' && e.includes('@'))
+    : [];
+
+  const adminUids: string[] = Array.isArray(config?.adminUids) ? config.adminUids : [];
+
+  let adminEmails: string[] = [];
+  if (!config) {
+    adminEmails = (await obtenerEmailsAdminsActivos()).map((a) => a.email);
+  } else if (adminUids.length > 0) {
+    const snaps = await Promise.all(
+      adminUids.map((uid) => db().collection('usuarios').doc(uid).get())
+    );
+    adminEmails = snaps
+      .filter((s) => s.exists && s.data()?.activo !== false)
+      .map((s) => (s.data()?.email as string | undefined)?.trim())
+      .filter((e): e is string => !!e);
+  }
+
+  const todos = [...new Set([...adminEmails, ...emailsExtra])];
+  return todos;
 }
 
 export async function obtenerEmailsAdminsActivos(): Promise<EmailDestinatario[]> {
@@ -74,6 +129,14 @@ function urgenciaLabel(dias: number): string {
   return 'Aviso';
 }
 
+const APP_BASE_URL = 'https://gruasbacar.web.app';
+
+function tabDocumentacion(tipoDoc: string): string {
+  if (tipoDoc === 'ITV') return 'itv';
+  if (tipoDoc.startsWith('Póliza')) return 'polizas';
+  return 'carnets';
+}
+
 export function construirEmailVencimiento(opts: {
   tipoDoc: 'Carnet' | 'ITV' | 'Póliza de seguro';
   identificador: string;
@@ -86,6 +149,7 @@ export function construirEmailVencimiento(opts: {
   const color = urgenciaColor(diasRestantes);
   const label = urgenciaLabel(diasRestantes);
   const diasTxt = diasRestantes === 1 ? '1 día' : `${diasRestantes} días`;
+  const linkUrl = `${APP_BASE_URL}/#/documentacion?tab=${tabDocumentacion(tipoDoc)}`;
 
   const subject = `[${label}] ${tipoDoc} por vencer — ${descripcion} (${diasTxt})`;
 
@@ -118,6 +182,11 @@ export function construirEmailVencimiento(opts: {
       </tr>
       ${detalle ? `<tr><td style="padding: 8px 0; color: #6b7280;">Detalle</td><td style="padding: 8px 0;">${detalle}</td></tr>` : ''}
     </table>
+    <div style="margin-top: 20px; text-align: center;">
+      <a href="${linkUrl}" style="display: inline-block; background: ${color}; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+        Ver en Documentación
+      </a>
+    </div>
     <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
     <p style="font-size: 12px; color: #9ca3af; margin: 0;">
       Notificación automática — Grúas Bacar

@@ -22,6 +22,7 @@ import {
   Trash2,
   Settings,
   RotateCcw,
+  Mail,
 } from "lucide-react";
 import { isMock, db, functions } from "../firebase";
 import { setDoc, updateDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
@@ -29,8 +30,9 @@ import { httpsCallable } from "firebase/functions";
 import { Grua, Corralon, TipoFlota, TIPO_FLOTA_OPTIONS, TIPO_FLOTA_FILTER_OPTIONS, labelTipoFlota, normalizeTipoFlota, matchesTipoFlotaFilter, buildGruaId, labelMotivoFueraDeServicio } from "@gruasbacar/shared";
 import { codigoInternoVisible } from "../utils/codigoVisible";
 import { GruaDoc, CorralonDoc } from "../services/adminCatalog.cache";
+import AdminNotificacionesPanel from "../components/admin/AdminNotificacionesPanel";
 
-type ConfigTab = "GRUAS" | "CORRALONES" | "USUARIOS";
+type ConfigTab = "GRUAS" | "CORRALONES" | "USUARIOS" | "NOTIFICACIONES";
 
 type DeleteTarget =
   | { kind: "grua"; item: GruaDoc }
@@ -40,6 +42,7 @@ const TABS: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { id: "GRUAS", label: "Grúas", icon: <Truck className="w-4 h-4" /> },
   { id: "CORRALONES", label: "Corralones", icon: <Building2 className="w-4 h-4" /> },
   { id: "USUARIOS", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
+  { id: "NOTIFICACIONES", label: "Emails", icon: <Mail className="w-4 h-4" /> },
 ];
 
 const ESTADO_ACTIVO_OPTIONS = [
@@ -476,7 +479,7 @@ export const AdminPage: React.FC = () => {
 
         <div className="border border-brand-seashell rounded-2xl shadow-sm overflow-hidden bg-white">
           <div className="bg-gray-100/80 px-2 pt-2 border-b border-brand-seashell/50">
-            <nav className="grid grid-cols-3 gap-0.5" role="tablist" aria-label="Secciones de configuración">
+            <nav className="grid grid-cols-4 gap-0.5" role="tablist" aria-label="Secciones de configuración">
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
                 return (
@@ -516,6 +519,10 @@ export const AdminPage: React.FC = () => {
             usuarios={usuarios}
             onUsuariosChange={(next) => sync({ ...data, usuarios: next })}
           />
+        </div>
+
+        <div className={activeTab === "NOTIFICACIONES" ? "" : "hidden"}>
+          <AdminNotificacionesPanel usuarios={usuarios} />
         </div>
 
         <div className={activeTab === "GRUAS" || activeTab === "CORRALONES" ? "" : "hidden"}>

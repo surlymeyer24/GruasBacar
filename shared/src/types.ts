@@ -958,3 +958,10 @@ export function calcularEstadoCarnet(fechaVencimiento: string, ahora?: Date): Ca
   if (dias <= 30) return 'POR_VENCER_30D';
   return 'VIGENTE';
 }
+
+// ── Configuración de emails de vencimiento ──────────────────
+
+export interface ConfigNotificacionesEmail {
+  adminUids: string[];
+  emailsExtra: string[];
+}

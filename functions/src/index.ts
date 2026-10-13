@@ -19,6 +19,8 @@ import { withHttpsErrorHandling } from './utils/callableHandler';
 import { assertAislamientoEmulador } from './utils/entorno';
 
 const googleDriveFolderId = defineSecret('GOOGLE_DRIVE_FOLDER_ID');
+const smtpUser = defineSecret('SMTP_USER');
+const smtpPassword = defineSecret('SMTP_PASSWORD');
 
 admin.initializeApp();
 assertAislamientoEmulador();
@@ -281,6 +283,45 @@ export const marcarTodasNotificacionesLeidas = onCall(callable, withHttpsErrorHa
   return { ok: true, count };
 }));
 
+// ── Configuración de notificaciones por email ───────────────
+
+export const obtenerConfigNotificaciones = onCall(callable, withHttpsErrorHandling('obtenerConfigNotificaciones', async (request) => {
+  await verificarAdmin(request.auth);
+  const snap = await admin.firestore().collection('configuracion').doc('notificaciones').get();
+  if (!snap.exists) return { adminUids: [], emailsExtra: [] };
+  const data = snap.data()!;
+  return {
+    adminUids: Array.isArray(data.adminUids) ? data.adminUids : [],
+    emailsExtra: Array.isArray(data.emailsExtra) ? data.emailsExtra : [],
+  };
+}));
+
+export const guardarConfigNotificaciones = onCall(callable, withHttpsErrorHandling('guardarConfigNotificaciones', async (request) => {
+  await verificarAdmin(request.auth);
+  const { adminUids, emailsExtra } = request.data ?? {};
+
+  if (!Array.isArray(adminUids)) {
+    throw new HttpsError('invalid-argument', 'adminUids debe ser un array.');
+  }
+  if (!Array.isArray(emailsExtra)) {
+    throw new HttpsError('invalid-argument', 'emailsExtra debe ser un array.');
+  }
+
+  const uidsLimpios = adminUids.filter((u: unknown): u is string => typeof u === 'string' && u.trim().length > 0);
+
+  const emailsLimpios = emailsExtra
+    .filter((e: unknown): e is string => typeof e === 'string' && e.includes('@'))
+    .map((e: string) => e.trim().toLowerCase())
+    .filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+
+  await admin.firestore().collection('configuracion').doc('notificaciones').set({
+    adminUids: uidsLimpios,
+    emailsExtra: emailsLimpios,
+  });
+
+  return { ok: true, adminUids: uidsLimpios, emailsExtra: emailsLimpios };
+}));
+
 // ── Diagnóstico de errores del frontend ─────────────────────
 
 export const reportarErrorCliente = onCall(callable, withHttpsErrorHandling('reportarErrorCliente', async (request) => {
@@ -383,7 +424,7 @@ export const desactivarCarnet = onCall(callable, withHttpsErrorHandling('desacti
 }));
 
 export const verificarCarnetsVencimiento = onSchedule(
-  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1', secrets: [smtpUser, smtpPassword] },
   async () => {
     await carnetService.verificarVencimientosCarnets();
   }
@@ -414,7 +455,7 @@ export const desactivarITV = onCall(callable, withHttpsErrorHandling('desactivar
 }));
 
 export const verificarITVVencimiento = onSchedule(
-  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1', secrets: [smtpUser, smtpPassword] },
   async () => {
     await itvService.verificarVencimientosITV();
   }
@@ -439,7 +480,7 @@ export const desactivarPoliza = onCall(callable, withHttpsErrorHandling('desacti
 }));
 
 export const verificarPolizasVencimiento = onSchedule(
-  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1', secrets: [smtpUser, smtpPassword] },
   async () => {
     await polizaService.verificarVencimientosPolizas();
   }
@@ -473,7 +514,7 @@ export const backupFirestoreDiario = onSchedule(
     schedule: 'every day 03:00',
     timeZone: 'America/Argentina/Buenos_Aires',
     region: 'us-central1',
-    secrets: [googleDriveFolderId],
+    secrets: [googleDriveFolderId, smtpUser, smtpPassword],
     timeoutSeconds: 540,
     memory: '1GiB',
   },
@@ -484,7 +525,7 @@ export const backupFirestoreDiario = onSchedule(
 );
 
 export const ejecutarBackupFirestore = onCall(
-  { ...callable, secrets: [googleDriveFolderId], timeoutSeconds: 540, memory: '1GiB' },
+  { ...callable, secrets: [googleDriveFolderId, smtpUser, smtpPassword], timeoutSeconds: 540, memory: '1GiB' },
   withHttpsErrorHandling('ejecutarBackupFirestore', async (request) => {
     await verificarAdmin(request.auth);
     const backup = await import('./services/firestoreBackup.service');
