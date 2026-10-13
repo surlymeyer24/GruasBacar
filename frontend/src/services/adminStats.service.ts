@@ -15,7 +15,25 @@ export interface AdminDashboardStats {
   gruasEnOperacion: number;
   serviciosActivos: Servicio[];
   usuariosEnTurno: Usuario[];
+  gruasFueraDeServicio: (Grua & { docId: string })[];
+  gruasCatalog: Grua[];
 }
+
+export const EMPTY_ADMIN_STATS: AdminDashboardStats = {
+  actasEnEnganche: 0,
+  actasEnTraslado: 0,
+  actasFinalizadas: 0,
+  actasHoy: 0,
+  actasEsteMes: 0,
+  hoyLabel: '',
+  mesActualLabel: '',
+  gruasActivas: 0,
+  gruasEnOperacion: 0,
+  serviciosActivos: [],
+  usuariosEnTurno: [],
+  gruasFueraDeServicio: [],
+  gruasCatalog: [],
+};
 
 function periodosArgentina(): {
   inicioHoy: Timestamp;
@@ -106,7 +124,7 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
     getCountFromServer(
       query(serviciosCol, where('creadoEn', '>=', inicioMes), where('esTest', '==', true))
     ),
-    getDocs(query(collection(db, 'gruas'), where('activa', '==', true))),
+    getDocs(collection(db, 'gruas')),
     // Evita escanear toda la colección usuarios/
     getDocs(query(collection(db, 'usuarios'), where('asignacionDiaria.fecha', '==', hoy))),
   ]);
@@ -137,7 +155,17 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
     : Math.max(0, esteMesCount.data().count - esteMesTestCount.data().count);
 
   const gruasCatalog: Grua[] = [];
-  gruasSnap.forEach((d) => gruasCatalog.push({ ...(d.data() as Grua), id: d.id }));
+  const gruasFueraDeServicio: (Grua & { docId: string })[] = [];
+  let gruasActivasCount = 0;
+  gruasSnap.forEach((d) => {
+    const g = { ...(d.data() as Grua), id: d.id };
+    gruasCatalog.push(g);
+    if (g.activa) {
+      gruasActivasCount++;
+    } else if ((g as any).fueraDeServicio) {
+      gruasFueraDeServicio.push({ ...g, docId: d.id });
+    }
+  });
 
   const byUid = new Map<string, Usuario>();
   usuariosTurnoHoySnap.forEach((docSnap) => {
@@ -194,9 +222,11 @@ export async function obtenerEstadisticasAdmin(): Promise<AdminDashboardStats> {
     actasEsteMes,
     hoyLabel,
     mesActualLabel,
-    gruasActivas: gruasSnap.size,
+    gruasActivas: gruasActivasCount,
     gruasEnOperacion: gruasEnOperacion.size,
     serviciosActivos,
     usuariosEnTurno,
+    gruasFueraDeServicio,
+    gruasCatalog,
   };
 }

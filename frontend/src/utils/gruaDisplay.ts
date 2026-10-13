@@ -8,6 +8,26 @@ export function esPatenteVehiculo(valor: string): boolean {
   return PATENTE_VIEJA.test(cleaned) || PATENTE_MERCOSUR.test(cleaned);
 }
 
+function findGrua(gruaValor: string, gruas: Grua[]): Grua | undefined {
+  const val = gruaValor.trim();
+  const upper = val.toUpperCase().replace(/\s/g, "");
+  return (
+    gruas.find((g) => g.id === val) ??
+    gruas.find((g) => g.patente?.trim().toUpperCase() === upper)
+  );
+}
+
+/** Devuelve el prefijo operativo si existe, o la patente como fallback. */
+export function resolverPrefijoGrua(
+  gruaValor: string | undefined,
+  gruas: Grua[] = []
+): string {
+  if (!gruaValor?.trim()) return "—";
+  const grua = findGrua(gruaValor, gruas);
+  if (grua?.prefijo?.trim()) return grua.prefijo.trim();
+  return resolverPatenteGrua(gruaValor, gruas);
+}
+
 /** Devuelve la patente legible de la grúa (no el ID interno de Firestore). */
 export function resolverPatenteGrua(
   gruaValor: string | undefined,
@@ -72,52 +92,40 @@ export function gruaIdParaServicio(
   return normalizeGruaId(candidata);
 }
 
-/** Devuelve la descripción de la grúa, o la patente si no tiene descripción. */
+/** Devuelve la descripción de la grúa, o el prefijo/patente si no tiene descripción. */
 export function resolverDescripcionGrua(
   gruaValor: string | undefined,
   gruas: Grua[] = []
 ): string {
   if (!gruaValor?.trim()) return "—";
 
-  const val = gruaValor.trim();
+  const grua = findGrua(gruaValor, gruas);
+  if (grua?.descripcion?.trim()) return grua.descripcion.trim();
 
-  const byDocId = gruas.find((g) => g.id === val);
-  if (byDocId?.descripcion?.trim()) return byDocId.descripcion.trim();
-
-  const patente = resolverPatenteGrua(val, gruas);
-  const byPatente = gruas.find(
-    (g) => g.patente?.trim().toUpperCase() === patente.toUpperCase()
-  );
-  if (byPatente?.descripcion?.trim()) return byPatente.descripcion.trim();
-
-  return patente;
+  return resolverPrefijoGrua(gruaValor, gruas);
 }
 
-/** Devuelve "Descripción — PATENTE" o solo la patente si no hay descripción. */
+/**
+ * Label principal de grúa para la UI.
+ * Si tiene prefijo: "Descripción (PREFIJO)" o solo "PREFIJO".
+ * Si no tiene prefijo: "Descripción — PATENTE" o solo "PATENTE".
+ */
 export function resolverLabelGrua(
   gruaValor: string | undefined,
   gruas: Grua[] = []
 ): string {
   if (!gruaValor?.trim()) return "—";
 
-  const val = gruaValor.trim();
-  const upper = val.toUpperCase().replace(/\s/g, "");
-
-  const byDocId = gruas.find((g) => g.id === val);
-  if (byDocId) {
-    const pat = byDocId.patente?.trim().toUpperCase() || upper;
-    const desc = byDocId.descripcion?.trim();
-    return desc ? `${desc} — ${pat}` : pat;
+  const grua = findGrua(gruaValor, gruas);
+  if (grua) {
+    const pref = grua.prefijo?.trim();
+    const desc = grua.descripcion?.trim();
+    const pat = grua.patente?.trim().toUpperCase() || gruaValor.trim();
+    const identificador = pref || pat;
+    return desc ? `${desc} (${identificador})` : identificador;
   }
 
-  const patente = resolverPatenteGrua(val, gruas);
-  const byPatente = gruas.find(
-    (g) => g.patente?.trim().toUpperCase() === patente.toUpperCase()
-  );
-  if (byPatente?.descripcion?.trim()) {
-    return `${byPatente.descripcion.trim()} — ${patente}`;
-  }
-
+  const patente = resolverPatenteGrua(gruaValor, gruas);
   return patente;
 }
 

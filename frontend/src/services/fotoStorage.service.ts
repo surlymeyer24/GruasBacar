@@ -7,6 +7,7 @@ import {
 import { ref, uploadBytesResumable } from "firebase/storage";
 import { auth, db, storage } from "../firebase";
 import { EtiquetaFoto, Foto } from "@gruasbacar/shared";
+import { logger } from "../utils/logger";
 
 export type CarpetaFoto = "enganche" | "desenganche";
 
@@ -227,7 +228,7 @@ export function watchFotosStaging(
   };
 
   const onSnapshotError = (err: unknown) => {
-    console.error("[watchFotosStaging]", err);
+    logger.error("fotos", "Error escuchando el procesamiento de fotos", err);
     onUpdate({
       fase: "error",
       storageCompletadas: 0,

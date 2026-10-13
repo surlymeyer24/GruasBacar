@@ -15,7 +15,9 @@ export type TipoNotificacion =
   | 'POLIZA_POR_VENCER_15D'
   | 'POLIZA_POR_VENCER_7D'
   | 'ENGANCHE_TIMEOUT_AVISO'
-  | 'ENGANCHE_TIMEOUT_ANULADO';
+  | 'ENGANCHE_TIMEOUT_ANULADO'
+  | 'TRASLADO_TIMEOUT_AVISO'
+  | 'TRASLADO_TIMEOUT_ANULADO';
 
 export interface Notificacion {
   id: string;
@@ -37,6 +39,8 @@ export interface AsignarTurnoOperadorPayload {
   gestionCrossTipo?: GestionCambioCrossTipo;
   /** Marcar la notificación del admin como leída al confirmar. */
   notificacionId?: string;
+  /** Motivo del cambio mid-turno (requerido desde Control de Turno). */
+  motivoCambio?: string;
 }
 
 export interface SolicitarReconfiguracionTurnoPayload {

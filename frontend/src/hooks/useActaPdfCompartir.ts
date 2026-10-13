@@ -8,6 +8,7 @@ import {
   generarActaPdfBlob,
 } from "../utils/shareActaPdf";
 import { nombreArchivoPdf } from "../utils/exportActaPdf";
+import { logger } from "../utils/logger";
 
 type PdfListo = {
   blob: Blob;
@@ -36,7 +37,7 @@ export function useActaPdfCompartir() {
       const blob = await generarActaPdfBlob({ ...options, returnBlob: true }, setProgress);
       setPdfListo({ blob, servicio: options.servicio });
     } catch (err: unknown) {
-      console.error("[useActaPdfCompartir] Error al generar PDF:", err);
+      logger.error("pdf", "Error al generar el PDF del acta", err);
       setError("No se pudo generar el PDF. Intentá de nuevo.");
     } finally {
       setGenerando(false);
@@ -59,7 +60,7 @@ export function useActaPdfCompartir() {
         }
       })
       .catch((err: unknown) => {
-        console.error("[useActaPdfCompartir] Error al compartir PDF:", err);
+        logger.error("pdf", "Error al compartir el PDF del acta", err);
         setError("No se pudo compartir el PDF. Probá descargarlo.");
       });
   }, [pdfListo]);

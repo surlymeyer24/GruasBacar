@@ -60,6 +60,7 @@ export function patchEngancheDraft(patch: Partial<EngancheDraft>): void {
         dupla: "",
         duplaChofer: "",
         duplaEnganchador: "",
+        gruaPrefijo: "",
       },
       paso: patch.paso ?? "DATOS",
       pasosVisitados: patch.pasosVisitados ?? ["DATOS"],

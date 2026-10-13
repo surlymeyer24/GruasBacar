@@ -30,7 +30,7 @@ import { isMock, db } from "../firebase";
 import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { CORRALONES } from "../data/mockData";
 import { Servicio, EstadoServicio, Evento, Foto, Grua, Usuario, TIPO_FLOTA_FILTER_OPTIONS, TIPO_FLOTA_OPTIONS, TipoFlota, matchesTipoFlotaFilter, labelTipoFlota, resumenDuracionActa, enganchadorDeDuplaServicio, puedeVerHistorialCompleto, puedeGestionarActas, esGeoValida, normalizeGruaId, normalizeTipoFlota, eventosParaVistaActa, VersionActa, labelTipoVersion, rutaInicioPorRoles, displayPatente, normalizeRoles, Dupla, enganchadorDeDupla, esPatenteSinNumero, normalizarPatenteInput } from "@gruasbacar/shared";
-import { resolverPatenteGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
+import { resolverPatenteGrua, resolverPrefijoGrua, resolverLabelGrua, tipoFlotaDeServicio } from "../utils/gruaDisplay";
 import { nombreCorralon, CorralonCatalogo } from "../utils/corralonDisplay";
 import { gruaService } from "../services/grua.service";
 import { corralonService } from "../services/corralon.service";
@@ -362,11 +362,20 @@ export const HistorialPage: React.FC = () => {
 
   const applyFilters = (list: Servicio[]) =>
     list.filter((s) => {
+      const q = searchQuery.trim().toLowerCase();
+      const chofer = (s.dupla?.chofer ?? "").toLowerCase();
+      const enganchador = (enganchadorDeDuplaServicio(s.dupla) ?? "").toLowerCase();
       const matchesSearch =
-        s.patente.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (s.numeroInfraccion ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.grua.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        patenteGruaDe(s).toLowerCase().includes(searchQuery.toLowerCase());
+        !q ||
+        s.patente.toLowerCase().includes(q) ||
+        (s.numeroInfraccion ?? "").toLowerCase().includes(q) ||
+        s.grua.toLowerCase().includes(q) ||
+        patenteGruaDe(s).toLowerCase().includes(q) ||
+        resolverPrefijoGrua(s.grua, gruasCatalog).toLowerCase().includes(q) ||
+        chofer.includes(q) ||
+        enganchador.includes(q) ||
+        (s.dupla?.legajoChofer ?? "").toLowerCase().includes(q) ||
+        (s.dupla?.legajoEnganchador ?? "").toLowerCase().includes(q);
 
       const matchesStatus = statusFilter === "ALL" || s.estado === statusFilter;
 
@@ -914,7 +923,7 @@ export const HistorialPage: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar por Patente, Acta o Grúa..."
+                placeholder="Buscar por patente, acta, grúa, chofer o enganchador..."
                 className="w-full pl-7 pr-3 py-2 bg-brand-bg border border-gray-250 rounded-xl text-[13px] leading-tight font-mono text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-cta/25 focus:border-brand-cta/40 transition-shadow"
               />
             </div>
@@ -1277,7 +1286,7 @@ export const HistorialPage: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <span className="text-gray-400 block mb-0.5">Grúa Patente</span>
+                    <span className="text-gray-400 block mb-0.5">Grúa</span>
                     {editingActa ? (
                       <CustomSelect
                         value={editGrua}
@@ -1285,7 +1294,9 @@ export const HistorialPage: React.FC = () => {
                         options={[
                           ...gruasCatalog.map((g) => ({
                             value: g.patente,
-                            label: `${g.descripcion ? `${g.descripcion} — ` : ""}${g.patente}`,
+                            label: g.descripcion
+                              ? `${g.descripcion} (${g.prefijo?.trim() || g.patente})`
+                              : (g.prefijo?.trim() || g.patente),
                           })),
                           ...(!gruasCatalog.some((g) => g.patente === editGrua) && editGrua
                             ? [{ value: editGrua, label: editGrua }]

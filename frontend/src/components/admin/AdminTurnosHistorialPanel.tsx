@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Search,
   Calendar,
@@ -107,10 +108,10 @@ interface AdminTurnosHistorialPanelProps {
 }
 
 function resolverGruaLabel(patente: string | undefined, descripcion: string | undefined, gruas: GruaDoc[]): { desc: string; pat: string } {
-  const pat = patente || "—";
-  if (descripcion?.trim()) return { desc: descripcion.trim(), pat };
   const grua = gruas.find((g) => g.patente === patente);
-  return { desc: grua?.descripcion?.trim() || "", pat };
+  const id = grua?.prefijo?.trim() || patente || "—";
+  if (descripcion?.trim()) return { desc: descripcion.trim(), pat: id };
+  return { desc: grua?.descripcion?.trim() || "", pat: id };
 }
 
 const AdminTurnosHistorialPanel: React.FC<AdminTurnosHistorialPanelProps> = ({ gruas }) => {
@@ -460,7 +461,12 @@ const AdminTurnosHistorialPanel: React.FC<AdminTurnosHistorialPanelProps> = ({ g
                     {serviciosDelTurnoSeleccionado.map((s) => {
                       const badge = ESTADO_BADGE[s.estado] ?? { label: s.estado, cls: "bg-gray-50 text-gray-600" };
                       return (
-                        <div key={s.id} className="flex items-center gap-3 bg-brand-bg/50 rounded-xl px-3 py-2.5 text-xs">
+                        <Link
+                          key={s.id}
+                          to={`/historial?servicio=${encodeURIComponent(s.id)}`}
+                          className="flex items-center gap-3 bg-brand-bg/50 rounded-xl px-3 py-2.5 text-xs hover:bg-white hover:ring-1 hover:ring-brand-cta/30 transition-colors"
+                          title="Abrir acta"
+                        >
                           <Car className="w-4 h-4 text-brand-pale shrink-0" />
                           <div className="min-w-0 flex-1">
                             <span className="font-bold text-brand-purply">{displayPatente(s.patente)}</span>
@@ -478,7 +484,7 @@ const AdminTurnosHistorialPanel: React.FC<AdminTurnosHistorialPanelProps> = ({ g
                             {badge.label}
                           </span>
                           <span className="text-brand-pale shrink-0">{formatHoraFirestore(s.creadoEn ?? s.fechaCreacion)}</span>
-                        </div>
+                        </Link>
                       );
                     })}
                   </div>

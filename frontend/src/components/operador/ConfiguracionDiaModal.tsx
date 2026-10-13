@@ -23,7 +23,6 @@ import { getFirebaseErrorMessage } from "../../utils/firebaseError";
 import { Truck, User, Users, X, AlertCircle, MessageSquareWarning, Info } from "lucide-react";
 import { fechaHoyArgentina } from "../../utils/formatters";
 import { CustomSelect } from "../shared/CustomSelect";
-import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { solicitarReconfiguracionTurno } from "../../services/notificacion.service";
 
 interface Operador {
@@ -139,11 +138,11 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
   const [tipoOperacion, setTipoOperacion] = useState<TipoFlota>("TRANSITO");
   const [mostrarTodasGruas, setMostrarTodasGruas] = useState(false);
-  const [confirmCrossOperacion, setConfirmCrossOperacion] = useState(false);
   const [gruaPatente, setGruaPatente] = useState("");
   const [choferKey, setChoferKey] = useState("");
   const [enganchadorKey, setEnganchadorKey] = useState("");
   const preselected = useRef(false);
+  const formInit = useRef(false);
 
   const gruasFiltradas = useMemo(
     () => gruas.filter((g) => normalizeTipoFlota(g.tipo) === tipoOperacion),
@@ -162,12 +161,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
   const tipoFlotaEfectivo = useMemo(
     () => normalizeTipoFlota(gruaSeleccionada?.tipo ?? tipoOperacion),
-    [gruaSeleccionada, tipoOperacion]
-  );
-
-  const esCrossOperacion = useMemo(
-    () =>
-      !!gruaSeleccionada && normalizeTipoFlota(gruaSeleccionada.tipo) !== tipoOperacion,
     [gruaSeleccionada, tipoOperacion]
   );
 
@@ -289,13 +282,17 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
   const tieneServicioActivo = !!userData?.servicioActivoId;
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      formInit.current = false;
+      return;
+    }
+    if (formInit.current) return;
+    formInit.current = true;
 
     setError(null);
     preselected.current = false;
     setMostrarTodasGruas(false);
-    setConfirmCrossOperacion(false);
-    setTipoOperacion(normalizeTipoFlota(initialAsignacion?.tipoFlota));
+    setTipoOperacion(tipoReferencia);
     setGruaPatente(initialAsignacion?.gruaPatente ?? "");
     setChoferKey("");
     setEnganchadorKey("");
@@ -323,11 +320,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
     load();
   }, [isOpen, initialAsignacion]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setTipoOperacion(tipoReferencia);
-  }, [isOpen, tipoReferencia]);
 
   useEffect(() => {
     if (!isOpen || loadingCatalog) return;
@@ -441,7 +433,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         duplaEnganchador: selectedEnganchador.nombre,
         tipoFlota: tipoFlotaEfectivo,
       });
-      setConfirmCrossOperacion(false);
       if (!blocking) onClose?.();
     } catch (err: unknown) {
       console.error(err);
@@ -456,11 +447,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
 
     if (!gruaSeleccionada || !selectedChofer || !selectedEnganchador) {
       setError("Elegí grúa, chofer y enganchador.");
-      return;
-    }
-
-    if (esCrossOperacion) {
-      setConfirmCrossOperacion(true);
       return;
     }
 
@@ -529,11 +515,16 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                     <button
                       key={opt.value}
                       type="button"
-                      disabled
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border cursor-not-allowed opacity-80 ${
+                      disabled={saving}
+                      onClick={() => {
+                        setError(null);
+                        setTipoOperacion(opt.value);
+                        setMostrarTodasGruas(false);
+                      }}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
                         tipoOperacion === opt.value
                           ? "bg-brand-cta text-white border-brand-cta"
-                          : "bg-brand-bg text-brand-purply border-brand-seashell"
+                          : "bg-brand-bg text-brand-purply border-brand-seashell hover:border-brand-cta/50"
                       }`}
                     >
                       {opt.label}
@@ -548,17 +539,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                   <span>
                     Tenés un servicio activo con grúa <strong>{turnoVigente.gruaPatente}</strong>.
                     El cambio aplica al próximo servicio.
-                  </span>
-                </div>
-              )}
-
-              {esCrossOperacion && (
-                <div className="p-3 bg-amber-50 text-amber-800 text-xs rounded-xl border border-amber-200/50 flex items-start gap-2">
-                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>
-                    Elegiste la grúa <strong>{gruaPatente}</strong> ({labelTipoFlota(tipoFlotaEfectivo)}).
-                    Tu operación habitual es <strong>{labelTipoFlota(tipoOperacion)}</strong>.
-                    Se notificará al administrador al confirmar.
                   </span>
                 </div>
               )}
@@ -609,11 +589,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
                     Ver solo grúas de {labelTipoFlota(tipoOperacion)}
                   </button>
                 )}
-                {gruaPatente && gruasOcupadas.has(gruaPatente) && (
-                  <p className="text-[11px] text-amber-700 mt-1">
-                    Esta grúa tiene un servicio activo. Si la seleccionás, no podrás crear un enganche hasta que se libere.
-                  </p>
-                )}
               </div>
 
               <div className="space-y-1">
@@ -655,7 +630,7 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
             disabled={saving || loadingCatalog || sinRecursos || !selectedChofer || !selectedEnganchador}
             className="w-full py-3 font-extrabold text-xs rounded-xl cursor-pointer bg-brand-cta hover:bg-brand-cta-hover disabled:bg-brand-cta/40 text-white"
           >
-            {saving ? "Guardando..." : esCrossOperacion ? "Confirmar turno" : "Confirmar turno del día"}
+            {saving ? "Guardando..." : "Confirmar turno del día"}
           </button>
 
           <button
@@ -706,23 +681,6 @@ export const ConfiguracionDiaModal: React.FC<ConfiguracionDiaModalProps> = ({
         </form>
       </div>
 
-      <ConfirmDialog
-        isOpen={confirmCrossOperacion}
-        onClose={() => setConfirmCrossOperacion(false)}
-        onConfirm={() => void guardarTurno()}
-        title="Grúa de otra operación"
-        message={
-          <>
-            Estás trayendo una grúa de <strong>{labelTipoFlota(tipoFlotaEfectivo)}</strong> (
-            {gruaPatente}) estando asignado a <strong>{labelTipoFlota(tipoOperacion)}</strong>.
-            <br />
-            <br />
-            ¿Estás seguro? Se avisará al administrador.
-          </>
-        }
-        confirmText="Sí, confirmar"
-        cancelText="Volver"
-      />
     </div>
   );
 };

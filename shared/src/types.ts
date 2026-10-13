@@ -428,6 +428,8 @@ export interface Grua {
   id: string;
   patente: string;
   descripcion: string;
+  /** Identificador operativo visible (ej: "T-16", "G-01"). Se muestra en lugar de la patente. */
+  prefijo?: string;
   activa: boolean;
   /** Default legacy: TRANSITO */
   tipo?: TipoFlota;
@@ -566,6 +568,8 @@ export interface AsignacionDiaria {
   fecha: string; // YYYY-MM-DD (zona Argentina)
   gruaPatente: string;
   gruaDescripcion?: string;
+  /** Prefijo operativo de la grúa (ej: "T-16"). Cache del catálogo al asignar turno. */
+  gruaPrefijo?: string;
   duplaId: string;
   duplaChofer: string;
   duplaEnganchador: string;
@@ -580,6 +584,9 @@ export interface AsignacionDiaria {
   /** Inicio del turno (ISO 8601, servidor). Expira a las 8 h. */
   inicioEn?: string;
 }
+
+/** Tipo de evento registrado en la colección `turnos/`. */
+export type TipoEventoTurno = 'ASIGNACION' | 'FUERA_DE_SERVICIO' | 'REACTIVACION';
 
 /** Registro histórico de una asignación de turno (colección `turnos/`). */
 export interface RegistroTurno {
@@ -605,6 +612,7 @@ export interface RegistroTurno {
   gruaFueraDeServicioPatente?: string;
   categoriaFueraDeServicio?: MotivoFueraDeServicio;
   gruaDeshabilitada?: boolean;
+  tipoEvento?: TipoEventoTurno;
 }
 
 export const DURACION_TURNO_MS = 8 * 60 * 60 * 1000;
@@ -833,6 +841,17 @@ export interface SolicitarCambioGruaPayload {
   motivo?: string;
 }
 
+export interface GestionarGruaFueraDeServicioPayload {
+  patente: string;
+  categoria: MotivoFueraDeServicio;
+  motivo?: string;
+}
+
+export interface ReactivarGruaPayload {
+  gruaDocId: string;
+  motivo?: string;
+}
+
 // ── ITV (Inspección Técnica Vehicular) ──────────────────────
 
 export interface RegistroITV {
@@ -851,6 +870,7 @@ export interface RegistroITV {
 export interface GruaPoliza {
   id: string;
   patente: string;
+  prefijo?: string;
   descripcion?: string;
 }
 
@@ -937,4 +957,11 @@ export function calcularEstadoCarnet(fechaVencimiento: string, ahora?: Date): Ca
   if (dias <= 15) return 'POR_VENCER_15D';
   if (dias <= 30) return 'POR_VENCER_30D';
   return 'VIGENTE';
+}
+
+// ── Configuración de emails de vencimiento ──────────────────
+
+export interface ConfigNotificacionesEmail {
+  adminUids: string[];
+  emailsExtra: string[];
 }

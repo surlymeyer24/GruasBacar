@@ -21,6 +21,7 @@ import { invalidateAdminCatalog } from "../services/adminCatalog.cache";
 import { invalidateAdminServicios } from "../services/adminServicios.cache";
 import { clearEngancheDraft } from "../services/engancheDraft.cache";
 import { registrarFcmToken, eliminarFcmToken } from "../services/fcm.service";
+import { logger } from "../utils/logger";
 
 // Initial mock databases stored in localStorage for simulated engine
 const MOCK_USERS_KEY = "gruas_bacar_mock_usuarios";
@@ -145,7 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         servicioActivoResumen: resumen,
       };
     } catch (err) {
-      console.warn("No se pudo validar servicio activo en segundo plano:", err);
+      logger.warn("auth", "No se pudo validar servicio activo en segundo plano", err);
       return profile;
     }
   };
@@ -223,7 +224,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         registrarFcmToken().catch((err) => {
-          console.warn("[FCM] Token registration failed:", err);
+          logger.warn("fcm", "Falló el registro del token push", err);
         });
 
         // Validar servicio activo en background (no bloquea primer paint)
@@ -234,15 +235,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         });
       } else {
-        console.warn(
-          "[auth] No existe usuarios/" + uid + " en Firestore. " +
-            "El usuario debe ser dado de alta por un administrador."
-        );
+        logger.warn("auth", "No existe el perfil de usuario en Firestore");
         setUserData(null);
         setPendienteActivacion(true);
       }
     } catch (err) {
-      console.error("Error fetching real user data from Firestore", err);
+      logger.error("auth", "Error al obtener el perfil de usuario", err);
     } finally {
       setProfileLoading(false);
     }
@@ -369,7 +367,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setProfileLoading(true);
     try {
-      await eliminarFcmToken().catch(console.warn);
+      await eliminarFcmToken().catch((err) => logger.warn("fcm", "No se pudo eliminar el token push", err));
       invalidateAdminCatalog();
       invalidateAdminServicios();
       clearEngancheDraft();
@@ -381,7 +379,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserData(null);
       }
     } catch (err) {
-      console.error(err);
+      logger.error("auth", "Error al cerrar sesión", err);
     } finally {
       setProfileLoading(false);
     }
@@ -405,7 +403,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             );
             await fn();
           } catch (err) {
-            console.warn("liberarServicioActivoSiHuerfano no disponible, estado local limpiado:", err);
+            logger.warn("servicio", "No se pudo liberar el servicio huérfano; se limpió el estado local", err);
           }
           await fetchRealUserData(user.uid, user);
 
@@ -453,7 +451,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     } catch (err) {
-      console.error("Error setting active service", err);
+      logger.error("servicio", "Error al establecer el servicio activo", err);
       if (servicioId === null) {
         setUserData((prev) =>
           prev ? { ...prev, servicioActivoId: null, servicioActivoResumen: null } : null

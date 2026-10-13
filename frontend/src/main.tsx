@@ -3,6 +3,11 @@ import {createRoot} from 'react-dom/client';
 import {registerSW} from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
+import { installErrorReporting } from './services/errorReporter.service';
+import { installGlobalErrorHandlers } from './utils/logger';
+
+installGlobalErrorHandlers();
+installErrorReporting();
 
 registerSW({
   immediate: true,

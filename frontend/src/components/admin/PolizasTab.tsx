@@ -20,6 +20,7 @@ import {
   diasParaVencimiento,
 } from "@gruasbacar/shared";
 import AdminListFilters from "./AdminListFilters";
+import { contarPorVencimiento, DocumentacionKpis, FiltroVencimiento } from "./DocumentacionKpis";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 import { CustomDatePicker } from "../shared/CustomDatePicker";
 import LoadingSpinner from "../shared/LoadingSpinner";
@@ -116,6 +117,11 @@ const PolizasTab: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  const conteos = useMemo(() => {
+    const activas = polizas.filter((p) => p.activo);
+    return contarPorVencimiento(activas.map((p) => calcularEstadoPoliza(p.fechaVencimiento)));
+  }, [polizas]);
+
   const filtered = useMemo(() => {
     return polizas.filter((poliza) => {
       if (status === "HISTORICO") {
@@ -143,6 +149,7 @@ const PolizasTab: React.FC = () => {
         poliza.gruas.some(
           (grua) =>
             grua.patente.toLowerCase().includes(q) ||
+            (grua.prefijo ?? "").toLowerCase().includes(q) ||
             (grua.descripcion ?? "").toLowerCase().includes(q)
         )
       );
@@ -417,9 +424,9 @@ const PolizasTab: React.FC = () => {
                     />
                     <Truck className="w-4 h-4 text-brand-pale shrink-0" />
                     <span className="text-xs font-semibold text-gray-700">
-                      {grua.descripcion?.trim() || grua.patente}
+                      {grua.descripcion?.trim() || grua.prefijo?.trim() || grua.patente}
                       {grua.descripcion?.trim() && (
-                        <span className="ml-1 font-mono text-brand-pale">{grua.patente}</span>
+                        <span className="ml-1 font-mono text-brand-pale">{grua.prefijo?.trim() || grua.patente}</span>
                       )}
                     </span>
                   </label>
@@ -440,6 +447,12 @@ const PolizasTab: React.FC = () => {
           </form>
         </div>
       )}
+
+      <DocumentacionKpis
+        conteos={conteos}
+        activo={status}
+        onSelect={(filtro: FiltroVencimiento) => setStatus(filtro)}
+      />
 
       <div className="border border-brand-seashell rounded-2xl shadow-sm bg-white">
         <div className="p-3 border-b border-brand-seashell/50 bg-gray-50/50 rounded-t-2xl">
@@ -562,7 +575,7 @@ const PolizasTab: React.FC = () => {
                             title={grua.descripcion}
                           >
                             <Truck className="w-3 h-3" />
-                            {grua.patente}
+                            {grua.prefijo?.trim() || grua.patente}
                           </span>
                         ))}
                       </div>

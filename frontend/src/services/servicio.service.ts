@@ -5,6 +5,7 @@ import { addMockService, getMockServices, updateMockService } from "../data/mock
 import { fotoService } from "./foto.service";
 import { getFirebaseErrorMessage } from "../utils/firebaseError";
 import { patenteGruaParaServicio } from "../utils/gruaDisplay";
+import { logger } from "../utils/logger";
 import {
   Servicio,
   Foto,
@@ -89,7 +90,7 @@ export const servicioService = {
           };
         }
       } catch (e) {
-        console.error("Error matching mock dupla:", e);
+        logger.error("servicio", "Error vinculando la dupla simulada", e);
       }
     }
 

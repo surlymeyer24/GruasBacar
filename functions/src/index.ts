@@ -11,12 +11,16 @@ import * as itvService from './services/itv.service';
 import * as polizaService from './services/poliza.service';
 import * as servicioTimeoutService from './services/servicioTimeout.service';
 import * as usuarioService from './services/usuario.service';
+import * as gruaService from './services/grua.service';
 import * as mapsService from './services/maps.service';
-import { verificarAuth, verificarAdmin, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
+import * as clientErrorService from './services/clientError.service';
+import { verificarAuth, verificarAdmin, verificarAdminOSupervisor, verificarGestionActas, verificarOperador } from './middleware/auth.middleware';
 import { withHttpsErrorHandling } from './utils/callableHandler';
 import { assertAislamientoEmulador } from './utils/entorno';
 
 const googleDriveFolderId = defineSecret('GOOGLE_DRIVE_FOLDER_ID');
+const smtpUser = defineSecret('SMTP_USER');
+const smtpPassword = defineSecret('SMTP_PASSWORD');
 
 admin.initializeApp();
 assertAislamientoEmulador();
@@ -218,7 +222,7 @@ export const guardarAsignacionDiaria = onCall(callable, withHttpsErrorHandling('
 }));
 
 export const asignarTurnoOperador = onCall(callable, withHttpsErrorHandling('asignarTurnoOperador', async (request) => {
-  const ctx = await verificarAdmin(request.auth);
+  const ctx = await verificarAdminOSupervisor(request.auth);
   return usuarioService.asignarTurnoOperador(request.data ?? {}, ctx);
 }));
 
@@ -240,6 +244,18 @@ export const solicitarCambioGrua = onCall(callable, withHttpsErrorHandling('soli
     nombre: ctx.nombre,
     legajo,
   });
+}));
+
+export const gestionarGruaFueraDeServicio = onCall(callable, withHttpsErrorHandling('gestionarGruaFueraDeServicio', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  await gruaService.gestionarGruaFueraDeServicioHandler(request.data ?? {}, ctx);
+  return { ok: true };
+}));
+
+export const reactivarGruaEnServicio = onCall(callable, withHttpsErrorHandling('reactivarGruaEnServicio', async (request) => {
+  const ctx = await verificarAdmin(request.auth);
+  await gruaService.reactivarGruaHandler(request.data ?? {}, ctx);
+  return { ok: true };
 }));
 
 export const marcarNotificacionLeida = onCall(callable, withHttpsErrorHandling('marcarNotificacionLeida', async (request) => {
@@ -265,6 +281,60 @@ export const marcarTodasNotificacionesLeidas = onCall(callable, withHttpsErrorHa
   const notificationService = await import('./services/notification.service');
   const count = await notificationService.marcarTodasNotificacionesLeidas(ctx.uid);
   return { ok: true, count };
+}));
+
+// ── Configuración de notificaciones por email ───────────────
+
+export const obtenerConfigNotificaciones = onCall(callable, withHttpsErrorHandling('obtenerConfigNotificaciones', async (request) => {
+  await verificarAdmin(request.auth);
+  const snap = await admin.firestore().collection('configuracion').doc('notificaciones').get();
+  if (!snap.exists) return { adminUids: [], emailsExtra: [] };
+  const data = snap.data()!;
+  return {
+    adminUids: Array.isArray(data.adminUids) ? data.adminUids : [],
+    emailsExtra: Array.isArray(data.emailsExtra) ? data.emailsExtra : [],
+  };
+}));
+
+export const guardarConfigNotificaciones = onCall(callable, withHttpsErrorHandling('guardarConfigNotificaciones', async (request) => {
+  await verificarAdmin(request.auth);
+  const { adminUids, emailsExtra } = request.data ?? {};
+
+  if (!Array.isArray(adminUids)) {
+    throw new HttpsError('invalid-argument', 'adminUids debe ser un array.');
+  }
+  if (!Array.isArray(emailsExtra)) {
+    throw new HttpsError('invalid-argument', 'emailsExtra debe ser un array.');
+  }
+
+  const uidsLimpios = adminUids.filter((u: unknown): u is string => typeof u === 'string' && u.trim().length > 0);
+
+  const emailsLimpios = emailsExtra
+    .filter((e: unknown): e is string => typeof e === 'string' && e.includes('@'))
+    .map((e: string) => e.trim().toLowerCase())
+    .filter((e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+
+  await admin.firestore().collection('configuracion').doc('notificaciones').set({
+    adminUids: uidsLimpios,
+    emailsExtra: emailsLimpios,
+  });
+
+  return { ok: true, adminUids: uidsLimpios, emailsExtra: emailsLimpios };
+}));
+
+// ── Diagnóstico de errores del frontend ─────────────────────
+
+export const reportarErrorCliente = onCall(callable, withHttpsErrorHandling('reportarErrorCliente', async (request) => {
+  const ctx = await verificarAuth(request.auth);
+  return clientErrorService.reportClientError(request.data, ctx);
+}));
+
+export const listarErroresCliente = onCall(callable, withHttpsErrorHandling('listarErroresCliente', async (request) => {
+  const ctx = await verificarAuth(request.auth);
+  if (!ctx.roles.includes('SUPERADMIN')) {
+    throw new HttpsError('permission-denied', 'Se requiere rol SUPERADMIN.');
+  }
+  return clientErrorService.listClientErrors(request.data?.limit);
 }));
 
 /** Prueba acceso a Google Drive (solo admin). Crea un .txt de verificación en la carpeta configurada. */
@@ -354,7 +424,7 @@ export const desactivarCarnet = onCall(callable, withHttpsErrorHandling('desacti
 }));
 
 export const verificarCarnetsVencimiento = onSchedule(
-  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1', secrets: [smtpUser, smtpPassword] },
   async () => {
     await carnetService.verificarVencimientosCarnets();
   }
@@ -385,7 +455,7 @@ export const desactivarITV = onCall(callable, withHttpsErrorHandling('desactivar
 }));
 
 export const verificarITVVencimiento = onSchedule(
-  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1', secrets: [smtpUser, smtpPassword] },
   async () => {
     await itvService.verificarVencimientosITV();
   }
@@ -410,7 +480,7 @@ export const desactivarPoliza = onCall(callable, withHttpsErrorHandling('desacti
 }));
 
 export const verificarPolizasVencimiento = onSchedule(
-  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  { schedule: 'every day 10:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1', secrets: [smtpUser, smtpPassword] },
   async () => {
     await polizaService.verificarVencimientosPolizas();
   }
@@ -425,12 +495,26 @@ export const verificarTimeoutEnganches = onSchedule(
   }
 );
 
+export const verificarTimeoutTraslados = onSchedule(
+  { schedule: 'every 10 minutes', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await servicioTimeoutService.verificarTimeoutTraslados();
+  }
+);
+
+export const limpiarErroresClienteExpirados = onSchedule(
+  { schedule: 'every day 04:00', timeZone: 'America/Argentina/Buenos_Aires', region: 'us-central1' },
+  async () => {
+    await clientErrorService.cleanupExpiredClientErrors();
+  }
+);
+
 export const backupFirestoreDiario = onSchedule(
   {
     schedule: 'every day 03:00',
     timeZone: 'America/Argentina/Buenos_Aires',
     region: 'us-central1',
-    secrets: [googleDriveFolderId],
+    secrets: [googleDriveFolderId, smtpUser, smtpPassword],
     timeoutSeconds: 540,
     memory: '1GiB',
   },
@@ -441,7 +525,7 @@ export const backupFirestoreDiario = onSchedule(
 );
 
 export const ejecutarBackupFirestore = onCall(
-  { ...callable, secrets: [googleDriveFolderId], timeoutSeconds: 540, memory: '1GiB' },
+  { ...callable, secrets: [googleDriveFolderId, smtpUser, smtpPassword], timeoutSeconds: 540, memory: '1GiB' },
   withHttpsErrorHandling('ejecutarBackupFirestore', async (request) => {
     await verificarAdmin(request.auth);
     const backup = await import('./services/firestoreBackup.service');

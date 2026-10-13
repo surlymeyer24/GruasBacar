@@ -172,8 +172,8 @@ export function buildFilterOptions(
     if (s.grua?.trim()) {
       const grua = gruasCatalog.find((g) => g.id === s.grua || g.patente === s.grua);
       const desc = grua?.descripcion?.trim();
-      const pat = grua?.patente?.trim() || s.grua;
-      const label = desc ? `${desc} — ${pat}` : pat;
+      const id = grua?.prefijo?.trim() || grua?.patente?.trim() || s.grua;
+      const label = desc ? `${desc} (${id})` : id;
       gruas.set(s.grua, label);
     }
 

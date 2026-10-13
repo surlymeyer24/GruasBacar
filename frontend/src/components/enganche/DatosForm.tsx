@@ -22,6 +22,7 @@ export interface DatosFormFields {
   grua: string;
   gruaPatente: string;
   gruaDescripcion: string;
+  gruaPrefijo: string;
   dupla: string;
   duplaChofer: string;
   duplaEnganchador: string;
@@ -91,6 +92,7 @@ export const DatosForm: React.FC<DatosFormProps> = ({
             updates.grua = grua.id;
             updates.gruaPatente = grua.patente;
             updates.gruaDescripcion = grua.descripcion;
+            updates.gruaPrefijo = grua.prefijo || "";
           }
           if (dupla && !values.dupla) {
             updates.dupla = dupla.id;
@@ -119,11 +121,13 @@ export const DatosForm: React.FC<DatosFormProps> = ({
             updates.grua = grua.id;
             updates.gruaPatente = grua.patente;
             updates.gruaDescripcion = grua.descripcion;
+            updates.gruaPrefijo = grua.prefijo || "";
           } else if (values.grua) {
             const grua = activeGruas.find((g) => g.id === values.grua);
             if (grua) {
               updates.gruaPatente = grua.patente;
               updates.gruaDescripcion = grua.descripcion;
+              updates.gruaPrefijo = grua.prefijo || "";
             }
           }
         }
@@ -284,8 +288,8 @@ export const DatosForm: React.FC<DatosFormProps> = ({
             >
               {selectedGrua
                 ? (selectedGrua.descripcion?.trim()
-                    ? `${selectedGrua.descripcion} (${selectedGrua.patente})`
-                    : selectedGrua.patente)
+                    ? `${selectedGrua.descripcion} (${selectedGrua.prefijo?.trim() || selectedGrua.patente})`
+                    : selectedGrua.prefijo?.trim() || selectedGrua.patente)
                 : "Sin grúa asignada"}
             </div>
           </div>

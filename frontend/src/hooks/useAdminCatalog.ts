@@ -5,6 +5,7 @@ import {
   getAdminCatalogSnapshot,
   patchAdminCatalog,
 } from "../services/adminCatalog.cache";
+import { logger } from "../utils/logger";
 
 export function useAdminCatalog() {
   const [data, setData] = useState<AdminCatalogData | null>(() => getAdminCatalogSnapshot());
@@ -21,7 +22,7 @@ export function useAdminCatalog() {
         }
       })
       .catch((err) => {
-        console.error(err);
+        logger.error("admin-catalog", "Error cargando el catálogo administrativo", err);
         if (!cancelled) setLoading(false);
       });
 

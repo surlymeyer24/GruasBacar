@@ -142,10 +142,11 @@ export const GestionSolicitudModal: React.FC<Props> = ({
   const gruasOosOptions = useMemo(
     () => [
       { value: "", label: "Ninguna / no aplica" },
-      ...gruasOosFiltradas.map((g) => ({
-        value: g.patente,
-        label: `${g.descripcion?.trim() ? `${g.descripcion.trim()} — ` : ""}${g.patente}`,
-      })),
+      ...gruasOosFiltradas.map((g) => {
+        const id = g.prefijo?.trim() || g.patente;
+        const desc = g.descripcion?.trim();
+        return { value: g.patente, label: desc ? `${desc} (${id})` : id };
+      }),
     ],
     [gruasOosFiltradas]
   );
@@ -164,10 +165,11 @@ export const GestionSolicitudModal: React.FC<Props> = ({
     () =>
       gruasFiltradas.length === 0
         ? [{ value: "", label: "Sin grúas de este tipo" }]
-        : gruasFiltradas.map((g) => ({
-            value: g.patente,
-            label: `${g.descripcion?.trim() ? `${g.descripcion.trim()} — ` : ""}${g.patente}`,
-          })),
+        : gruasFiltradas.map((g) => {
+            const id = g.prefijo?.trim() || g.patente;
+            const desc = g.descripcion?.trim();
+            return { value: g.patente, label: desc ? `${desc} (${id})` : id };
+          }),
     [gruasFiltradas]
   );
 
@@ -231,15 +233,18 @@ export const GestionSolicitudModal: React.FC<Props> = ({
     const legajoChofer = duplaCatalogo?.legajoChofer;
     const legajoEnganchador = duplaCatalogo?.legajoEnganchador;
 
-    const gruaDesc = gruasFiltradas.find(
+    const gruaCat = gruasFiltradas.find(
       (g) => g.patente === editGruaPatente.trim()
-    )?.descripcion;
+    );
+    const gruaDesc = gruaCat?.descripcion;
+    const gruaPref = gruaCat?.prefijo?.trim();
 
     const asignacion: AsignacionDiaria = {
       ...(operadorAsignacion ?? {}),
       fecha: fechaHoyArgentina(),
       gruaPatente: editGruaPatente.trim(),
       ...(gruaDesc ? { gruaDescripcion: gruaDesc } : {}),
+      ...(gruaPref ? { gruaPrefijo: gruaPref } : {}),
       duplaId,
       duplaChofer: editChofer.trim(),
       duplaEnganchador: editEnganchador.trim(),

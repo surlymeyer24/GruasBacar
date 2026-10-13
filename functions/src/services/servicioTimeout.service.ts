@@ -1,11 +1,14 @@
 import * as admin from 'firebase-admin';
 import { crearNotificacion } from './notification.service';
-import { anularServicioAutomaticamente } from './servicio.service';
+import { anularServicioAutomaticamente, anularTrasladoAutomaticamente } from './servicio.service';
 
 const db = () => admin.firestore();
 
 const TIMEOUT_AVISO_MS = 7 * 60 * 1000;
 const TIMEOUT_ANULACION_MS = 15 * 60 * 1000;
+
+const TIMEOUT_TRASLADO_AVISO_MS = 2 * 60 * 60 * 1000;
+const TIMEOUT_TRASLADO_ANULACION_MS = 3 * 60 * 60 * 1000;
 
 export async function verificarTimeoutEnganches(): Promise<void> {
   const ahora = Date.now();
@@ -53,6 +56,56 @@ export async function verificarTimeoutEnganches(): Promise<void> {
       }
     } catch (err) {
       console.error(`[servicioTimeout] Error procesando ${doc.id}:`, err);
+    }
+  }
+}
+
+export async function verificarTimeoutTraslados(): Promise<void> {
+  const ahora = Date.now();
+  const umbralAviso = admin.firestore.Timestamp.fromDate(
+    new Date(ahora - TIMEOUT_TRASLADO_AVISO_MS)
+  );
+
+  const snap = await db()
+    .collection('servicios')
+    .where('estado', '==', 'EN_TRASLADO')
+    .where('creadoEn', '<=', umbralAviso)
+    .get();
+
+  for (const doc of snap.docs) {
+    try {
+      const data = doc.data();
+      if (data.esTest === true) continue;
+
+      const operadorUid = data.creadoPor as string;
+      const patente = (data.patente as string) || doc.id;
+      const creadoEn = data.creadoEn?.toDate?.() as Date | undefined;
+      const elapsed = creadoEn ? ahora - creadoEn.getTime() : TIMEOUT_TRASLADO_AVISO_MS;
+
+      if (elapsed >= TIMEOUT_TRASLADO_ANULACION_MS) {
+        const anulado = await anularTrasladoAutomaticamente(doc.id);
+        if (anulado) {
+          await crearNotificacion({
+            destinatarioUid: operadorUid,
+            tipo: 'TRASLADO_TIMEOUT_ANULADO',
+            titulo: `Traslado anulado — ${patente}`,
+            cuerpo: `El traslado de ${patente} fue anulado automáticamente por inactividad (más de 3 horas).`,
+            claveDedup: `traslado_timeout_anulado:${doc.id}`,
+            datos: { servicioId: doc.id, patente },
+          });
+        }
+      } else {
+        await crearNotificacion({
+          destinatarioUid: operadorUid,
+          tipo: 'TRASLADO_TIMEOUT_AVISO',
+          titulo: `Traslado abierto — ${patente}`,
+          cuerpo: `El traslado de ${patente} lleva más de 2 horas. ¿Seguís en camino?`,
+          claveDedup: `traslado_timeout:${doc.id}`,
+          datos: { servicioId: doc.id, patente },
+        });
+      }
+    } catch (err) {
+      console.error(`[servicioTimeout] Error procesando traslado ${doc.id}:`, err);
     }
   }
 }

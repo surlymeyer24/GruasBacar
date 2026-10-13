@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Layout from "../components/shared/Layout";
@@ -12,18 +12,19 @@ import {
   CheckCircle2,
   CalendarDays,
   CalendarCheck,
+  Radio,
 } from "lucide-react";
 import { isMock, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { getMockServices } from "../data/mockData";
-import { Servicio, Grua, duplaEnganchadorDeAsignacion, displayPatente, labelTipoFlota } from "@gruasbacar/shared";
-import { obtenerEstadisticasAdmin, AdminDashboardStats } from "../services/adminStats.service";
+import { Servicio, Grua, duplaEnganchadorDeAsignacion, displayPatente, labelTipoFlota, esAdmin, esOperador } from "@gruasbacar/shared";
+import { obtenerEstadisticasAdmin, AdminDashboardStats, EMPTY_ADMIN_STATS } from "../services/adminStats.service";
 import { formatFechaLarga, formatHoraEnVivo } from "../utils/formatters";
-import { esOperador } from "@gruasbacar/shared";
 import { asignacionDiariaVigente, configDiaFueOmitidaHoy, limpiarConfigDiaOmitidaHoy, marcarConfigDiaOmitidaHoy } from "../utils/asignacionDiaria";
 import { ConfiguracionDiaModal } from "../components/operador/ConfiguracionDiaModal";
-import { gruaService } from "../services/grua.service";
-import { resolverDescripcionGrua, resolverPatenteGrua } from "../utils/gruaDisplay";
+import { resolverDescripcionGrua, resolverPrefijoGrua } from "../utils/gruaDisplay";
+import { ControlTurnoModal } from "../components/admin/ControlTurnoModal";
+import { useAutoRefresh } from "../hooks/useAutoRefresh";
 
 export const AdminDashboardPage: React.FC = () => {
   const { userData, updateServicioActivo, sessionLoading, profileLoading } = useAuth();
@@ -33,49 +34,47 @@ export const AdminDashboardPage: React.FC = () => {
   const [loadingActiveService, setLoadingActiveService] = useState(false);
   const [adminStats, setAdminStats] = useState<AdminDashboardStats | null>(null);
   const [loadingAdminStats, setLoadingAdminStats] = useState(false);
-  const [gruasCatalog, setGruasCatalog] = useState<Grua[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [showConfigDia, setShowConfigDia] = useState(false);
+  const [showControlTurno, setShowControlTurno] = useState(false);
 
-  const isAdmin = userData?.roles?.includes("SUPERADMIN") || userData?.roles?.includes("ADMIN");
+  const isAdminUser = userData ? esAdmin(userData.roles) : false;
   const isEnganchador = userData ? esOperador(userData.roles) : false;
   const authPending = sessionLoading || (profileLoading && !userData);
+  const refreshEnabled = !authPending && isAdminUser && !isMock;
+  const gruasCatalog = adminStats?.gruasCatalog ?? [];
 
   const etiquetaGrua = (gruaId: string) => {
     const desc = resolverDescripcionGrua(gruaId, gruasCatalog);
-    const pat = resolverPatenteGrua(gruaId, gruasCatalog);
+    const pat = resolverPrefijoGrua(gruaId, gruasCatalog);
     return { desc, pat, mostrarPatente: desc !== pat && pat !== "—" };
   };
 
+  const refreshStats = useCallback(async () => {
+    const stats = await obtenerEstadisticasAdmin();
+    setAdminStats(stats);
+  }, []);
+
+  const { lastRefresh, refreshNow } = useAutoRefresh(refreshStats, 45_000, refreshEnabled);
 
   useEffect(() => {
-    if (authPending || !isAdmin || isMock) return;
+    if (!refreshEnabled) return;
 
     let cancelled = false;
     setLoadingAdminStats(true);
-    obtenerEstadisticasAdmin()
-      .then((stats) => {
-        if (!cancelled) setAdminStats(stats);
-      })
+    refreshNow()
       .catch((err) => {
         console.error("Error cargando estadísticas admin:", err);
-        if (!cancelled) setAdminStats({ actasEnEnganche: 0, actasEnTraslado: 0, actasFinalizadas: 0, actasHoy: 0, actasEsteMes: 0, hoyLabel: "", mesActualLabel: "", gruasActivas: 0, gruasEnOperacion: 0, serviciosActivos: [], usuariosEnTurno: [] });
+        if (!cancelled) setAdminStats(EMPTY_ADMIN_STATS);
       })
       .finally(() => {
         if (!cancelled) setLoadingAdminStats(false);
       });
 
-    gruaService
-      .getAllGruas()
-      .then((gruas) => {
-        if (!cancelled) setGruasCatalog(gruas);
-      })
-      .catch((err) => console.error("Error cargando catálogo de grúas:", err));
-
     return () => {
       cancelled = true;
     };
-  }, [isAdmin, authPending, isMock]);
+  }, [refreshEnabled, refreshNow]);
 
   if (authPending) {
     return <LoadingSpinner fullScreen message="Sincronizando estado operacional..." />;
@@ -216,6 +215,15 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             </div>
 
+            <button
+              type="button"
+              onClick={() => setShowControlTurno(true)}
+              className="w-full py-4 text-base font-extrabold rounded-2xl bg-brand-cta text-white shadow-md shadow-brand-cta/20 hover:bg-brand-cta-hover transition-all cursor-pointer flex items-center justify-center gap-3"
+            >
+              <Radio className="w-5 h-5" />
+              Control de Turno
+            </button>
+
             {/* Monitoreo en Vivo */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="p-5 bg-white rounded-2xl border border-brand-seashell shadow-sm overflow-hidden flex flex-col max-h-96">
@@ -271,7 +279,7 @@ export const AdminDashboardPage: React.FC = () => {
                       <div key={u.uid ?? `turno-${idx}`} className="p-3 bg-brand-bg rounded-xl border border-brand-seashell hover:border-brand-cta/30 transition-colors">
                         <p className="font-sans text-sm font-bold text-brand-purply">{u.nombre}</p>
                         {u.asignacionDiaria ? (
-                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPatente}</span>{u.asignacionDiaria.gruaDescripcion && u.asignacionDiaria.gruaPatente ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPatente})</span> : null}{u.asignacionDiaria.tipoFlota ? <span className="ml-1.5 bg-brand-bg px-1.5 py-0.5 rounded text-[9px] font-medium text-brand-purply border border-brand-seashell">{labelTipoFlota(u.asignacionDiaria.tipoFlota)}</span> : null} • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
+                          <p className="text-[10px] text-brand-pale mt-0.5">Grúa: <span className="font-bold text-brand-purply/80">{u.asignacionDiaria.gruaDescripcion || u.asignacionDiaria.gruaPrefijo || u.asignacionDiaria.gruaPatente}</span>{u.asignacionDiaria.gruaDescripcion ? <span className="font-mono text-brand-pale/70 ml-1">({u.asignacionDiaria.gruaPrefijo || u.asignacionDiaria.gruaPatente})</span> : null}{u.asignacionDiaria.tipoFlota ? <span className="ml-1.5 bg-brand-bg px-1.5 py-0.5 rounded text-[9px] font-medium text-brand-purply border border-brand-seashell">{labelTipoFlota(u.asignacionDiaria.tipoFlota)}</span> : null} • D: {u.asignacionDiaria.duplaChofer} + {duplaEnganchadorDeAsignacion(u.asignacionDiaria)}</p>
                         ) : (
                           <p className="text-[10px] text-brand-pale mt-0.5">Servicio activo pero sin turno asignado</p>
                         )}
@@ -329,6 +337,15 @@ export const AdminDashboardPage: React.FC = () => {
 
           </div>
       </div>
+
+      <ControlTurnoModal
+        isOpen={showControlTurno}
+        onClose={() => setShowControlTurno(false)}
+        stats={adminStats ?? EMPTY_ADMIN_STATS}
+        onDataChanged={() => { void refreshNow(); }}
+        lastRefresh={lastRefresh}
+        permisos={{ puedeReasignarGrua: true, puedeSacarOOS: true }}
+      />
     </Layout>
   );
 };

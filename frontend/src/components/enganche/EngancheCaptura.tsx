@@ -395,7 +395,7 @@ export const EngancheCaptura: React.FC<EngancheCapturaProps> = ({
         <div className="flex flex-wrap items-center gap-3 text-xs text-brand-pale">
           <span className="inline-flex items-center gap-1.5 font-bold">
             <Tag className="w-3.5 h-3.5 text-brand-cta" />
-            <span className="text-brand-purply">{turno.gruaDescripcion || turno.gruaPatente}{turno.gruaDescripcion && turno.gruaPatente ? <span className="font-mono text-brand-pale ml-1.5">({turno.gruaPatente})</span> : null}</span>
+            <span className="text-brand-purply">{turno.gruaDescripcion || turno.gruaPrefijo || turno.gruaPatente}{turno.gruaDescripcion ? <span className="font-mono text-brand-pale ml-1.5">({turno.gruaPrefijo || turno.gruaPatente})</span> : null}</span>
           </span>
           <span className="text-brand-seashell">·</span>
           <span className="inline-flex items-center gap-1.5 font-medium">

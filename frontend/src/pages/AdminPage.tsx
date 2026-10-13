@@ -22,6 +22,7 @@ import {
   Trash2,
   Settings,
   RotateCcw,
+  Mail,
 } from "lucide-react";
 import { isMock, db, functions } from "../firebase";
 import { setDoc, updateDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
@@ -29,8 +30,9 @@ import { httpsCallable } from "firebase/functions";
 import { Grua, Corralon, TipoFlota, TIPO_FLOTA_OPTIONS, TIPO_FLOTA_FILTER_OPTIONS, labelTipoFlota, normalizeTipoFlota, matchesTipoFlotaFilter, buildGruaId, labelMotivoFueraDeServicio } from "@gruasbacar/shared";
 import { codigoInternoVisible } from "../utils/codigoVisible";
 import { GruaDoc, CorralonDoc } from "../services/adminCatalog.cache";
+import AdminNotificacionesPanel from "../components/admin/AdminNotificacionesPanel";
 
-type ConfigTab = "GRUAS" | "CORRALONES" | "USUARIOS";
+type ConfigTab = "GRUAS" | "CORRALONES" | "USUARIOS" | "NOTIFICACIONES";
 
 type DeleteTarget =
   | { kind: "grua"; item: GruaDoc }
@@ -40,6 +42,7 @@ const TABS: { id: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { id: "GRUAS", label: "Grúas", icon: <Truck className="w-4 h-4" /> },
   { id: "CORRALONES", label: "Corralones", icon: <Building2 className="w-4 h-4" /> },
   { id: "USUARIOS", label: "Usuarios", icon: <Users className="w-4 h-4" /> },
+  { id: "NOTIFICACIONES", label: "Emails", icon: <Mail className="w-4 h-4" /> },
 ];
 
 const ESTADO_ACTIVO_OPTIONS = [
@@ -64,6 +67,7 @@ export const AdminPage: React.FC = () => {
 
   const [gruaPatente, setGruaPatente] = useState("");
   const [gruaDesc, setGruaDesc] = useState("");
+  const [gruaPrefijo, setGruaPrefijo] = useState("");
   const [gruaTipo, setGruaTipo] = useState<TipoFlota>("TRANSITO");
 
   const [corralonMapLink, setCorralonMapLink] = useState("");
@@ -77,6 +81,7 @@ export const AdminPage: React.FC = () => {
   const [editGruaDocId, setEditGruaDocId] = useState<string | null>(null);
   const [editGruaPatente, setEditGruaPatente] = useState("");
   const [editGruaDesc, setEditGruaDesc] = useState("");
+  const [editGruaPrefijo, setEditGruaPrefijo] = useState("");
   const [editGruaTipo, setEditGruaTipo] = useState<TipoFlota>("TRANSITO");
 
   const [editCorralonDocId, setEditCorralonDocId] = useState<string | null>(null);
@@ -102,6 +107,7 @@ export const AdminPage: React.FC = () => {
       const codigo = codigoInternoVisible(g.id, g.docId) ?? "";
       return (
         matchesSearch(g.patente, gruaSearch) ||
+        matchesSearch(g.prefijo ?? "", gruaSearch) ||
         matchesSearch(g.descripcion, gruaSearch) ||
         matchesSearch(codigo, gruaSearch)
       );
@@ -144,10 +150,12 @@ export const AdminPage: React.FC = () => {
       return;
     }
 
+    const prefijoTrimmed = gruaPrefijo.trim().toUpperCase() || undefined;
     const newGrua: GruaDoc = {
       id: newGruaId,
       patente,
       descripcion: gruaDesc.trim(),
+      prefijo: prefijoTrimmed,
       activa: true,
       tipo: gruaTipo,
       docId: newGruaId,
@@ -159,6 +167,7 @@ export const AdminPage: React.FC = () => {
           id: newGrua.id,
           patente: newGrua.patente,
           descripcion: newGrua.descripcion,
+          ...(prefijoTrimmed ? { prefijo: prefijoTrimmed } : {}),
           activa: newGrua.activa,
           tipo: newGrua.tipo,
         });
@@ -172,6 +181,7 @@ export const AdminPage: React.FC = () => {
       sync({ ...data, gruas: [...gruas, newGrua] });
       setGruaPatente("");
       setGruaDesc("");
+      setGruaPrefijo("");
       setGruaTipo("TRANSITO");
     } catch (err) {
       console.error(err);
@@ -365,6 +375,7 @@ export const AdminPage: React.FC = () => {
     setEditGruaDocId(g.docId);
     setEditGruaPatente(g.patente);
     setEditGruaDesc(g.descripcion);
+    setEditGruaPrefijo(g.prefijo || "");
     setEditGruaTipo(normalizeTipoFlota(g.tipo));
     setEditCorralonDocId(null);
   };
@@ -373,6 +384,7 @@ export const AdminPage: React.FC = () => {
     setEditGruaDocId(null);
     setEditGruaPatente("");
     setEditGruaDesc("");
+    setEditGruaPrefijo("");
     setEditGruaTipo("TRANSITO");
   };
 
@@ -381,9 +393,11 @@ export const AdminPage: React.FC = () => {
     setSavingState(true);
     setPageError(null);
     try {
-      const updates = {
+      const prefijoVal = editGruaPrefijo.trim().toUpperCase() || undefined;
+      const updates: Record<string, any> = {
         patente: editGruaPatente.toUpperCase().trim(),
         descripcion: editGruaDesc.trim(),
+        prefijo: prefijoVal ?? null,
         tipo: editGruaTipo,
       };
       if (!isMock && db) {
@@ -465,7 +479,7 @@ export const AdminPage: React.FC = () => {
 
         <div className="border border-brand-seashell rounded-2xl shadow-sm overflow-hidden bg-white">
           <div className="bg-gray-100/80 px-2 pt-2 border-b border-brand-seashell/50">
-            <nav className="grid grid-cols-3 gap-0.5" role="tablist" aria-label="Secciones de configuración">
+            <nav className="grid grid-cols-4 gap-0.5" role="tablist" aria-label="Secciones de configuración">
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
                 return (
@@ -505,6 +519,10 @@ export const AdminPage: React.FC = () => {
             usuarios={usuarios}
             onUsuariosChange={(next) => sync({ ...data, usuarios: next })}
           />
+        </div>
+
+        <div className={activeTab === "NOTIFICACIONES" ? "" : "hidden"}>
+          <AdminNotificacionesPanel usuarios={usuarios} />
         </div>
 
         <div className={activeTab === "GRUAS" || activeTab === "CORRALONES" ? "" : "hidden"}>
@@ -593,6 +611,13 @@ export const AdminPage: React.FC = () => {
                                 className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
                                 placeholder="Descripción"
                               />
+                              <input
+                                type="text"
+                                value={editGruaPrefijo}
+                                onChange={(e) => setEditGruaPrefijo(e.target.value)}
+                                className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs font-mono uppercase"
+                                placeholder="Prefijo operativo (ej: T-16)"
+                              />
                               <CustomSelect
                                 value={editGruaTipo}
                                 onChange={(v) => setEditGruaTipo(v as TipoFlota)}
@@ -634,7 +659,10 @@ export const AdminPage: React.FC = () => {
                                     {labelTipoFlota(g.tipo)}
                                   </span>
                                 </div>
-                                <p className="text-xs font-mono font-bold text-red-600 mt-1 tracking-wide">{g.patente}</p>
+                                <p className="text-xs font-mono font-bold text-red-600 mt-1 tracking-wide">
+                                  {g.prefijo?.trim() || g.patente}
+                                  {g.prefijo?.trim() && <span className="text-brand-pale font-normal ml-2">({g.patente})</span>}
+                                </p>
                                 {!g.activa && g.fueraDeServicio && (
                                   <p className="text-[11px] text-rose-700 mt-1">
                                     {labelMotivoFueraDeServicio(g.fueraDeServicio.categoria)}
@@ -861,6 +889,20 @@ export const AdminPage: React.FC = () => {
                     className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                    Prefijo operativo
+                  </label>
+                  <input
+                    type="text"
+                    value={gruaPrefijo}
+                    onChange={(e) => setGruaPrefijo(e.target.value)}
+                    placeholder="Ej: T-16, G-01"
+                    className="w-full px-3 py-2 bg-brand-bg border border-gray-250 rounded-lg text-xs font-mono uppercase"
+                  />
+                  <p className="text-[10px] text-brand-pale mt-1">Nombre corto con el que se conoce la grúa.</p>
                 </div>
 
                 <div>

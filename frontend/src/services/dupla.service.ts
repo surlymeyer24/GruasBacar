@@ -1,6 +1,7 @@
 import { isMock, db } from "../firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { Dupla, enganchadorDeDupla, buildGruaId } from "@gruasbacar/shared";
+import { logger } from "../utils/logger";
 
 export interface DuplaAsset extends Dupla {
   activa: boolean;
@@ -32,7 +33,7 @@ export const duplaService = {
           return list;
         }
       } catch (err) {
-        console.error("Error fetching duplas from Firestore:", err);
+        logger.error("duplas", "Error obteniendo duplas de Firestore", err);
       }
     }
 

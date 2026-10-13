@@ -15,9 +15,11 @@ interface ResumenConfirmacionProps {
 
 function formatGrua(values: DatosFormFields): string {
   const desc = values.gruaDescripcion?.trim();
+  const pref = values.gruaPrefijo?.trim();
   const pat = values.gruaPatente?.trim();
-  if (desc && pat) return `${desc} (${pat})`;
-  return desc || pat || "Sin grúa asignada";
+  const id = pref || pat;
+  if (desc && id) return `${desc} (${id})`;
+  return id || desc || "Sin grúa asignada";
 }
 
 function formatEnganchador(values: DatosFormFields): string {
